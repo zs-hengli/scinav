@@ -1,9 +1,7 @@
 import logging
-import datetime
 
 from rest_framework import serializers
 
-from chat.models import Question, Conversation
 from document.models import Document
 
 logger = logging.getLogger(__name__)
@@ -29,4 +27,3 @@ class DocumentListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Document
         fields = ['id', 'doc_apa']
-

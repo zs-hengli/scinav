@@ -17,6 +17,8 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='collectiondocument',
             name='document',
-            field=models.ForeignKey(db_column='document_id', db_constraint=False, on_delete=django.db.models.deletion.DO_NOTHING, to='document.document'),
+            field=models.ForeignKey(
+                db_column='document_id', db_constraint=False, on_delete=django.db.models.deletion.DO_NOTHING,
+                to='document.document'),
         ),
     ]

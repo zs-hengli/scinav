@@ -18,7 +18,7 @@ class BotDetailSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def get_prompt_spec(obj: Bot):
-        return obj.extension['spec'].get('prompt',  {}).get('spec', {}).get('system_prompt', '')
+        return obj.extension['spec'].get('prompt', {}).get('spec', {}).get('system_prompt', '')
 
     @staticmethod
     def get_collections(obj: Bot):
@@ -67,8 +67,3 @@ class BotListMySerializer(BaseModelSerializer):
     class Meta:
         model = Bot
         fields = ['id', 'title', 'description', 'doc_total', 'updated_at']
-
-
-
-
-

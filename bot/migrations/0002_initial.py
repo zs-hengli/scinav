@@ -19,21 +19,30 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='botcollection',
             name='collection',
-            field=models.ForeignKey(db_column='collection_id', db_constraint=False, null=True, on_delete=django.db.models.deletion.DO_NOTHING, related_name='bot_collection', to='collection.collection'),
+            field=models.ForeignKey(
+                db_column='collection_id', db_constraint=False, null=True,
+                on_delete=django.db.models.deletion.DO_NOTHING, related_name='bot_collection',
+                to='collection.collection'),
         ),
         migrations.AddField(
             model_name='botsubscribe',
             name='bot',
-            field=models.ForeignKey(db_column='bot_id', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='bot_subscribe', to='bot.bot'),
+            field=models.ForeignKey(
+                db_column='bot_id', null=True, on_delete=django.db.models.deletion.CASCADE,
+                related_name='bot_subscribe', to='bot.bot'),
         ),
         migrations.AddField(
             model_name='botsubscribe',
             name='user',
-            field=models.ForeignKey(db_column='user_id', db_constraint=False, null=True, on_delete=django.db.models.deletion.DO_NOTHING, to=settings.AUTH_USER_MODEL),
+            field=models.ForeignKey(
+                db_column='user_id', db_constraint=False, null=True, on_delete=django.db.models.deletion.DO_NOTHING,
+                to=settings.AUTH_USER_MODEL),
         ),
         migrations.AddField(
             model_name='hotbot',
             name='bot',
-            field=models.ForeignKey(db_column='bot_id', db_constraint=False, null=True, on_delete=django.db.models.deletion.DO_NOTHING, to='bot.bot'),
+            field=models.ForeignKey(
+                db_column='bot_id', db_constraint=False, null=True, on_delete=django.db.models.deletion.DO_NOTHING,
+                to='bot.bot'),
         ),
     ]

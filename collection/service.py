@@ -1,8 +1,8 @@
 import logging
 
-from collection.models import Collection, CollectionDocument
 from bot.rag_service import Collection as RagCollection
-from collection.serializers import CollectionListSerializer, CollectionDetailSerializer
+from collection.models import Collection, CollectionDocument
+from collection.serializers import CollectionDetailSerializer
 from document.serializers import DocumentListSerializer
 
 logger = logging.getLogger(__name__)
@@ -13,8 +13,7 @@ def collection_save(body, return_type='dict'):
         data = {
             'user_id': body['user_id'],
             'title': body.get('title', '未命名'),
-            'title_status': (
-                ConvTitleStatusEnum.QNAME.code() if body.get('title') else ConvTitleStatusEnum.UNNAMED.code()),
+            'title_status': '',
         }
         collection = Collection.objects.create(**data)
     else:

@@ -6,7 +6,7 @@ from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
-from core.utils.views import extract_json, my_json_response, check_keys
+from core.utils.views import check_keys, extract_json, my_json_response
 from document.service import gen_s3_presigned_post, search
 
 logger = logging.getLogger(__name__)

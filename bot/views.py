@@ -6,11 +6,12 @@ from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
-from bot.service import bot_create, hot_bots, bot_update, bot_delete, bot_detail, bot_list_all, bot_list_my, \
-    bot_list_subscribe, bot_subscribe, bot_documents
-from core.utils.exceptions import ValidationError
-from core.utils.views import extract_json, my_json_response, check_keys
 import bot.models
+from bot.service import (bot_create, bot_delete, bot_detail, bot_documents,
+                         bot_list_all, bot_list_my, bot_list_subscribe,
+                         bot_subscribe, bot_update, hot_bots)
+from core.utils.exceptions import ValidationError
+from core.utils.views import check_keys, extract_json, my_json_response
 
 logger = logging.getLogger(__name__)
 
@@ -130,17 +131,3 @@ class BotDocuments(APIView):
         }
         docs = bot_documents(bot_id, query_data['page_size'], query_data['page_num'])
         return my_json_response(docs)
-
-
-@method_decorator([extract_json], name='dispatch')
-@method_decorator(require_http_methods(['POST']), name='dispatch')
-# @permission_classes([AllowAny])
-class RagSearch(APIView):
-
-    def post(self, request, *args, **kwargs):  # noqa
-
-        body = kwargs['request_data']['JSON']
-
-        data = {'desc': 'bot index'}
-        return my_json_response(data)
-

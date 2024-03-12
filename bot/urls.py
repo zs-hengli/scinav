@@ -12,6 +12,4 @@ urlpatterns = [
     path('bots/<str:bot_id>/subscribe/<str:action>', views.BotSubscribe.as_view()),
     path('bots/<str:bot_id>/documents', views.BotDocuments.as_view()),
 
-
-    path('bots/rag/search', views.RagSearch.as_view())
 ]

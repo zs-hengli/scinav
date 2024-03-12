@@ -6,8 +6,9 @@ from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
-from collection.service import collection_list, collection_detail, collection_docs, collections_docs
-from core.utils.views import extract_json, my_json_response, check_keys
+from collection.service import (collection_detail, collection_docs,
+                                collection_list, collections_docs)
+from core.utils.views import check_keys, extract_json, my_json_response
 
 logger = logging.getLogger(__name__)
 

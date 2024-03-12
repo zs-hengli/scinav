@@ -2,7 +2,7 @@ import logging
 
 from rest_framework import serializers
 
-from collection.models import Collection, CollectionDocument
+from collection.models import Collection
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,3 @@ class CollectionDetailSerializer(serializers.ModelSerializer):
         model = Collection
         # fields = ['id']
         fields = '__all__'
-
-
-

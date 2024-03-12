@@ -1,8 +1,9 @@
 import logging
 
-from bot.rag_service import Bot as RagBot
 from bot.models import Bot, BotCollection, BotSubscribe, HotBot
-from bot.serializers import BotDetailSerializer, BotListAllSerializer, BotListMySerializer, HotBotListSerializer
+from bot.rag_service import Bot as RagBot
+from bot.serializers import (BotDetailSerializer, BotListAllSerializer,
+                             HotBotListSerializer)
 from collection.models import Collection, CollectionDocument
 from core.utils.exceptions import InternalServerError
 from document.models import Document

@@ -1,11 +1,7 @@
-import json
 import logging
+
 import requests
-
 from django.conf import settings
-from django.core.cache import cache
-
-from core.utils.common import str_hash
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +31,14 @@ class Bot:
         if paper_ids: post_data['paper_ids'] = paper_ids
         if public_collection_ids: post_data['public_collection_ids'] = public_collection_ids
         logger.debug(f'post_data:{post_data}')
-        resp = requests.post(url, json=post_data, headers={'X-API-KEY': RAG_API_KEY}).json()
+        resp = requests.post(url, json=post_data, headers={'X-API-KEY': RAG_API_KEY}, timeout=60).json()
         logger.info(f'url: {url}, post: {post_data}, response: {resp}')
         return resp
 
     @staticmethod
     def delete(agent_id):
         url = RAG_HOST + '/api/v1/agents/' + agent_id
-        resp = requests.delete(url, headers={'X-API-KEY': RAG_API_KEY}, verify=False)
+        resp = requests.delete(url, headers={'X-API-KEY': RAG_API_KEY}, verify=False, timeout=60)
         logger.info(f'url: {url}, response: {resp}')
         return resp
 
@@ -55,7 +51,7 @@ class Collection:
         :return:
         """
         url = RAG_HOST + '/api/v1/public-collections'
-        resp = requests.get(url, headers={'X-API-KEY': RAG_API_KEY}, verify=False).json()
+        resp = requests.get(url, headers={'X-API-KEY': RAG_API_KEY}, verify=False, timeout=60).json()
         logger.info(f'url: {url}, response: {resp}')
         return resp
 
@@ -71,6 +67,6 @@ class Document:
             'limit': limit
         }
         if filter_conditions: post_data['filter_conditions'] = filter_conditions
-        resp = requests.post(url, json=post_data, headers={'X-API-KEY': RAG_API_KEY}, verify=False).json()
+        resp = requests.post(url, json=post_data, headers={'X-API-KEY': RAG_API_KEY}, verify=False, timeout=600).json()
         logger.info(f'url: {url}, response: {resp}')
         return resp

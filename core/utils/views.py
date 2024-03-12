@@ -22,22 +22,22 @@ class APIError(BaseException):
         self.details = details
 
 
-def send_and_response(url, data_json, params=None, headers=None, method='POST'):
+def send_and_response(url, data_json, params=None, headers=None, method='POST', timeout=60):
     data_json_str = json.dumps(data_json)
     log_str = data_json_str if len(data_json_str) < 800 else f"{data_json_str[:200]} -- {data_json_str[-100:]}"
     logger.info(f'method:{method}, data_json:{log_str}, params:{params}, headers:{headers}')
     try:
         start_time = time.time()
         if method == 'POST':
-            res = requests.post(url, json=data_json, params=params, headers=headers, verify=False)
+            res = requests.post(url, json=data_json, params=params, headers=headers, verify=False, timeout=timeout)
         elif method == 'GET':
-            res = requests.get(url, data=data_json, params=params, headers=headers, verify=False)
+            res = requests.get(url, data=data_json, params=params, headers=headers, verify=False, timeout=timeout)
         elif method == 'DELETE':
-            res = requests.delete(url, data=data_json, params=params, headers=headers, verify=False)
+            res = requests.delete(url, data=data_json, params=params, headers=headers, verify=False, timeout=timeout)
         elif method == 'PATCH':
-            res = requests.patch(url, json=data_json, params=params, headers=headers, verify=False)
+            res = requests.patch(url, json=data_json, params=params, headers=headers, verify=False, timeout=timeout)
         elif method == 'PUT':
-            res = requests.put(url, json=data_json, params=params, headers=headers, verify=False)
+            res = requests.put(url, json=data_json, params=params, headers=headers, verify=False, timeout=timeout)
         else:
             raise ValueError(f'method:{method} not support')
         result_byte = res.content

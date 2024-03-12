@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['GET', 'POST']), name='dispatch')
-# @permission_classes([AllowAny])
+@permission_classes([AllowAny])
 class Index(APIView):
 
     def get(self, request, *args, **kwargs):  # noqa
