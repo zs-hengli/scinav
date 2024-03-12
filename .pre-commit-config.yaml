@@ -1,0 +1,90 @@
+repos:
+  - repo: meta
+    hooks:
+      - id: check-hooks-apply
+      - id: check-useless-excludes
+
+  # pre-commit-hooks: out-of-the-box hooks for pre-commit
+  # check-yaml: verify syntax of yaml
+  # end-of-file-fixer: Makes sure files end in a newline and only a newline
+  # trailing-whitespace: Trims trailing whitespace
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: check-merge-conflict
+#      - id: check-yaml
+#        exclude: chart/templates
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.10.1
+    hooks:
+      - id: isort
+
+#  - repo: https://github.com/psf/black
+#    rev: 22.1.0
+#    hooks:
+#      - id: black
+
+  # Vulture finds unused code in Python programs
+  # # noqa: F841 -> pass
+  #- repo: https://github.com/jendrikseipp/vulture
+  #  rev: v2.3
+  #  hooks:
+  #    - id: vulture
+  #      types: [python]
+  #      args:
+  #        - django-demo
+
+  # Flake8 is a wrapper around these tools:
+  # PyFlakes: 静态检查Python代码逻辑错误的工具, 类似 Pylint
+  # pycodestyle: 静态检查PEP8编码风格的工具
+  # Ned Batchelder's McCabe script: 静态分析Python代码复杂度的工具
+  # # flake8: noqa or # noqa: E234 -> pass
+  - repo: https://github.com/pycqa/flake8
+    rev: 6.0.0
+    hooks:
+      - id: flake8
+        additional_dependencies:
+          - flake8-bugbear
+          - flake8-logging-format
+          - flake8-pytest-style
+        args:
+          - --max-line-length=120
+          - --ignore=B028,G201,G004,W503
+
+  # Bandit is a tool designed to find comsmon security issues in Python code.
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.4
+    hooks:
+      - id: bandit
+        language_version: python3
+        args: [ "-ll", "-c", ".bandit.yml" ]
+
+  # gitlint: checks your commit messages for style
+  - repo: https://github.com/jorisroovers/gitlint
+    rev: v0.15.1
+    hooks:
+      - id: gitlint
+
+#  - repo: https://github.com/jazzband/pip-tools
+#    rev: 6.9.0
+#    hooks:
+#      - id: pip-compile
+#        name: Generate requirements.txt
+#        files: ^(deploy\/requirements.in)$
+#        args:
+#          - --output-file
+#          - deploy/requirements.txt
+#          - --cache-dir
+#          - .cache/pip-tools
+#          - deploy/requirements.in
+
+#  - repo: https://github.com/codespell-project/codespell
+#    rev: v2.1.0
+#    hooks:
+#      - id: codespell
+#        name: codespell
+#        entry: codespell -q 3 -S "*.lock" -I codespell-ignore-words.txt --regex="[a-zA-Z0-9\-'’`]+"
+#        types: [text]

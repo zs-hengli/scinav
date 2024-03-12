@@ -1,0 +1,18 @@
+skips:
+  - B303  # md5
+  - B604  # run shell command
+  - B701  # jinja2 is used to render dockerfile
+  - B611  # Potential SQL injection on RawSQL function
+  - B608  # Possible SQL injection vector through string-based query construction
+  - B413  # Test results: The pyCrypto library and its module AES are no longer actively maintained
+  - B307  # Test results:Use of possibly insecure function - consider using safer ast.literal_eval
+  - B602  # subprocess_popen_with_shell_equals_true
+  - B501  # request_with_no_cert_validation
+  - B108  # hardcoded_tmp_directory
+  - B102  # Use of exec detected
+  - B104  # B104:hardcoded_bind_all_interfaces Possible binding to all interfaces.
+  - B605  # start_process_with_a_shell
+
+
+#  - B028  # 'key' is manually surrounded by quotes, consider using the `!r` conversion flag
+#  - G201  # Logging: .exception(...) should be used instead of .error(..., exc_info=True)

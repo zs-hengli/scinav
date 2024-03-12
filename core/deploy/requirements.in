@@ -1,0 +1,19 @@
+pip-tools
+pre-commit
+Django==5.0.3
+djangorestframework
+django_redis
+requests
+
+# pgsql
+psycopg2-binary
+
+# S3
+boto3==1.34.58
+botocore==1.34.58
+s3transfer==0.10.0
+#urllib3==2.0.7
+
+celery
+django-celery-results
+redis
