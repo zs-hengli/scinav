@@ -6,6 +6,8 @@ from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
+from collection.models import Collection
+from collection.serializers import CollectionCreateSerializer, CollectionDetailSerializer, CollectionUpdateSerializer
 from collection.service import (collection_detail, collection_docs,
                                 collection_list, collections_docs)
 from core.utils.views import check_keys, extract_json, my_json_response
@@ -26,16 +28,44 @@ class Index(APIView):
 
 
 @method_decorator([extract_json], name='dispatch')
-@method_decorator(require_http_methods(['GET', 'POST']), name='dispatch')
+@method_decorator(require_http_methods(['GET', 'POST', 'PUT', 'DELETE']), name='dispatch')
 @permission_classes([AllowAny])
-class Collection(APIView):
+class Collections(APIView):
 
-    def get(self, request, collection_id=None, *args, **kwargs):  # noqa
+    @staticmethod
+    def get(request, collection_id=None, *args, **kwargs):
         user_id = request.user.id
         if collection_id:
-            data = collection_detail(user_id, collection_id)
+            collection = Collection.objects.get(pk=collection_id, user_id=user_id)
+            data = CollectionDetailSerializer(collection).data
         else:
             data = {'list': collection_list(user_id, True)}
+        return my_json_response(data)
+
+    @staticmethod
+    def post(request, *args, **kwargs):
+        request_data = request.data
+        serial = CollectionCreateSerializer(data=request_data)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
+        collection = serial.create(serial.validated_data)
+        data = CollectionDetailSerializer(collection).data
+        return my_json_response(data)
+
+    @staticmethod
+    def put(request, collection_id):
+        user_id = request.user.id
+        collection = Collection.objects.filter(pk=collection_id, user_id=user_id).first()
+        if not collection:
+            return my_json_response({}, code=-1, msg='validate collection_id error')
+
+        request_data = request.data
+        serial = CollectionUpdateSerializer(data=request_data)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
+
+        collection = serial.update(collection, validated_data=serial.validated_data)
+        data = CollectionUpdateSerializer(collection).data
         return my_json_response(data)
 
 

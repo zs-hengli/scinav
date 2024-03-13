@@ -14,13 +14,14 @@ class Collection(models.Model):
         Bot = 'bot', _('bot')
 
     id = models.CharField(max_length=36, primary_key=True, default=uuid.uuid4)
-    title = models.CharField(null=True, blank=True, max_length=128, default=None, db_default=None)
+    title = models.CharField(null=True, blank=True, max_length=255, default=None, db_default=None)
     user = models.ForeignKey(
         'user.MyUser', db_constraint=False, on_delete=models.DO_NOTHING, null=True, db_column='user_id')
     bot_id = models.CharField(null=True, blank=True, max_length=36, default=None, db_default=None)
     type = models.CharField(null=True, blank=True, max_length=32, default=TypeChoices.PERSONAL,
                             db_default=TypeChoices.PERSONAL)
-    total = models.IntegerField(default=0, db_default=0)
+    total_public = models.IntegerField(default=0, db_default=0)
+    total_personal = models.IntegerField(default=0, db_default=0)
     del_flag = models.BooleanField(default=False, db_default=False)
     updated_at = models.DateTimeField(null=True, auto_now=True)
     created_at = models.DateTimeField(null=True, auto_now_add=True)

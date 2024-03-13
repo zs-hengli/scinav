@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 import bot.models
 from bot.service import (bot_create, bot_delete, bot_detail, bot_documents,
                          bot_list_all, bot_list_my, bot_list_subscribe,
-                         bot_subscribe, bot_update, hot_bots)
+                         bot_subscribe, bot_update, hot_bots, bot_publish)
 from core.utils.exceptions import ValidationError
 from core.utils.views import check_keys, extract_json, my_json_response
 
@@ -131,3 +131,14 @@ class BotDocuments(APIView):
         }
         docs = bot_documents(bot_id, query_data['page_size'], query_data['page_num'])
         return my_json_response(docs)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+# @permission_classes([AllowAny])
+class BotPublish(APIView):
+
+    @staticmethod
+    def get(request, bot_id, *args, **kwargs):
+        code, msg = bot_publish(bot_id)
+        return my_json_response(code=code, msg=msg, data={})

@@ -12,7 +12,7 @@ class BaseModelSerializer(serializers.ModelSerializer):
     updated_at = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S")
 
 
-class BotDetailSerializer(serializers.ModelSerializer):
+class BotDetailSerializer(BaseModelSerializer):
     prompt_spec = serializers.SerializerMethodField()
     collections = serializers.SerializerMethodField()
 
@@ -28,7 +28,7 @@ class BotDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Bot
 
-        fields = ['id', 'author', 'title', 'description', 'prompt_spec', 'questions', 'collections']
+        fields = ['id', 'author', 'title', 'description', 'prompt_spec', 'questions', 'collections', 'updated_at']
 
 
 class HotBotListSerializer(BaseModelSerializer):
@@ -49,7 +49,7 @@ class BotListAllSerializer(BaseModelSerializer):
     @staticmethod
     def get_doc_total(obj):
         bot_collections = BotCollection.objects.filter(bot_id=obj.id).all()
-        return sum([bc.collection.total for bc in bot_collections])
+        return sum([bc.collection.total_public + bc.collection.total_personal for bc in bot_collections])
 
     class Meta:
         model = Bot
@@ -62,7 +62,7 @@ class BotListMySerializer(BaseModelSerializer):
     @staticmethod
     def get_doc_total(obj):
         bot_collections = BotCollection.objects.filter(bot_id=obj.id).all()
-        return sum([bc.collection.total for bc in bot_collections])
+        return sum([bc.collection.total_public + bc.collection.total_personal for bc in bot_collections])
 
     class Meta:
         model = Bot

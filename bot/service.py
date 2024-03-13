@@ -1,3 +1,4 @@
+import datetime
 import logging
 
 from bot.models import Bot, BotCollection, BotSubscribe, HotBot
@@ -45,6 +46,7 @@ def bot_create(body):
     if rag_ret.get('id'):
         data['extension'] = rag_ret
         data['agent_id'] = rag_ret['id']
+        data['prompt'] = rag_ret['spec']['prompt']
         bot = Bot.objects.create(**data)
         # save BotCollection
         for c in collections:
@@ -89,9 +91,10 @@ def bot_update(bot_id, body):
     if body.get('cover_url') and bot.cover_url != body['cover_url']:
         data['cover_url'] = body['cover_url']
         bot.cover_url = body['cover_url']
-    if body.get('prompt_spec') and bot.prompt['spec'] != body.get('prompt_spec'):
+    if body.get('prompt_spec') and bot.prompt['spec']['system_prompt'] != body.get('prompt_spec'):
         data['prompt_spec'] = body['prompt_spec']
         bot.prompt['spec']['system_prompt'] = body.get('prompt_spec')
+    logger.debug(f'bot_update data: {data}')
     collections = BotCollection.objects.filter(bot=bot, del_flag=False).all()
     collection_ids = [bc.collection_id for bc in collections]
     collections_change = False
@@ -156,8 +159,8 @@ def bot_detail(user_id, bot_id):
 
 
 def is_subscribed(user_id, bot: Bot):
-    if bot.user_id == user_id:
-        return True
+    # if bot.user_id == user_id:
+    #     return True
     if BotSubscribe.objects.filter(user_id=user_id, bot=bot).exists():
         return True
     return False
@@ -183,7 +186,7 @@ def hot_bots():
 def bot_list_all(user_id, page_size=10, page_num=1):
     user_subscribe_bot = BotSubscribe.objects.filter(user_id=user_id, del_flag=False).all()
     us_bot_ids = [us_b.bot_id for us_b in user_subscribe_bot]
-    query_set = Bot.objects.filter(type=Bot.TypeChoices.PUBLIC).order_by('-pub_date')
+    query_set = Bot.objects.filter(type=Bot.TypeChoices.PUBLIC, del_flag=False).order_by('-pub_date')
     filter_count = query_set.count()
     start_num = page_size * (page_num - 1)
     logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
@@ -264,3 +267,16 @@ def bot_documents(bot_id, page_size=10, page_num=1):
         'list': docs_data,
         'total': total
     }
+
+
+def bot_publish(bot_id, action=Bot.TypeChoices.PUBLIC):
+    bot = Bot.objects.filter(pk=bot_id).first()
+    if not bot:
+        return -1, 'bot not exist'
+    if action == Bot.TypeChoices.PUBLIC:
+        bot.type = Bot.TypeChoices.PUBLIC
+        bot.pub_date = datetime.datetime.now()
+    else:
+        bot.type = Bot.TypeChoices.PERSONAL
+    bot.save()
+    return 0, ''

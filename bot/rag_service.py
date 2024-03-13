@@ -15,7 +15,6 @@ class Bot:
         user_id,
         prompt,
         preset_questions,
-        type='OpenAPIFunctionsAgent',
         # llm=None,
         # tools=None,
         paper_ids=None,
@@ -24,13 +23,13 @@ class Bot:
         url = RAG_HOST + '/api/v1/agents'
         post_data = {
             'user_id': user_id,
-            'type': type,
+            # 'type': type,
         }
         if preset_questions: post_data['preset_questions'] = preset_questions
         if prompt: post_data['prompt'] = prompt
         if paper_ids: post_data['paper_ids'] = paper_ids
         if public_collection_ids: post_data['public_collection_ids'] = public_collection_ids
-        logger.debug(f'post_data:{post_data}')
+        logger.debug(f'create post_data: {post_data}')
         resp = requests.post(url, json=post_data, headers={'X-API-KEY': RAG_API_KEY}, timeout=60).json()
         logger.info(f'url: {url}, post: {post_data}, response: {resp}')
         return resp
@@ -68,5 +67,6 @@ class Document:
         }
         if filter_conditions: post_data['filter_conditions'] = filter_conditions
         resp = requests.post(url, json=post_data, headers={'X-API-KEY': RAG_API_KEY}, verify=False, timeout=600).json()
-        logger.info(f'url: {url}, response: {resp}')
+        logger.debug(f'search post_data: {post_data}')
+        logger.info(f'url: {url}, response.len: {len(resp)}')
         return resp

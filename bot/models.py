@@ -16,7 +16,7 @@ class Bot(models.Model):
     agent_id = models.CharField(null=True, blank=True, max_length=36)
     user = models.ForeignKey(
         'user.MyUser', db_constraint=False, on_delete=models.DO_NOTHING, null=True, db_column='user_id')
-    author = models.CharField(null=True, blank=True, max_length=64, default=None, db_default=None)
+    author = models.CharField(null=True, blank=True, max_length=128, default=None, db_default=None)
     title = models.CharField(null=True, blank=True, max_length=200, default=None, db_default=None)
     prompt = models.JSONField(null=True, blank=True, db_default=None)
     description = models.TextField(null=True, blank=True, db_default=None)
