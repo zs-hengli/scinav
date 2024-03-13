@@ -2,7 +2,6 @@ import logging
 
 from bot.rag_service import Collection as RagCollection
 from collection.models import Collection, CollectionDocument
-from collection.serializers import CollectionDetailSerializer
 from document.serializers import DocumentListSerializer
 
 logger = logging.getLogger(__name__)
@@ -21,8 +20,9 @@ def collection_list(user_id, include_public=False):
             _save_public_collection(Collection.objects.filter(id__in=ids).all(), public_collections)
     collections = Collection.objects.filter(user_id=user_id, del_flag=False).all()
     coll_list += [
-        {'id': c.id, 'name': c.title, 'total': c.total_public + c.total_personal, 'type': Collection.TypeChoices.PERSONAL}
-        for c in collections
+        {'id': c.id, 'name': c.title, 'total': c.total_public + c.total_personal,
+         'type': Collection.TypeChoices.PERSONAL
+         } for c in collections
     ]
     return coll_list
 

@@ -7,9 +7,11 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from collection.models import Collection
-from collection.serializers import CollectionCreateSerializer, CollectionDetailSerializer, CollectionUpdateSerializer
-from collection.service import (collection_detail, collection_docs,
-                                collection_list, collections_docs)
+from collection.serializers import (CollectionCreateSerializer,
+                                    CollectionDetailSerializer,
+                                    CollectionUpdateSerializer)
+from collection.service import (collection_docs, collection_list,
+                                collections_docs)
 from core.utils.views import check_keys, extract_json, my_json_response
 
 logger = logging.getLogger(__name__)
@@ -53,7 +55,7 @@ class Collections(APIView):
         return my_json_response(data)
 
     @staticmethod
-    def put(request, collection_id):
+    def put(request, collection_id, *args, **kwargs):
         user_id = request.user.id
         collection = Collection.objects.filter(pk=collection_id, user_id=user_id).first()
         if not collection:
@@ -67,6 +69,16 @@ class Collections(APIView):
         collection = serial.update(collection, validated_data=serial.validated_data)
         data = CollectionUpdateSerializer(collection).data
         return my_json_response(data)
+
+    @staticmethod
+    def delete(request, collection_id, *args, **kwargs):
+        user_id = request.user.id
+        collection = Collection.objects.filter(pk=collection_id, user_id=user_id).first()
+        if not collection:
+            return my_json_response({}, code=-1, msg='validate collection_id error')
+        collection.del_flag = True
+        collection.save()
+        return my_json_response({'collection_id': collection_id})
 
 
 @method_decorator([extract_json], name='dispatch')

@@ -13,7 +13,7 @@ class BaseModelSerializer(serializers.ModelSerializer):
 
 
 class CollectionCreateSerializer(BaseModelSerializer):
-    title = serializers.CharField(required=True)
+    name = serializers.CharField(required=True, source='title')
     user_id = serializers.CharField(required=True, min_length=32, max_length=36)
     type = serializers.ChoiceField(choices=Collection.TypeChoices.choices, default=Collection.TypeChoices.PERSONAL)
 
@@ -27,7 +27,7 @@ class CollectionCreateSerializer(BaseModelSerializer):
 
 
 class CollectionUpdateSerializer(BaseModelSerializer):
-    title = serializers.CharField(required=True)
+    name = serializers.CharField(required=True, source='title')
 
     def update(self, instance, validated_data):
         instance.title = validated_data.get('title', instance.title[:255])
@@ -36,18 +36,20 @@ class CollectionUpdateSerializer(BaseModelSerializer):
 
     class Meta:
         model = Collection
-        fields = ['id', 'title', 'updated_at']
+        fields = ['id', 'name', 'updated_at']
 
 
 class CollectionDetailSerializer(BaseModelSerializer):
+    name = serializers.CharField(source='title')
 
     class Meta:
         model = Collection
-        fields = ['id', 'title', 'updated_at', 'total_public', 'total_personal']
+        fields = ['id', 'name', 'updated_at', 'total_public', 'total_personal']
 
 
 class CollectionListSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source='title')
 
     class Meta:
         model = Collection
-        fields = ['id', 'title', 'updated_at']
+        fields = ['id', 'name', 'updated_at']

@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 import bot.models
 from bot.service import (bot_create, bot_delete, bot_detail, bot_documents,
                          bot_list_all, bot_list_my, bot_list_subscribe,
-                         bot_subscribe, bot_update, hot_bots, bot_publish)
+                         bot_publish, bot_subscribe, bot_update, hot_bots)
 from core.utils.exceptions import ValidationError
 from core.utils.views import check_keys, extract_json, my_json_response
 
