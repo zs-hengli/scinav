@@ -6,7 +6,8 @@ from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
-import bot.models
+from bot.models import Bot
+from bot.serializers import BotCreateSerializer
 from bot.service import (bot_create, bot_delete, bot_detail, bot_documents,
                          bot_list_all, bot_list_my, bot_list_subscribe,
                          bot_publish, bot_subscribe, bot_update, hot_bots)
@@ -40,8 +41,8 @@ class HotBot(APIView):
 
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['GET', 'POST', 'PUT', 'DELETE']), name='dispatch')
-@permission_classes([AllowAny])
-class Bot(APIView):
+# @permission_classes([AllowAny])
+class Bots(APIView):
 
     @staticmethod
     def get(request, bot_id=None, *args, **kwargs):
@@ -68,32 +69,29 @@ class Bot(APIView):
 
     @staticmethod
     def post(request, *args, **kwargs):
-        body = kwargs['request_data']['JSON']
         user_id = request.user.id
-        check_keys(body, ['author', 'title', 'description', 'collections'])
-        post_data = {
-            'user_id': user_id,
-            'author': body['author'],
-            'title': body['title'],
-            'description': body['description'],
-            'prompt_spec': body.get('prompt_spec', None),
-            'questions': body.get('questions', None),
-            'llm': None,
-            'tools': None,
-            'cover_url': None,
-            'type': bot.models.Bot.TypeChoices.PERSONAL,
-            'collections': body['collections']
-        }
-        if not isinstance(post_data['collections'], list):
-            raise ValidationError("collections is not a list[string]")
-        data = bot_create(post_data)
+        request_data = request.data
+        request_data['user_id'] = user_id
+        serial = BotCreateSerializer(data=request_data)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
+
+        data = bot_create(serial.validated_data)
         return my_json_response(data)
 
     @staticmethod
     def put(request, bot_id, *args, **kwargs):
-        body = kwargs['request_data']['JSON']
-        body['user_id'] = request.user.id
-        data = bot_update(bot_id, body)
+        bot = Bot.objects.filter(pk=bot_id).first()
+        if not bot:
+            return my_json_response({}, code=-1, msg='validate bot_id error')
+        request_data = request.data
+        request_data['user_id'] = request.user.id
+        serial = BotCreateSerializer(data=request_data)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=-2, msg=f'validate error, {list(serial.errors.keys())}')
+        validated_data = serial.validated_data
+        updated_bot, bot_collections, updated_attrs = serial.updated_attrs(bot, validated_data)
+        data = bot_update(updated_bot, bot_collections, updated_attrs, validated_data)
         return my_json_response(data)
 
     @staticmethod

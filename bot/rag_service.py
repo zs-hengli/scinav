@@ -26,7 +26,7 @@ class Bot:
             # 'type': type,
         }
         if preset_questions: post_data['preset_questions'] = preset_questions
-        if prompt: post_data['prompt'] = prompt
+        if prompt and prompt['spec']['system_prompt']: post_data['prompt'] = prompt
         if paper_ids: post_data['paper_ids'] = paper_ids
         if public_collection_ids: post_data['public_collection_ids'] = public_collection_ids
         logger.debug(f'create post_data: {post_data}')

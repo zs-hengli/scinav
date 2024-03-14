@@ -1,13 +1,14 @@
 import datetime
 import logging
 
+from django.utils.translation import gettext_lazy as _
+
 from bot.models import Bot, BotCollection, BotSubscribe, HotBot
 from bot.rag_service import Bot as RagBot
 from bot.serializers import (BotDetailSerializer, BotListAllSerializer,
                              HotBotListSerializer)
 from collection.models import Collection, CollectionDocument
 from core.utils.exceptions import InternalServerError
-from document.models import Document
 from document.serializers import DocumentListSerializer
 
 logger = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ def bot_create(body):
     if rag_ret.get('id'):
         data['extension'] = rag_ret
         data['agent_id'] = rag_ret['id']
-        data['prompt'] = rag_ret['spec']['prompt']
+        # data['prompt'] = rag_ret['spec']['prompt']
         bot = Bot.objects.create(**data)
         # save BotCollection
         for c in collections:
@@ -62,58 +63,47 @@ def bot_create(body):
 
 
 def _collections_doc_ids(collections: list[Collection]):
-    cids = [c.id for c in collections if c.type == c.TypeChoices.PERSONAL]
-    documents = Document.objects.filter(collection_id__in=cids).all()
-    return [
-        {'collection_id': doc.collection_id,
-         'collection_type': Collection.TypeChoices.PERSONAL,
-         'doc_id': doc.doc_id
-         } for doc in documents
+    _cids = [c.id for c in collections if c.type == c.TypeChoices.PERSONAL]
+    c_docs = CollectionDocument.objects.filter(collection_id__in=_cids).all()
+    return [{
+        'collection_id': c_doc.document.collection_id,
+        'collection_type': Collection.TypeChoices.PERSONAL,
+        'doc_id': c_doc.document.doc_id} for c_doc in c_docs
     ]
 
 
 # 修改专题
-def bot_update(bot_id, body):
-    bot: Bot = Bot.objects.get(pk=bot_id)
-    data = {'user_id': body['user_id']}
-    if body.get('author') and bot.author != body['author']:
-        data['author'] = body['author']
-        bot.author = body['author']
-    if body.get('title') and bot.title != body['title']:
-        data['title'] = body['title']
-        bot.title = body['title']
-    if body.get('description') and bot.description != body['description']:
-        data['description'] = body['description']
-        bot.description = body['description']
-    if body.get('questions') and bot.questions != body['questions']:
-        data['questions'] = body['questions']
-        bot.questions = body['questions']
-    if body.get('cover_url') and bot.cover_url != body['cover_url']:
-        data['cover_url'] = body['cover_url']
-        bot.cover_url = body['cover_url']
-    if body.get('prompt_spec') and bot.prompt['spec']['system_prompt'] != body.get('prompt_spec'):
-        data['prompt_spec'] = body['prompt_spec']
-        bot.prompt['spec']['system_prompt'] = body.get('prompt_spec')
-    logger.debug(f'bot_update data: {data}')
-    collections = BotCollection.objects.filter(bot=bot, del_flag=False).all()
-    collection_ids = [bc.collection_id for bc in collections]
-    collections_change = False
-    if body.get('collections') and set(collection_ids) != set(body['collections']):
-        collections_change = True
-
-    need_recreate_filed = ['questions', 'prompt_spec']
-    if set(need_recreate_filed) & set(data.keys()) or collections_change:
-        _recreate_bot(bot, collection_ids, data)
+def bot_update(bot, bot_collections, updated_attrs, validated_data):
+    bc_ids = [bc.collection_id for bc in bot_collections]
+    collections = Collection.objects.filter(id__in=validated_data['collections'], del_flag=False).all()
+    c_dict = {c.id: c for c in collections}
+    c_ids = [c.id for c in collections]
+    need_recreate_attrs = ['questions', 'prompt_spec', 'collections']
+    if set(need_recreate_attrs) & set(updated_attrs):
+        _recreate_bot(bot, collections)
+    # update BotCollection
+    if to_add_ids := set(c_ids) - set(bc_ids):
+        logger.debug(f'bot_update to_add_ids: {to_add_ids}')
+        for c_id in to_add_ids:
+            bc_data = {
+                'bot_id': bot.id,
+                'collection_id': c_id,
+                'collection_type': c_dict[c_id].type
+            }
+            BotCollection.objects.update_or_create(
+                bc_data, bot_id=bc_data['bot_id'], collection_id=bc_data['collection_id'])
+    if to_dell_c_ids := set(bc_ids) - set(c_ids):
+        logger.debug(f'bot_update to_dell_c_ids: {to_dell_c_ids}')
+        BotCollection.objects.filter(bot_id=bot.id, collection_id__in=to_dell_c_ids).update(del_flag=True)
     bot.save()
     return BotDetailSerializer(bot).data
 
 
-def _recreate_bot(bot: Bot, collection_ids, data):
+def _recreate_bot(bot: Bot, collections):
     RagBot.delete(bot.agent_id)
-    collections = Collection.objects.filter(id__in=collection_ids).all()
     public_collection_ids = [c.id for c in collections if c.type == c.TypeChoices.PUBLIC]
     rag_ret = RagBot.create(
-        data['user_id'],
+        bot.user_id,
         bot.prompt,
         bot.questions,
         paper_ids=_collections_doc_ids(collections),
@@ -254,17 +244,29 @@ def bot_subscribe(user_id, bot_id, action='subscribe'):
 def bot_documents(bot_id, page_size=10, page_num=1):
     bot_collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False)
     collections = [bc.collection for bc in bot_collections]
-    collection_ids = [c.id for c in collections if c.type == c.TypeChoices.PERSONAL]
+    collection_ids = [c.id for c in collections]
     query_set = CollectionDocument.objects.filter(collection_id__in=collection_ids).order_by('-updated_at')
     total = query_set.count()
     start_num = page_size * (page_num - 1)
     logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
     c_docs = query_set[start_num:(page_size * page_num)] if total > start_num else []
     docs = [cd.document for cd in c_docs]
-
     docs_data = DocumentListSerializer(docs, many=True).data
+
+    public_collections = Collection.objects.filter(id__in=collection_ids, type=Collection.TypeChoices.PUBLIC).all()
+    res_data = []
+    if public_collections:
+        for p_c in public_collections:
+            res_data.append({
+                'id': None,
+                'doc_apa': f"{_('公共库')}: {p_c.title}"
+            })
+    for i, d in enumerate(docs_data):
+        d['doc_apa'] = f"[{i + 1}] {d['doc_apa']}"
+        res_data.append(d)
+
     return {
-        'list': docs_data,
+        'list': res_data,
         'total': total
     }
 

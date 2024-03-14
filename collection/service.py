@@ -1,5 +1,7 @@
 import logging
 
+from django.utils.translation import gettext_lazy as _
+
 from bot.rag_service import Collection as RagCollection
 from collection.models import Collection, CollectionDocument
 from document.serializers import DocumentListSerializer
@@ -54,6 +56,8 @@ def collection_docs(collection_id, page_size=10, page_num=1):
     docs = [cd.document for cd in c_docs]
 
     docs_data = DocumentListSerializer(docs, many=True).data
+    for i, d_data in enumerate(docs_data):
+        docs_data[i]['doc_apa'] = f"[{i + 1}] {d_data['doc_apa']}"
 
     if c_docs:
         collection = c_docs[0].collection
@@ -70,6 +74,14 @@ def collection_docs(collection_id, page_size=10, page_num=1):
 def collections_docs(collection_ids, page_size=10, page_num=1):
     query_set = CollectionDocument.objects.filter(
         collection_id__in=collection_ids, del_flag=False).order_by('-updated_at')
+    public_collections = Collection.objects.filter(id__in=collection_ids, type=Collection.TypeChoices.PUBLIC).all()
+    res_data = []
+    if public_collections:
+        for p_c in public_collections:
+            res_data.append({
+                'id': None,
+                'doc_apa': f"{_('公共库')}: {p_c.title}"
+            })
     total = query_set.count()
     start_num = page_size * (page_num - 1)
     logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
@@ -77,7 +89,10 @@ def collections_docs(collection_ids, page_size=10, page_num=1):
     docs = [cd.document for cd in c_docs]
 
     docs_data = DocumentListSerializer(docs, many=True).data
+    for i, d in enumerate(docs_data):
+        d['doc_apa'] = f"[{i + 1}] {d['doc_apa']}"
+        res_data.append(d)
     return {
-        'list': docs_data,
+        'list': res_data,
         'total': total
     }

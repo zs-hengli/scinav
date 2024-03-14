@@ -112,6 +112,7 @@ def search(user_id, content, page_size=10, page_num=1, topn=1000):
             'reference_count': doc.reference_count,
             'collection_id': str(doc.collection_id),
             'collection_title': doc.collection.title,
+            'source': doc.journal if doc.journal else doc.conference if doc.conference else ''
         })
     cache.set(redis_key, json.dumps(ret_data), search_result_expires)
     total = len(ret_data)

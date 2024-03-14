@@ -21,8 +21,8 @@ class DocumentListSerializer(serializers.ModelSerializer):
         authors = ','.join(obj.authors)
         title = obj.title
         year = obj.year
-        journal_or_conference = obj.journal if obj.journal else obj.conference if obj.conference else ''
-        return f'{authors};{title}.{journal_or_conference} {year}'
+        source = obj.journal if obj.journal else obj.conference if obj.conference else ''
+        return f'{authors};{title}.{source} {year}'
 
     class Meta:
         model = Document

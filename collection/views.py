@@ -9,7 +9,8 @@ from rest_framework.views import APIView
 from collection.models import Collection
 from collection.serializers import (CollectionCreateSerializer,
                                     CollectionDetailSerializer,
-                                    CollectionUpdateSerializer)
+                                    CollectionUpdateSerializer,
+                                    CollectionDocUpdateSerializer)
 from collection.service import (collection_docs, collection_list,
                                 collections_docs)
 from core.utils.views import check_keys, extract_json, my_json_response
@@ -47,6 +48,7 @@ class Collections(APIView):
     @staticmethod
     def post(request, *args, **kwargs):
         request_data = request.data
+        request_data['user_id'] = request.user.id
         serial = CollectionCreateSerializer(data=request_data)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
@@ -82,9 +84,9 @@ class Collections(APIView):
 
 
 @method_decorator([extract_json], name='dispatch')
-@method_decorator(require_http_methods(['GET']), name='dispatch')
+@method_decorator(require_http_methods(['GET', 'PUT']), name='dispatch')
 @permission_classes([AllowAny])
-class CollectionDocument(APIView):
+class CollectionDocuments(APIView):
 
     @staticmethod
     def get(request, collection_id=None, *args, **kwargs):  # noqa
@@ -101,4 +103,21 @@ class CollectionDocument(APIView):
                 'page_num': int(query.get('page_num', 1)),
             }
             data = collections_docs(query_data['collection_ids'], query_data['page_size'], query_data['page_num'])
+        return my_json_response(data)
+
+    @staticmethod
+    def put(request, collection_id, *args, **kwargs):
+        user_id = request.user.id
+        collection = Collection.objects.filter(pk=collection_id, user_id=user_id).first()
+        if not collection:
+            return my_json_response({}, code=-1, msg='validate collection_id error')
+        post_data = request.data
+        post_data['user_id'] = user_id
+        post_data['collection_id'] = collection_id
+        serial = CollectionDocUpdateSerializer(data=post_data)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
+        serial.create(serial.validated_data)
+        data = {'document_ids': serial.validated_data['document_ids']}
+
         return my_json_response(data)
