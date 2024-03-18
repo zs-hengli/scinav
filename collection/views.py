@@ -9,8 +9,8 @@ from rest_framework.views import APIView
 from collection.models import Collection
 from collection.serializers import (CollectionCreateSerializer,
                                     CollectionDetailSerializer,
-                                    CollectionUpdateSerializer,
-                                    CollectionDocUpdateSerializer)
+                                    CollectionDocUpdateSerializer,
+                                    CollectionUpdateSerializer)
 from collection.service import (collection_docs, collection_list,
                                 collections_docs)
 from core.utils.views import check_keys, extract_json, my_json_response

@@ -9,6 +9,7 @@ from bot.serializers import (BotDetailSerializer, BotListAllSerializer,
                              HotBotListSerializer)
 from collection.models import Collection, CollectionDocument
 from core.utils.exceptions import InternalServerError
+from document.models import Document
 from document.serializers import DocumentListSerializer
 
 logger = logging.getLogger(__name__)
@@ -28,13 +29,12 @@ def bot_create(body):
         'cover_url': body['cover_url'],
         'type': body['type'],
     }
-    if data['prompt']:
-        data['prompt'] = {
-            'type': 'SystemPrompt',
-            "spec": {
-                "system_prompt": data['prompt'],
-            }
+    data['prompt'] = {
+        'type': 'SystemPrompt',
+        "spec": {
+            "system_prompt": data['prompt'],
         }
+    }
     collections = Collection.objects.filter(id__in=body['collections']).all()
     public_collection_ids = [c.id for c in collections if c.type == c.TypeChoices.PUBLIC]
     rag_ret = RagBot.create(
@@ -176,7 +176,7 @@ def hot_bots():
 def bot_list_all(user_id, page_size=10, page_num=1):
     user_subscribe_bot = BotSubscribe.objects.filter(user_id=user_id, del_flag=False).all()
     us_bot_ids = [us_b.bot_id for us_b in user_subscribe_bot]
-    query_set = Bot.objects.filter(type=Bot.TypeChoices.PUBLIC, del_flag=False).order_by('-pub_date')
+    query_set = Bot.objects.filter(type=Bot.TypeChoices.PUBLIC, del_flag=False).order_by('-pub_date', '-created_at')
     filter_count = query_set.count()
     start_num = page_size * (page_num - 1)
     logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
@@ -211,7 +211,7 @@ def bot_list_subscribe(user_id, page_size=10, page_num=1):
 
 
 def bot_list_my(user_id, page_size=10, page_num=1):
-    query_set = Bot.objects.filter(user_id=user_id, del_flag=False).order_by('-pub_date')
+    query_set = Bot.objects.filter(user_id=user_id, del_flag=False).order_by('-created_at')
     filter_count = query_set.count()
     start_num = page_size * (page_num - 1)
     logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
@@ -245,12 +245,14 @@ def bot_documents(bot_id, page_size=10, page_num=1):
     bot_collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False)
     collections = [bc.collection for bc in bot_collections]
     collection_ids = [c.id for c in collections]
-    query_set = CollectionDocument.objects.filter(collection_id__in=collection_ids).order_by('-updated_at')
+    query_set = CollectionDocument.objects.filter(
+        collection_id__in=collection_ids).distinct().values('document_id').order_by('-updated_at').all()
     total = query_set.count()
     start_num = page_size * (page_num - 1)
     logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
     c_docs = query_set[start_num:(page_size * page_num)] if total > start_num else []
-    docs = [cd.document for cd in c_docs]
+    docs = Document.objects.filter(id__in=[cd['document_id'] for cd in c_docs]).all()
+    # docs = [cd.document for cd in c_docs]
     docs_data = DocumentListSerializer(docs, many=True).data
 
     public_collections = Collection.objects.filter(id__in=collection_ids, type=Collection.TypeChoices.PUBLIC).all()

@@ -30,10 +30,10 @@ class BotCreateSerializer(serializers.Serializer):
             attrs['author'] = attrs['author'][:128]
         if attrs.get('title') and len(attrs['title']) > 128:
             attrs['title'] = attrs['title'][:128]
-        if attrs.get('description') and len(attrs['description']) > 128:
-            attrs['description'] = attrs['description'][:128]
-        if attrs.get('prompt_spec') and len(attrs['prompt_spec']) > 128:
-            attrs['prompt_spec'] = attrs['prompt_spec'][:128]
+        if attrs.get('description') and len(attrs['description']) > 255:
+            attrs['description'] = attrs['description'][:255]
+        if attrs.get('prompt_spec') and len(attrs['prompt_spec']) > 8000:
+            attrs['prompt_spec'] = attrs['prompt_spec'][:8000]
         if attrs.get('questions'):
             for index, question in enumerate(attrs['questions']):
                 if len(question) > 255:
@@ -66,7 +66,7 @@ class BotDetailSerializer(BaseModelSerializer):
 
     @staticmethod
     def get_prompt_spec(obj: Bot):
-        return obj.extension['spec'].get('prompt', {}).get('spec', {}).get('system_prompt', '')
+        return obj.prompt.get('spec', {}).get('system_prompt', '')
 
     @staticmethod
     def get_collections(obj: Bot):

@@ -4,6 +4,7 @@ from django.utils.translation import gettext_lazy as _
 
 from bot.rag_service import Collection as RagCollection
 from collection.models import Collection, CollectionDocument
+from document.models import Document
 from document.serializers import DocumentListSerializer
 
 logger = logging.getLogger(__name__)
@@ -73,7 +74,8 @@ def collection_docs(collection_id, page_size=10, page_num=1):
 
 def collections_docs(collection_ids, page_size=10, page_num=1):
     query_set = CollectionDocument.objects.filter(
-        collection_id__in=collection_ids, del_flag=False).order_by('-updated_at')
+        collection_id__in=collection_ids, del_flag=False).values('document_id') \
+        .order_by('-updated_at').distinct().all()
     public_collections = Collection.objects.filter(id__in=collection_ids, type=Collection.TypeChoices.PUBLIC).all()
     res_data = []
     if public_collections:
@@ -86,7 +88,7 @@ def collections_docs(collection_ids, page_size=10, page_num=1):
     start_num = page_size * (page_num - 1)
     logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
     c_docs = query_set[start_num:(page_size * page_num)]
-    docs = [cd.document for cd in c_docs]
+    docs = Document.objects.filter(id__in=[cd['document_id'] for cd in c_docs]).all()
 
     docs_data = DocumentListSerializer(docs, many=True).data
     for i, d in enumerate(docs_data):

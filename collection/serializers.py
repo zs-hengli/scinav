@@ -1,9 +1,8 @@
 import json
 import logging
 
-from django.utils.translation import gettext_lazy as _
 from django.core.cache import cache
-
+from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
 from collection.models import Collection, CollectionDocument
@@ -73,7 +72,7 @@ class CollectionDocUpdateSerializer(serializers.Serializer):
         if not attrs.get('document_ids') and not attrs.get('is_all'):
             raise serializers.ValidationError(f"document_ids and is_all {_('cannot be empty at the same time')}")
         if attrs.get('is_all') and not attrs.get('search_content'):
-            raise serializers.ValidationError(f"search_content required")
+            raise serializers.ValidationError("search_content required")
         return attrs
 
     def create(self, validated_data):
