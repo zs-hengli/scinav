@@ -89,7 +89,7 @@ class Collections(APIView):
 class CollectionDocuments(APIView):
 
     @staticmethod
-    def get(request, collection_id=None, *args, **kwargs):  # noqa
+    def get(request, collection_id=None, *args, **kwargs):
         if collection_id:
             data = collection_docs(collection_id)
         else:

@@ -7,7 +7,7 @@ import uuid
 from functools import wraps
 
 import requests
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from rest_framework.exceptions import APIException
 
 from core.utils.exceptions import ValidationError
@@ -89,6 +89,11 @@ def my_json_response(data=None, code=0, msg='', status=200, set_cookie=None):
     response = JsonResponse(res_data, status=status)
     if set_cookie: response.set_cookie(**set_cookie)
     return response
+
+
+def streaming_response(data_iter):
+    # return StreamingHttpResponse(data_iter, content_type='application/octet-stream')
+    return StreamingHttpResponse(data_iter, content_type='text/event-stream')
 
 
 def missed_key(sub_keys: dict, keys: set):

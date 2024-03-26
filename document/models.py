@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class Document(models.Model):
     class TypeChoices(models.TextChoices):
-        PERSONAL = 'personal', _('personal'),
+        PERSONAL = 'personal', _('personal')
         PUBLIC = 'public', _('public')
 
     class StateChoices(models.TextChoices):
@@ -36,6 +36,7 @@ class Document(models.Model):
     year = models.IntegerField(null=True)
     pub_date = models.DateField(null=True)
     pub_type = models.CharField(null=True, blank=True, max_length=32, default=None, db_default=None)
+    venue = models.CharField(null=True, blank=True, max_length=128, default=None, db_default=None)
     journal = models.CharField(null=True, blank=True, max_length=128, default=None, db_default=None)
     conference = models.CharField(null=True, blank=True, max_length=256, default=None, db_default=None)
     keywords = models.JSONField(null=True)
@@ -49,6 +50,8 @@ class Document(models.Model):
     object_path = models.CharField(null=True, blank=True, max_length=256)
     source_url = models.CharField(null=True, blank=True, max_length=256)
     checksum = models.CharField(null=True, blank=True, db_index=True, max_length=64)
+    ref_collection_id = models.CharField(null=True, blank=True, db_index=True, max_length=36)
+    ref_doc_id = models.BigIntegerField(null=True)
     updated_at = models.DateTimeField(null=True, auto_now=True)
     created_at = models.DateTimeField(null=True, auto_now_add=True)
 

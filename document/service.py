@@ -86,6 +86,7 @@ def search(user_id, content, page_size=10, page_num=1, topn=1000):
             'year': doc['year'],
             'pub_date': doc['pub_date'],
             'pub_type': doc['pub_type'],
+            'venue': doc['venue'],
             'journal': doc['journal'],
             'conference': doc['conference'],
             'keywords': doc['keywords'],
@@ -96,6 +97,8 @@ def search(user_id, content, page_size=10, page_num=1, topn=1000):
             'object_path': doc['object_path'],
             'source_url': doc['source_url'],
             'checksum': doc['checksum'],
+            'ref_collection_id': doc['ref_collection_id'],  # todo 分享只返回公共文章列表，如果是个人取ref_doc_id
+            'ref_doc_id': doc['ref_doc_id'],
             'state': Document.StateChoices.COMPLETE,
         }
         models_query.MAX_GET_RESULTS = 1

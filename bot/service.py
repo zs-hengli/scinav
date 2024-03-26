@@ -151,7 +151,7 @@ def bot_detail(user_id, bot_id):
 def is_subscribed(user_id, bot: Bot):
     # if bot.user_id == user_id:
     #     return True
-    if BotSubscribe.objects.filter(user_id=user_id, bot=bot).exists():
+    if BotSubscribe.objects.filter(user_id=user_id, bot=bot, del_flag=False).exists():
         return True
     return False
 
