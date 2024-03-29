@@ -5,8 +5,9 @@ from django.views.decorators.http import require_http_methods
 from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
+from django.utils.translation import gettext_lazy as _
 
-from bot.models import Bot
+from bot.models import Bot, HotBot
 from bot.serializers import BotCreateSerializer
 from bot.service import (bot_create, bot_delete, bot_detail, bot_documents,
                          bot_list_all, bot_list_my, bot_list_subscribe,
@@ -31,7 +32,7 @@ class Index(APIView):
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['GET']), name='dispatch')
 @permission_classes([AllowAny])
-class HotBot(APIView):
+class HotBots(APIView):
 
     @staticmethod
     def get(request, *args, **kwargs):
@@ -96,6 +97,8 @@ class Bots(APIView):
 
     @staticmethod
     def delete(request, bot_id, *args, **kwargs):
+        if HotBot.objects.filter(bot_id=bot_id, del_flag=False).exists():
+            return my_json_response({}, code=-1, msg=_('bot is hot, can not delete'))
         bot_delete(bot_id)
         return my_json_response({'bot_id': bot_id})
 

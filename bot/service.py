@@ -168,7 +168,7 @@ def bot_docs(bot_id):
 
 # 专题列表
 def hot_bots():
-    hot_bot = HotBot.objects.filter(del_flag=False).order_by('order_num').all()
+    hot_bot = HotBot.objects.filter(del_flag=False, bot__del_flag=False).order_by('order_num').all()
     hot_bot_list_data = HotBotListSerializer(hot_bot, many=True).data
     return hot_bot_list_data
 
