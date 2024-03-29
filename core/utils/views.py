@@ -7,10 +7,13 @@ import uuid
 from functools import wraps
 
 import requests
+from django.conf import settings
 from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from rest_framework.exceptions import APIException
+from rest_framework.renderers import BaseRenderer
 
 from core.utils.exceptions import ValidationError
+from request_id import get_current_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +28,7 @@ class APIError(BaseException):
 def send_and_response(url, data_json, params=None, headers=None, method='POST', timeout=60):
     data_json_str = json.dumps(data_json)
     log_str = data_json_str if len(data_json_str) < 800 else f"{data_json_str[:200]} -- {data_json_str[-100:]}"
-    logger.info(f'method:{method}, data_json:{log_str}, params:{params}, headers:{headers}')
+    logger.info(f'method: {method}, data_json: {log_str}, params: {params}, headers: {headers}')
     try:
         start_time = time.time()
         if method == 'POST':
@@ -93,7 +96,11 @@ def my_json_response(data=None, code=0, msg='', status=200, set_cookie=None):
 
 def streaming_response(data_iter):
     # return StreamingHttpResponse(data_iter, content_type='application/octet-stream')
-    return StreamingHttpResponse(data_iter, content_type='text/event-stream')
+    response = StreamingHttpResponse(data_iter, content_type='text/event-stream')
+    response['Access-Control-Allow-Origin'] = '*'
+    response['X-Accel-Buffering'] = 'no'
+    response['Cache-Control'] = 'no-cache'
+    return response
 
 
 def missed_key(sub_keys: dict, keys: set):
@@ -120,6 +127,10 @@ def extract_json(view_func):
 
 def _extract_json(request):
     data = {'GET': {}, 'POST': {}, 'JSON': {}}
+    if hasattr(request, 'header_id'):
+        settings.REQUEST_ID = request.header_id
+    else:
+        settings.REQUEST_ID = get_current_request_id()
     try:
         # 简单点只支持一个值
         # https://docs.djangoproject.com/en/3.0/ref/request-response/#django.http.QueryDict.dict  # noqa
@@ -167,3 +178,11 @@ def wrap_api_errors(view_func):
             return respond_json(resp, err.status)
 
     return wrapper
+
+
+class ServerSentEventRenderer(BaseRenderer):
+    media_type = 'text/event-stream'
+    format = 'txt'
+
+    def render(self, data, accepted_media_type=None, renderer_context=None):
+        return data

@@ -7,6 +7,7 @@ from bot.models import Bot
 from bot.rag_service import Conversations as RagConversation
 from chat.models import Conversation
 from chat.serializers import ConversationCreateSerializer, ConversationDetailSerializer, ConversationListSerializer
+from collection.models import Collection, CollectionDocument
 
 logger = logging.getLogger(__name__)
 
@@ -21,10 +22,35 @@ def conversation_create(validated_data):
         agent_id = bot.agent_id
         paper_ids = bot.extension['paper_ids']
         public_collection_ids = bot.extension['public_collection_ids']
+        documents = None
+        collections = None
+    elif vd.get('documents'):
+        # auto create collection.
+        collection_title = RagConversation.generate_favorite_title(vd['document_tiles'])
+        collection = Collection.objects.create(
+            user_id=vd['user_id'],
+            title=collection_title,
+            type=Collection.TypeChoices.PERSONAL,
+            total=len(vd['documents']),
+        )
+        c_doc_objs = []
+        for document_id in vd['documents']:
+            c_doc_objs.append(CollectionDocument(
+                collection=collection,
+                document_id=document_id,
+            ))
+        CollectionDocument.objects.bulk_create(c_doc_objs)
+        agent_id = None
+        paper_ids = vd.get('paper_ids')
+        public_collection_ids = vd.get('public_collection_ids')
+        documents = vd.get('documents')
+        collections = vd.get('collections', []) + [collection.id]
     else:
         agent_id = None
         paper_ids = vd.get('paper_ids')
         public_collection_ids = vd.get('public_collection_ids')
+        documents = vd.get('documents')
+        collections = vd.get('collections')
 
     # 创建 Conversation
     conv = RagConversation.create(
@@ -38,12 +64,14 @@ def conversation_create(validated_data):
         title="未命名-" + datetime.datetime.now().strftime("%Y%m%d%H%M%S"),
         user_id=conv['user_id'],
         agent_id=conv['agent_id'],
+        documents=documents,
+        collections=collections,
         public_collection_ids=conv['public_collection_ids'],
         paper_ids=conv['paper_ids'],
         type=chat_type,
     )
     # 返回 Conversation id
-    return conversation.id
+    return str(conversation.id)
 
 
 def conversation_update(conversation_id, validated_data):
@@ -92,9 +120,8 @@ def conversation_menu_list(validated_data):
         # 'within_30_days': [],
         # 'this_year': [],
     }
+    today = datetime.datetime.strptime(datetime.datetime.now().strftime('%Y-%m-%d'), '%Y-%m-%d')
     for conv in list_data:
-        today = datetime.datetime.strptime(datetime.datetime.now().strftime('%Y-%m-%d'), '%Y-%m-%d')
-        logger.debug(f"today: {today}, last_used_at: {conv['last_used_at']}")
         last_used_at = datetime.datetime.strptime(conv['last_used_at'][:10], '%Y-%m-%d')
         if today <= last_used_at:
             if data.get('today', None) is None:
@@ -129,12 +156,7 @@ def conversation_menu_list(validated_data):
 
 def chat_query(validated_data):
     if not validated_data.get('conversation_id'):
-        conversation_id = conversation_create({
-            'user_id': validated_data['user_id'],
-            'documents': validated_data.get('documents'),
-            'collections': validated_data.get('collections'),
-            'bot_id': validated_data.get('bot_id'),
-        })
+        conversation_id = conversation_create(validated_data)
     else:
         conversation_id = validated_data['conversation_id']
     return RagConversation.query(

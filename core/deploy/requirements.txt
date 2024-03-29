@@ -10,7 +10,9 @@
 amqp==5.2.0
     # via kombu
 asgiref==3.7.2
-    # via django
+    # via
+    #   django
+    #   django-cors-headers
 async-timeout==4.0.3
     # via redis
 billiard==4.2.0
@@ -53,11 +55,17 @@ django==5.0.3
     # via
     #   -r core/deploy/requirements.in
     #   django-celery-results
+    #   django-cors-headers
     #   django-redis
+    #   django-request-id
     #   djangorestframework
 django-celery-results==2.5.1
     # via -r core/deploy/requirements.in
+django-cors-headers==4.3.1
+    # via -r core/deploy/requirements.in
 django-redis==5.4.0
+    # via -r core/deploy/requirements.in
+django-request-id==1.0.0
     # via -r core/deploy/requirements.in
 djangorestframework==3.14.0
     # via -r core/deploy/requirements.in

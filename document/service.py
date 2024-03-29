@@ -10,6 +10,9 @@ from django.db.models import query as models_query
 from bot.rag_service import Document as Rag_Document
 from core.utils.common import str_hash
 from document.models import Document, DocumentLibrary
+from document.serializers import DocumentRagGetSerializer, DocumentUpdateSerializer
+
+from bot.rag_service import Document as RagDocument
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +102,7 @@ def search(user_id, content, page_size=10, page_num=1, topn=1000):
             'checksum': doc['checksum'],
             'ref_collection_id': doc['ref_collection_id'],  # todo 分享只返回公共文章列表，如果是个人取ref_doc_id
             'ref_doc_id': doc['ref_doc_id'],
-            'state': Document.StateChoices.COMPLETE,
+            'state': Document.StateChoices.COMPLETE if doc['content_id'] == 'arxiv' else Document.StateChoices.UNDONE
         }
         models_query.MAX_GET_RESULTS = 1
         doc, _ = Document.objects.update_or_create(
@@ -132,4 +135,37 @@ def update_document_lib(user_id, document_ids):
             'document_id': doc_id,
         }
         DocumentLibrary.objects.update_or_create(data, user_id=user_id, document_id=doc_id)
+    return True
+
+
+def get_url_by_object_path(object_path):
+    return f'{settings.OBJECT_PATH_URL_HOST}/{object_path}'
+
+
+def document_update_from_rag(validated_data):
+    doc_info = RagDocument.get(validated_data)
+    serial = DocumentRagGetSerializer(data=doc_info)
+    if not serial.is_valid():
+        raise Exception(serial.errors)
+    document, _ = Document.objects.update_or_create(
+        serial.validated_data,
+        doc_id=serial.validated_data['doc_id'],
+        collection_type=serial.validated_data['collection_type'],
+        collection_id=serial.validated_data['collection_id']
+    )
+    data = DocumentUpdateSerializer(document).data
+    return data
+
+
+def documents_update_from_rag(begin_id, end_id):
+    documents = Document.objects.filter(doc_id__gte=begin_id, doc_id__lte=end_id).values_list(
+        'doc_id', 'collection_id', 'collection_type', named=True).all()
+    for d in documents:
+        data = {
+            'collection_id': d.collection_id,
+            'collection_type': d.collection_type,
+            'doc_id': d.doc_id,
+        }
+        document_update_from_rag(data)
+        logger.debug(f"success update doc_Id: {d.doc_id}")
     return True

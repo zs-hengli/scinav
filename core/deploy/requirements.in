@@ -17,3 +17,5 @@ s3transfer==0.10.0
 celery
 django-celery-results
 redis
+django-request-id
+django-cors-headers

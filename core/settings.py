@@ -28,6 +28,9 @@ DEBUG = True
 DEBUG_MODAL_EXCEPTIONS = True
 
 ALLOWED_HOSTS = ['*']
+CORS_ALLOW_ALL_ORIGINS = True
+# CSRF_TRUSTED_ORIGINS = [r'^http://*', r'^https://*']
+# CORS_ALLOWED_ORIGINS = [r'^http://*', r'^https://*']
 
 # Application definition
 
@@ -39,6 +42,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django_celery_results',
+    'request_id',
+    'corsheaders',
     'user',
     'bot',
     'chat',
@@ -47,6 +52,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'request_id.middleware.RequestIdMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -122,12 +129,21 @@ if REDIS_PASSWORD:
     CACHES['default']['OPTIONS']['PASSWORD'] = REDIS_PASSWORD
 print(f"CACHES: {CACHES}")
 
+# django-request-id
+REQUEST_ID_HEADER = None
+REQUEST_ID = None
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    "filters": {
+        "request_id": {
+            "()": "request_id.logging.RequestIdFilter"
+        }
+    },
     'formatters': {
         'verbose': {
-            'format': "[{asctime}] [{name}::{funcName}::{lineno:d}] [{levelname}] {message}",
+            'format': "[{asctime}] [{name}::{funcName}::{lineno:d}] [{levelname}] {request_id} {message}",
             'style': '{',
         },
         'simple': {
@@ -138,6 +154,7 @@ LOGGING = {
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
+            "filters": ["request_id"],
             'formatter': 'verbose',
         },
     },
@@ -186,7 +203,9 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
     'DEFAULT_PARSER_CLASSES': (
+        'core.utils.views.ServerSentEventRenderer',
         'rest_framework.parsers.JSONParser',
+        'rest_framework.renderers.BrowsableAPIRenderer',
     ),
 
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -229,3 +248,6 @@ S3_SECRET_KEY = os.environ.get('S3_SECRET_KEY', 'secret_key')
 # rag api
 RAG_HOST = os.environ.get('RAG_HOST', 'https://api.scinav.myscale.cloud')
 RAG_API_KEY = os.environ.get('RAG_API_KEY', 'api_key')
+
+# object path url host
+OBJECT_PATH_URL_HOST = os.environ.get('OBJECT_PATH_URL_HOST', 'object_path_url_host')

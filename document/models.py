@@ -14,6 +14,7 @@ class Document(models.Model):
 
     class StateChoices(models.TextChoices):
         # UPLOADING = 'uploading', _('uploading')
+        UNDONE = 'undone', _('undone')
         PARSING = 'in_progress', _('in_progress')
         COMPLETE = 'complete', _('complete')
         FAILED = 'error', _('error')

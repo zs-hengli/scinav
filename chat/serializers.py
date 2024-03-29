@@ -19,6 +19,10 @@ class ConversationCreateSerializer(serializers.Serializer):
     documents = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
     collections = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
     bot_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, min_length=32, max_length=36)
+    public_collection_ids = serializers.ListField(
+        required=False, child=serializers.CharField(min_length=1), allow_empty=True)
+    paper_ids = serializers.ListField(
+        required=False, child=serializers.JSONField(), allow_empty=True, allow_null=True, default=list())
 
     def validate(self, attrs):
         if (
@@ -40,7 +44,8 @@ class ConversationCreateSerializer(serializers.Serializer):
             document_ids = list(set(document_ids))
         if document_ids:
             documents = Document.objects.filter(id__in=document_ids)\
-                .values_list('id', 'collection_type', 'collection_id', 'doc_id', named=True).all()
+                .values_list('id', 'collection_type', 'collection_id', 'doc_id', 'title', named=True).all()
+            attrs['document_titles'] = [d.title for d in documents if d.id in attrs.get('documents', [])]
             attrs['paper_ids'] = []
             for d in documents:
                 attrs['paper_ids'].append({
@@ -119,6 +124,9 @@ class ChatQuerySerializer(serializers.Serializer):
             and not attrs.get('bot_id')
         ):
             raise serializers.ValidationError('conversation_id, documents, collections, bot_id are all empty')
+        if attrs.get('conversation_id'):
+            if not Conversation.objects.filter(id=attrs['conversation_id']).exists():
+                raise serializers.ValidationError(f"conversation_id: {attrs['conversation_id']} is not exists")
         document_ids = []
         if attrs.get('documents'):
             document_ids = attrs['documents']
@@ -126,16 +134,16 @@ class ChatQuerySerializer(serializers.Serializer):
             collections = Collection.objects.filter(id__in=attrs['collections']).all()
             public_colls = [c.id for c in collections if c.type == Collection.TypeChoices.PUBLIC]
             personal_colls = [c.id for c in collections if c.type == Collection.TypeChoices.PERSONAL]
-            attrs['collections'] = public_colls
+            attrs['public_collection_ids'] = public_colls
             collection_docs = CollectionDocument.objects.filter(collection_id__in=personal_colls, del_flag=False).all()
             document_ids += [doc.document_id for doc in collection_docs]
             document_ids = list(set(document_ids))
         if document_ids:
             documents = Document.objects.filter(id__in=document_ids)\
                 .values_list('id', 'collection_type', 'collection_id', 'doc_id', named=True).all()
-            attrs['documents'] = []
+            attrs['paper_ids'] = []
             for d in documents:
-                attrs['documents'].append({
+                attrs['paper_ids'].append({
                     'collection_type': d.collection_type,
                     'collection_id': d.collection_id,
                     'doc_id': d.doc_id,

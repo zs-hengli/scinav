@@ -2,26 +2,30 @@ import logging
 
 from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
-from rest_framework.decorators import permission_classes
+from rest_framework.decorators import permission_classes, renderer_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
+from django.conf import settings
 
 from chat.serializers import ConversationCreateSerializer, ConversationUpdateSerializer, ChatQuerySerializer, \
     QuestionAnswerSerializer
 from chat.service import chat_query, conversation_create, conversation_detail, conversation_list, conversation_update, \
     conversation_menu_list
-from core.utils.views import extract_json, my_json_response, check_keys, streaming_response
+from core.utils.views import extract_json, my_json_response, streaming_response, ServerSentEventRenderer
 
 logger = logging.getLogger(__name__)
 
 
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['GET', 'POST']), name='dispatch')
-# @permission_classes([AllowAny])
+@permission_classes([AllowAny])
 class Index(APIView):
 
     def get(self, request, *args, **kwargs):  # noqa
         logger.debug(f'kwargs: {kwargs}')
+        logger.debug(f"dddddddddd request_id: {request.request_id}")
+        logger.debug(f"dddddddddd REQUEST_ID_HEADER: {settings.REQUEST_ID_HEADER}")
+        logger.debug(f"dddddddddd REQUEST_ID: {settings.REQUEST_ID}")
         data = {'desc': 'chat index'}
 
         return my_json_response(data)
@@ -78,10 +82,10 @@ class Conversations(APIView):
 
 
 @method_decorator([extract_json], name='dispatch')
-@method_decorator(require_http_methods(['POST']), name='dispatch')
+@method_decorator(require_http_methods(['POST', 'OPTIONS']), name='dispatch')
 # @permission_classes([AllowAny])
+@renderer_classes([ServerSentEventRenderer])
 class Chat(APIView):
-
     @staticmethod
     def post(request, *args, **kwargs):
         query_data = request.data

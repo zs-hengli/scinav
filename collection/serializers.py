@@ -2,6 +2,7 @@ import json
 import logging
 
 from django.core.cache import cache
+from django.db.models import F
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
@@ -86,6 +87,7 @@ class CollectionDocUpdateSerializer(serializers.Serializer):
                 all_cache = json.loads(search_cache)
                 doc_ids = [c['id'] for c in all_cache]
                 validated_data['document_ids'] = doc_ids
+        created_num = 0
         for d_id in validated_data.get('document_ids', []):
             cd_data = {
                 'collection_id': validated_data['collection_id'],
@@ -97,4 +99,9 @@ class CollectionDocUpdateSerializer(serializers.Serializer):
                 'collection_document': collection_document,
                 'created': created,
             })
+            if created:
+                created_num += 1
+        if created_num:
+            Collection.objects.filter(id=validated_data['collection_id']).update(
+                total_personal=F('total_personal') + created_num)
         return instances

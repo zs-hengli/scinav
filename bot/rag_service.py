@@ -1,9 +1,12 @@
 import datetime
 import json
 import logging
+import uuid
 
+import certifi
 import requests
 from django.conf import settings
+from requests import RequestException
 
 from chat.models import Question, Conversation
 
@@ -11,6 +14,31 @@ logger = logging.getLogger(__name__)
 
 RAG_HOST = settings.RAG_HOST
 RAG_API_KEY = settings.RAG_API_KEY
+
+
+def rag_requests(url, json=None, method='POST', headers=None, timeout=60, stream=None):
+    if headers is None:
+        headers = {}
+    request_id = settings.REQUEST_ID[:24] + str(uuid.uuid4())[24:]
+    logger.info(f'url: {url}, request_id: {request_id}, json: {json}')
+    headers.update({'X-API-KEY': RAG_API_KEY, 'X-REQUEST-ID': request_id})
+    try:
+        if method == 'POST':
+            resp = requests.post(
+                url, json=json, headers=headers, verify=certifi.where(), timeout=timeout, stream=stream)
+        elif method == 'GET':
+            resp = requests.get(url, headers=headers, verify=certifi.where(), timeout=timeout)
+        elif method == 'DELETE':
+            resp = requests.delete(url, headers=headers, verify=certifi.where(), timeout=timeout)
+        elif method == 'PUT':
+            resp = requests.put(url, json=json, headers=headers, verify=certifi.where(), timeout=timeout)
+        else:
+            raise RequestException(f"unknown method: {method}")
+    except Exception as e:
+        logger.error(e)
+        raise RequestException(f"{url}, {e}")
+    resp.raise_for_status()  # 自动处理非200响应
+    return resp
 
 
 class Bot:
@@ -33,16 +61,16 @@ class Bot:
         if prompt and prompt['spec']['system_prompt']: post_data['prompt'] = prompt
         if paper_ids: post_data['paper_ids'] = paper_ids
         if public_collection_ids: post_data['public_collection_ids'] = public_collection_ids
-        logger.debug(f'create post_data: {post_data}')
-        resp = requests.post(url, json=post_data, headers={'X-API-KEY': RAG_API_KEY}, timeout=60).json()
-        logger.info(f'url: {url}, post: {post_data}, response: {resp}')
+        resp = rag_requests(url, json=post_data, method='POST')
+        logger.info(f'url: {url}, response: {resp.text}')
+        resp = resp.json()
         return resp
 
     @staticmethod
     def delete(agent_id):
         url = RAG_HOST + '/api/v1/agents/' + agent_id
-        resp = requests.delete(url, headers={'X-API-KEY': RAG_API_KEY}, verify=False, timeout=60)
-        logger.info(f'url: {url}, response: {resp}')
+        resp = rag_requests(url, method='DELETE')
+        logger.info(f'url: {url}, response: {resp.text}')
         return resp
 
 
@@ -54,16 +82,22 @@ class Collection:
         :return:
         """
         url = RAG_HOST + '/api/v1/public-collections'
-        resp = requests.get(url, headers={'X-API-KEY': RAG_API_KEY}, verify=False, timeout=60)
-        logger.info(f'url: {url}, response: {resp}')
-        if resp.status_code == 200:
-            resp = resp.json()
-        else:
-            raise Exception(f'rag list error: {resp.status_code}, {resp.text}')
+        resp = rag_requests(url, method='GET')
+        logger.info(f'url: {url}, response: {resp.text}')
+        resp = resp.json()
         return resp
 
 
 class Document:
+    @staticmethod
+    def get(validation_data):
+        vd = validation_data
+        url = RAG_HOST + f"/api/v1/papers/{vd['collection_type']}/{vd['collection_id']}/{vd['doc_id']}"
+        resp = rag_requests(url, method='GET')
+        logger.info(f'url: {url}, response: {resp.text}')
+        resp = resp.json()
+        return resp
+
     @staticmethod
     def search(user_id, content, search_type='embedding', limit=1000, filter_conditions=None):
         url = RAG_HOST + '/api/v1/papers/search'
@@ -74,12 +108,9 @@ class Document:
             'limit': limit
         }
         if filter_conditions: post_data['filter_conditions'] = filter_conditions
-        resp = requests.post(url, json=post_data, headers={'X-API-KEY': RAG_API_KEY}, verify=False, timeout=600)
-        logger.debug(f'search post_data: {post_data}')
-        if resp.status_code == 200:
-            resp = resp.json()
-        else:
-            raise Exception(f'rag search error: {resp.status_code}, {resp.text}')
+        resp = rag_requests(url, json=post_data, method='POST')
+        logger.info(f'url: {url}, response: {resp.text}')
+        resp = resp.json()
         logger.info(f'url: {url}, response.len: {len(resp)}')
         return resp
 
@@ -94,13 +125,9 @@ class Conversations:
             'paper_ids': paper_ids,
             'public_collection_ids': public_collection_ids,
         }
-        resp = requests.post(url, json=post_data, headers={'X-API-KEY': RAG_API_KEY}, verify=False, timeout=600)
-        logger.debug(f'conversations create post_data: {post_data}')
-        if resp.status_code == 200:
-            resp = resp.json()
-        else:
-            raise Exception(f'rag search error: {resp.status_code}, {resp.text}')
-        logger.info(f'url: {url}, response.len: {len(resp)}')
+        resp = rag_requests(url, json=post_data, method='POST')
+        logger.info(f'url: {url}, response: {resp.text}')
+        resp = resp.json()
         return resp
 
     @staticmethod
@@ -111,13 +138,9 @@ class Conversations:
             'paper_ids': paper_ids,
             'public_collection_ids': public_collection_ids,
         }
-        resp = requests.put(url, json=post_data, headers={'X-API-KEY': RAG_API_KEY}, verify=False, timeout=600)
-        logger.debug(f'update post_data: {post_data}')
-        if resp.status_code == 200:
-            resp = resp.json()
-        else:
-            raise Exception(f'rag search error: {resp.status_code}, {resp.text}')
-        logger.info(f'url: {url}, response.len: {len(resp)}')
+        resp = rag_requests(url, json=post_data, method='PUT')
+        logger.info(f'url: {url}, response: {resp.text}')
+        resp = resp.json()
         return resp
 
     @staticmethod
@@ -127,37 +150,51 @@ class Conversations:
             'question': question,
             'answer': answer,
         }
-        resp = requests.post(url, json=post_data, headers={'X-API-KEY': RAG_API_KEY}, verify=False, timeout=20)
-        logger.debug(f'generate_conversation_title post_data: {post_data}')
-        if resp.status_code == 200:
-            resp = resp.json()
-        else:
-            raise Exception(f'rag generate_conversation_title error: {resp.status_code}, {resp.text}')
-        logger.info(f'url: {url}, response.len: {len(resp)}')
+        resp = rag_requests(url, json=post_data, method='POST', timeout=20)
+        logger.info(f'url: {url}, response: {resp.text}')
+        resp = resp.json()
         return resp.get('title', f"未命名-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}")
 
     @staticmethod
-    def query(user_id, conversation_id, content, streaming=True, response_format='events'):
-        def _format_stream_line(_stream, _line_data):
-            _event = _line_data.get('event')
-            if _event == 'tool_start':
-                _stream['tool_start']['name'] = _line_data.get('name')
-                _stream['input'] = _line_data.get('input')
-            elif _event == 'tool_end':
-                _stream['tool_end']['name'] = _line_data.get('name')
-                _stream['output'] = eval(_line_data['output']) if _line_data.get('output') else None
-            elif _event == 'model_statistics':
-                _stream['model_statistics']['name'] = _line_data.get('name')
-                _stream['run_id'] = _line_data.get('run_id')
-                _stream['statistics'] = _line_data.get('statistics')
-                _stream['metadata'] = _line_data.get('metadata')
-            elif _event == 'on_error':
-                _stream['on_error'] = _line_data.get('error')
-            elif _event == 'model_stream':
-                _stream['model_stream']['name'] = _line_data.get('name')
-                _stream['chunk'].append(_line_data.get('chunk'))
-            return _stream
+    def generate_favorite_title(titles):
+        url = RAG_HOST + '/api/v1/titles/favorites'
+        resp = rag_requests(url, json=titles, method='POST', timeout=20)
+        logger.info(f'url: {url}, response: {resp.text}')
+        resp = resp.json()
+        return resp.get('title', f"未命名-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}")
 
+    @staticmethod
+    def update_stream(stream, line_data):
+        class EventTypes:
+            TOOL_START = 'tool_start'
+            TOOL_END = 'tool_end'
+            MODEL_STATISTICS = 'model_statistics'
+            ON_ERROR = 'on_error'
+            MODEL_STREAM = 'model_stream'
+
+        """更新stream字典"""
+        event = line_data.get('event')
+        if event == EventTypes.TOOL_START:
+            stream[event]['name'] = line_data.get('name', '')
+            stream['input'] = line_data.get('input', '')
+        elif event == EventTypes.TOOL_END:
+            stream[event]['name'] = line_data.get('name', '')
+            stream['output'] = eval(line_data['output']) if line_data.get('output') else None
+        elif event == EventTypes.MODEL_STATISTICS:
+            stream[event]['name'] = line_data.get('name', '')
+            stream['run_id'] = line_data.get('run_id', '')
+            stream['statistics'] = line_data.get('statistics', {})
+            stream['metadata'] = line_data.get('metadata', {})
+        elif event == EventTypes.ON_ERROR:
+            stream[event] = line_data.get('error', '')  # todo on_error 信息
+        elif event == EventTypes.MODEL_STREAM:
+            stream[event]['name'] = line_data.get('name', '')
+            stream['chunk'].append(line_data.get('chunk', ''))  # Assuming 'chunk' is always a string here
+        return stream
+
+    @staticmethod
+    def query(user_id, conversation_id, content, streaming=True, response_format='events'):
+        error_msg = '很抱歉，当前服务出现了异常，无法完成您的请求。请稍后再试，或者联系我们的技术支持团队获取帮助。谢谢您的理解和耐心等待。'
         url = RAG_HOST + '/api/v1/query/conversation'
         post_data = {
             'content': content,
@@ -166,9 +203,13 @@ class Conversations:
             # 'streaming': streaming,
             # 'response_format': response_format
         }
-        resp = requests.post(url, json=post_data, headers={'X-API-KEY': RAG_API_KEY}, verify=False, timeout=30,
-                             stream=True)
-        logger.debug(f'query post_data: {post_data}')
+
+        try:
+            resp = rag_requests(url, json=post_data, method='POST', timeout=60, stream=True)
+        except requests.exceptions.RequestException as e:
+            logger.error(f'Request error: {e}')
+            yield json.dumps({'event': 'on_error', 'error': error_msg, "detail": str(e)}) + "\n"
+            return
         stream = {
             "input": {},
             "output": [],
@@ -190,7 +231,7 @@ class Conversations:
                     logger.debug(f'query line: {line}')
                     line_data = json.loads(line.strip("data: "))
                     if line_data and line_data.get('event'):
-                        stream = _format_stream_line(stream, line_data)
+                        stream = Conversations.update_stream(stream, line_data)
                         if line_data['event'] == 'tool_end':
                             line_data['output'] = stream['output']
                         yield json.dumps(line_data) + '\n'
@@ -204,19 +245,30 @@ class Conversations:
             )
         except requests.exceptions.ChunkedEncodingError as chunked_error:
             logger.error(f'query chunked_error: {chunked_error}')
-            yield json.dumps({'event': 'on_error', 'error': 'rag query/conversation service error, try again later',
-                              'detail': str(chunked_error)})
+            yield json.dumps({'event': 'on_error', 'error': error_msg, 'detail': str(chunked_error)}) + '\n'
         except requests.exceptions.ConnectionError as connection_error:
             logger.error(f'query connection_error: {connection_error}')
-            yield json.dumps({'event': 'on_error', 'error': 'rag query/conversation service error, try again later',
-                              'detail': str(connection_error)})
+            yield json.dumps({'event': 'on_error', 'error': error_msg, 'detail': str(connection_error)}) + '\n'
+        except requests.exceptions.ReadTimeout as read_timeout_error:
+            logger.error(f'query ReadTimeout: {read_timeout_error}')
+            yield json.dumps({'event': 'on_error', 'error': error_msg, 'detail': str(read_timeout_error)}) + '\n'
+        except Exception as exc:
+            logger.error(f'query exception: {exc}')
+            yield json.dumps({'event': 'on_error', 'error': error_msg, 'detail': str(exc)}) + '\n'
         yield json.dumps({
-            'event': 'conversation', 'id': conversation_id, 'question_id': question.id if question else None
-        })
-        # todo update conversation.last_used_at
-        conversation = Conversation.objects.get(pk=conversation_id)
-        conversation.last_used_at = datetime.datetime.now()
-        if not conversation.is_named:
-            conversation.title = Conversations.generate_conversation_title(content, ''.join(stream['chunk']))
-            conversation.is_named = True
-        conversation.save()
+            'event': 'conversation', 'id': conversation_id, 'question_id': str(question.id) if question else None
+        }) + '\n'
+        try:
+            conversation = Conversation.objects.get(pk=conversation_id)
+            conversation.last_used_at = datetime.datetime.now()
+            try:
+                if not conversation.is_named and stream['chunk']:
+                    conversation.title = Conversations.generate_conversation_title(content, ''.join(stream['chunk']))
+                    conversation.is_named = True
+            except Exception as e:
+                logger.error(f'Error updating conversation: {e}')
+            conversation.save()
+        except Conversation.DoesNotExist:
+            logger.error(f'Conversation with ID {conversation_id} does not exist.')
+        except Exception as e:
+            logger.error(f'Error updating conversation: {e}')

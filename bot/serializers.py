@@ -15,7 +15,7 @@ class BaseModelSerializer(serializers.ModelSerializer):
 class BotCreateSerializer(serializers.Serializer):
     user_id = serializers.CharField(required=True, min_length=32, max_length=36)
     author = serializers.CharField(required=True)
-    title = serializers.CharField(required=True)
+    title = serializers.CharField(required=True, allow_blank=False)
     description = serializers.CharField(allow_null=True, allow_blank=True)
     prompt_spec = serializers.CharField(allow_null=True, allow_blank=True)
     questions = serializers.ListField(child=serializers.CharField(min_length=1), allow_empty=True)

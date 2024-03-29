@@ -264,7 +264,7 @@ def bot_documents(bot_id, page_size=10, page_num=1):
                 'doc_apa': f"{_('公共库')}: {p_c.title}"
             })
     for i, d in enumerate(docs_data):
-        d['doc_apa'] = f"[{i + 1}] {d['doc_apa']}"
+        d['doc_apa'] = f"[{start_num + i + 1}] {d['doc_apa']}"
         res_data.append(d)
 
     return {

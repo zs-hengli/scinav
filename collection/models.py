@@ -11,7 +11,6 @@ class Collection(models.Model):
     class TypeChoices(models.TextChoices):
         PERSONAL = 'personal', _('personal'),
         PUBLIC = 'public', _('public')
-        Bot = 'bot', _('bot')
 
     id = models.CharField(max_length=36, primary_key=True, default=uuid.uuid4)
     title = models.CharField(null=True, blank=True, max_length=255, default=None, db_default=None)

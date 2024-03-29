@@ -58,7 +58,7 @@ def collection_docs(collection_id, page_size=10, page_num=1):
 
     docs_data = DocumentListSerializer(docs, many=True).data
     for i, d_data in enumerate(docs_data):
-        docs_data[i]['doc_apa'] = f"[{i + 1}] {d_data['doc_apa']}"
+        docs_data[i]['doc_apa'] = f"[{start_num + i + 1}] {d_data['doc_apa']}"
 
     if c_docs:
         collection = c_docs[0].collection
@@ -92,7 +92,7 @@ def collections_docs(collection_ids, page_size=10, page_num=1):
 
     docs_data = DocumentListSerializer(docs, many=True).data
     for i, d in enumerate(docs_data):
-        d['doc_apa'] = f"[{i + 1}] {d['doc_apa']}"
+        d['doc_apa'] = f"[{start_num + i + 1}] {d['doc_apa']}"
         res_data.append(d)
     return {
         'list': res_data,
