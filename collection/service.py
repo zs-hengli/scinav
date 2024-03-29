@@ -1,9 +1,11 @@
+import datetime
 import logging
 
 from django.utils.translation import gettext_lazy as _
 
 from bot.rag_service import Collection as RagCollection
 from collection.models import Collection, CollectionDocument
+from collection.serializers import CollectionPublicSerializer
 from document.models import Document
 from document.serializers import DocumentListSerializer
 
@@ -19,8 +21,8 @@ def collection_list(user_id, include_public=False):
             for c in public_collections
         ]
         ids = [c['id'] for c in public_collections]
-        if Collection.objects.filter(id__in=ids).count() != len(ids):
-            _save_public_collection(Collection.objects.filter(id__in=ids).all(), public_collections)
+        # if Collection.objects.filter(id__in=ids, del_flag=False).count() != len(ids):
+        _save_public_collection(Collection.objects.filter(id__in=ids).all(), public_collections)
     collections = Collection.objects.filter(user_id=user_id, del_flag=False).all()
     coll_list += [
         {'id': c.id, 'name': c.title, 'total': c.total_public + c.total_personal,
@@ -35,17 +37,28 @@ def collection_detail(user_id, collection_id):
 
 
 def _save_public_collection(saved_collections, public_collections):
-    saved_collections_dict = {c["id"]: c for c in saved_collections}
+    saved_collections_dict = {c.id: c for c in saved_collections}
     for pc in public_collections:
-        if pc['id'] not in saved_collections_dict.keys() or pc['total'] != saved_collections_dict[pc['id']]['total']:
-            coll_data = {
-                'id': pc['id'],
-                'title': pc['name'],
-                'user_id': None,
-                'type': Collection.TypeChoices.PUBLIC,
-                'total': pc['total']
-            }
-            Collection.objects.update_or_create(coll_data, id=pc['id'])
+        coll_data = {
+            'id': pc['id'],
+            'title': pc['name'],
+            'user_id': None,
+            'type': Collection.TypeChoices.PUBLIC,
+            'total_public': pc['total'],
+            'del_flag': False,
+            'updated_at': datetime.datetime.strptime(pc['update_time'], '%Y-%m-%dT%H:%M:%S'),
+        }
+        logger.debug(f"dddddddddd coll_data: {coll_data}")
+        serial = CollectionPublicSerializer(data=coll_data)
+        if not serial.is_valid():
+            logger.error(f"public collection data is invalid: {serial.errors}")
+        if pc['id'] not in saved_collections_dict.keys():
+            # create
+            serial.save()
+        else:
+            # update
+            collection = saved_collections_dict[pc['id']]
+            serial.update(collection, coll_data)
 
 
 def collection_docs(collection_id, page_size=10, page_num=1):

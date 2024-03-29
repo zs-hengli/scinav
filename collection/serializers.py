@@ -45,6 +45,33 @@ class CollectionUpdateSerializer(BaseModelSerializer):
         fields = ['id', 'name', 'updated_at']
 
 
+class CollectionPublicSerializer(serializers.ModelSerializer):
+    id = serializers.CharField(required=True)
+    title = serializers.CharField(required=True)
+    user_id = serializers.CharField(required=True, allow_null=True, allow_blank=True)
+    type = serializers.CharField(required=True)
+    total_public = serializers.IntegerField(required=True)
+    updated_at = serializers.DateTimeField(required=True, format="%Y-%m-%dT%H:%M:%S")
+    del_flag = serializers.BooleanField(required=True)
+
+    def to_internal_value(self, data):
+        ModelClass = self.Meta.model
+        date_field = ModelClass._meta.get_field('updated_at')
+        date_field.auto_now = False
+        date_field.editable = True
+        return super().to_internal_value(data)
+
+    def update(self, instance, validated_data):
+        instance.title = validated_data.get('title', instance.title)
+        instance.updated_at = validated_data.get('updated_at', instance.updated_at)
+        instance.del_flag = validated_data.get('del_flag', instance.del_flag)
+        instance.save()
+
+    class Meta:
+        model = Collection
+        fields = ['id', 'title', 'user_id', 'type', 'total_public', 'updated_at', 'del_flag']
+
+
 class CollectionDetailSerializer(BaseModelSerializer):
     name = serializers.CharField(source='title')
 
