@@ -48,7 +48,7 @@ def _save_public_collection(saved_collections, public_collections):
             'del_flag': False,
             'updated_at': datetime.datetime.strptime(pc['update_time'], '%Y-%m-%dT%H:%M:%S'),
         }
-        logger.debug(f"dddddddddd coll_data: {coll_data}")
+        serial = CollectionPublicSerializer(data=coll_data)
         serial = CollectionPublicSerializer(data=coll_data)
         if not serial.is_valid():
             logger.error(f"public collection data is invalid: {serial.errors}")
