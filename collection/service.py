@@ -21,8 +21,8 @@ def collection_list(user_id, include_public=False):
             for c in public_collections
         ]
         ids = [c['id'] for c in public_collections]
-        # if Collection.objects.filter(id__in=ids, del_flag=False).count() != len(ids):
-        _save_public_collection(Collection.objects.filter(id__in=ids).all(), public_collections)
+        if Collection.objects.filter(id__in=ids, del_flag=False).count() != len(ids):
+            _save_public_collection(Collection.objects.filter(id__in=ids).all(), public_collections)
     collections = Collection.objects.filter(user_id=user_id, del_flag=False).all()
     coll_list += [
         {'id': c.id, 'name': c.title, 'total': c.total_public + c.total_personal,
