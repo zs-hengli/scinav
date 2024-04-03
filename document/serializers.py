@@ -59,7 +59,7 @@ class DocumentRagGetSerializer(serializers.ModelSerializer):
     journal = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     conference = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     keywords = serializers.JSONField(required=True, allow_null=True)
-    is_open_access = serializers.BooleanField(required=True, allow_null=True)
+    full_text_accessible = serializers.BooleanField(required=True, allow_null=True)
     citation_count = serializers.IntegerField(required=True, allow_null=True)
     reference_count = serializers.IntegerField(required=True, allow_null=True)
     citations = serializers.JSONField(required=True, allow_null=True)
@@ -76,7 +76,7 @@ class DocumentRagGetSerializer(serializers.ModelSerializer):
         model = Document
         fields = ['id', 'doc_id', 'user_id', 'collection_type', 'collection_id', 'title', 'abstract', 'authors', 'doi',
                   'categories', 'page_num', 'year', 'pub_date', 'pub_type', 'venue', 'journal', 'conference',
-                  'keywords', 'is_open_access', 'citation_count', 'reference_count', 'citations', 'references', 'state',
+                  'keywords', 'full_text_accessible', 'citation_count', 'reference_count', 'citations', 'references', 'state',
                   'object_path', 'source_url', 'checksum', 'ref_collection_id', 'ref_doc_id']
 
 

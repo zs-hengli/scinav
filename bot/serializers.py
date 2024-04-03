@@ -1,6 +1,8 @@
 import logging
 
 from rest_framework import serializers
+from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 from bot.models import Bot, BotCollection, HotBot
 
@@ -91,6 +93,19 @@ class HotBotListSerializer(BaseModelSerializer):
         fields = ['bot_id', 'order_num', 'title', 'updated_at']
 
 
+class BotListQuerySerializer(serializers.Serializer):
+    class ListTypeChoices(models.TextChoices):
+        ALL = 'all', _('all'),
+        MY = 'my', _('my'),
+        SUBSCRIBE = 'subscribe', _('subscribe'),
+        CHAT_MENU = 'chat_menu', _('chat_menu')
+
+    user_id = serializers.CharField(required=True, min_length=32, max_length=36)
+    list_type = serializers.ChoiceField(required=False, choices=ListTypeChoices, default=ListTypeChoices.ALL)
+    page_num = serializers.IntegerField(required=False, default=1)
+    page_size = serializers.IntegerField(required=False, default=10)
+
+
 class BotListAllSerializer(BaseModelSerializer):
     doc_total = serializers.SerializerMethodField()
 
@@ -115,3 +130,10 @@ class BotListMySerializer(BaseModelSerializer):
     class Meta:
         model = Bot
         fields = ['id', 'title', 'description', 'doc_total', 'updated_at']
+
+
+class BotListChatMenuSerializer(BaseModelSerializer):
+
+    class Meta:
+        model = Bot
+        fields = ['id', 'title', 'description', 'updated_at']

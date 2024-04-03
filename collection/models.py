@@ -9,8 +9,9 @@ logger = logging.getLogger(__name__)
 
 class Collection(models.Model):
     class TypeChoices(models.TextChoices):
-        PERSONAL = 'personal', _('personal'),
+        PERSONAL = 'personal', _('personal')
         PUBLIC = 'public', _('public')
+        SUBSCRIBE = 'subscribe', _('subscribe')
 
     id = models.CharField(max_length=36, primary_key=True, default=uuid.uuid4)
     title = models.CharField(null=True, blank=True, max_length=255, default=None, db_default=None)
@@ -37,6 +38,7 @@ class CollectionDocument(models.Model):
     )
     document = models.ForeignKey(
         'document.Document', db_constraint=False, on_delete=models.DO_NOTHING, db_column='document_id')
+    full_text_accessible = models.BooleanField(null=True, default=None, db_default=None)
     del_flag = models.BooleanField(default=False, db_default=False)
     updated_at = models.DateTimeField(null=True, auto_now=True)
     created_at = models.DateTimeField(null=True, auto_now_add=True)

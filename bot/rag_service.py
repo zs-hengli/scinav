@@ -153,7 +153,7 @@ class Conversations:
         resp = rag_requests(url, json=post_data, method='POST', timeout=20)
         logger.info(f'url: {url}, response: {resp.text}')
         resp = resp.json()
-        return resp.get('title', f"未命名-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}")
+        return resp.get('title')
 
     @staticmethod
     def generate_favorite_title(titles):
@@ -193,7 +193,7 @@ class Conversations:
         return stream
 
     @staticmethod
-    def query(user_id, conversation_id, content, streaming=True, response_format='events'):
+    def query(user_id, conversation_id, content, question_id=None, streaming=True, response_format='events'):
         error_msg = '很抱歉，当前服务出现了异常，无法完成您的请求。请稍后再试，或者联系我们的技术支持团队获取帮助。谢谢您的理解和耐心等待。'
         url = RAG_HOST + '/api/v1/query/conversation'
         post_data = {
@@ -203,6 +203,26 @@ class Conversations:
             # 'streaming': streaming,
             # 'response_format': response_format
         }
+        conversation, question = None, None
+        conversation = Conversation.objects.filter(id=conversation_id).first()
+        if not conversation:
+            error_msg = f'此会话不存在 {conversation_id}'
+            yield json.dumps({
+                'event': 'on_error', 'error': error_msg, "detail": {"conversation_id": conversation_id}}) + "\n"
+            return
+        if question_id:
+            question = Question.objects.filter(id=question_id).first()
+            if not question:
+                error_msg = f'此问题id不存在 {question_id}'
+                yield json.dumps({
+                    'event': 'on_error', 'error': error_msg, "detail": {"question_id": question_id}}) + "\n"
+                return
+            elif question.conversation_id != conversation_id:
+                error_msg = f'此问题id不属于该会话, question_id: {question_id}, conversation_id: {conversation_id}'
+                yield json.dumps({
+                    'event': 'on_error', 'error': error_msg,
+                    "detail": {"question_id": question_id, "conversation_id": conversation_id}}) + "\n"
+                return
 
         try:
             resp = rag_requests(url, json=post_data, method='POST', timeout=60, stream=True)
@@ -223,7 +243,6 @@ class Conversations:
             "statistics": {},
             "chunk": []
         }
-        question = None
         try:
             for line in resp.iter_lines():
                 if line:
@@ -235,40 +254,35 @@ class Conversations:
                         if line_data['event'] == 'tool_end':
                             line_data['output'] = stream['output']
                         yield json.dumps(line_data) + '\n'
-            question = Question.objects.create(
-                conversation_id=conversation_id,
-                content=content,
-                stream=stream,
-                input_tokens=stream.get('statistics', {}).get('input_tokens', 0),
-                output_tokens=stream.get('statistics', {}).get('output_tokens', 0),
-                answer=''.join(stream['chunk'])
-            )
-        except requests.exceptions.ChunkedEncodingError as chunked_error:
-            logger.error(f'query chunked_error: {chunked_error}')
-            yield json.dumps({'event': 'on_error', 'error': error_msg, 'detail': str(chunked_error)}) + '\n'
-        except requests.exceptions.ConnectionError as connection_error:
-            logger.error(f'query connection_error: {connection_error}')
-            yield json.dumps({'event': 'on_error', 'error': error_msg, 'detail': str(connection_error)}) + '\n'
-        except requests.exceptions.ReadTimeout as read_timeout_error:
-            logger.error(f'query ReadTimeout: {read_timeout_error}')
-            yield json.dumps({'event': 'on_error', 'error': error_msg, 'detail': str(read_timeout_error)}) + '\n'
+            if not question:
+                question = Question.objects.create(
+                    conversation_id=conversation_id,
+                    content=content,
+                    stream=stream,
+                    input_tokens=stream.get('statistics', {}).get('input_tokens', 0),
+                    output_tokens=stream.get('statistics', {}).get('output_tokens', 0),
+                    answer=''.join(stream['chunk'])
+                )
+            else:
+                question.content = content
+                question.stream = stream
+                question.input_tokens = stream.get('statistics', {}).get('input_tokens', 0)
+                question.output_tokens = stream.get('statistics', {}).get('output_tokens', 0)
+                question.answer = ''.join(stream['chunk'])
+                question.save()
         except Exception as exc:
             logger.error(f'query exception: {exc}')
             yield json.dumps({'event': 'on_error', 'error': error_msg, 'detail': str(exc)}) + '\n'
         yield json.dumps({
             'event': 'conversation', 'id': conversation_id, 'question_id': str(question.id) if question else None
         }) + '\n'
+        conversation.last_used_at = datetime.datetime.now()
         try:
-            conversation = Conversation.objects.get(pk=conversation_id)
-            conversation.last_used_at = datetime.datetime.now()
-            try:
-                if not conversation.is_named and stream['chunk']:
-                    conversation.title = Conversations.generate_conversation_title(content, ''.join(stream['chunk']))
-                    conversation.is_named = True
-            except Exception as e:
-                logger.error(f'Error updating conversation: {e}')
-            conversation.save()
-        except Conversation.DoesNotExist:
-            logger.error(f'Conversation with ID {conversation_id} does not exist.')
+            if not conversation.is_named and stream['chunk']:
+                conversation.title = Conversations.generate_conversation_title(content, ''.join(stream['chunk']))
+                conversation.is_named = True
         except Exception as e:
             logger.error(f'Error updating conversation: {e}')
+        if not conversation.is_named:
+            conversation.title = content[:128]
+        conversation.save()

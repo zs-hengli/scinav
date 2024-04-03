@@ -41,7 +41,7 @@ class Document(models.Model):
     journal = models.CharField(null=True, blank=True, max_length=128, default=None, db_default=None)
     conference = models.CharField(null=True, blank=True, max_length=256, default=None, db_default=None)
     keywords = models.JSONField(null=True)
-    is_open_access = models.BooleanField(null=True, default=False, db_default=False)
+    full_text_accessible = models.BooleanField(null=True, default=None, db_default=None)
     citation_count = models.IntegerField(null=True)
     reference_count = models.IntegerField(null=True)
     citations = models.JSONField(null=True)

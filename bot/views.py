@@ -1,17 +1,16 @@
 import logging
 
 from django.utils.decorators import method_decorator
+from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_http_methods
 from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
-from django.utils.translation import gettext_lazy as _
 
 from bot.models import Bot, HotBot
-from bot.serializers import BotCreateSerializer
+from bot.serializers import BotCreateSerializer, BotListQuerySerializer
 from bot.service import (bot_create, bot_delete, bot_detail, bot_documents,
-                         bot_list_all, bot_list_my, bot_list_subscribe,
-                         bot_publish, bot_subscribe, bot_update, hot_bots)
+                         bot_publish, bot_subscribe, bot_update, hot_bots, get_bot_list)
 from core.utils.exceptions import ValidationError
 from core.utils.views import extract_json, my_json_response
 
@@ -52,20 +51,10 @@ class Bots(APIView):
             data = bot_detail(user_id, bot_id)
         else:
             query_data = kwargs['request_data']['GET']
-            params = {
-                'page_size': int(query_data.get('page_size', 10)),
-                'page_num': int(query_data.get('page_num', 1)),
-                'list_type': query_data.get('list_type', 'all')
-            }
-            list_type_map = ['all', 'my', 'subscribe']
-            if params['list_type'] not in list_type_map:
-                raise ValidationError(f'list_type is illegal must in {list_type_map}')
-            if params['list_type'] == 'all':
-                data = bot_list_all(user_id, params['page_size'], params['page_num'])
-            elif params['list_type'] == 'my':
-                data = bot_list_my(user_id, params['page_size'], params['page_num'])
-            else:
-                data = bot_list_subscribe(user_id, params['page_size'], params['page_num'])
+            query_data['user_id'] = user_id
+            serial = BotListQuerySerializer(data=query_data)
+            serial.is_valid(raise_exception=True)
+            data = get_bot_list(serial.validated_data)
         return my_json_response(data)
 
     @staticmethod
@@ -114,6 +103,11 @@ class BotSubscribe(APIView):
         action_map = ['subscribe', 'unsubscribe']
         if action not in action_map:
             raise ValidationError(f'action is illegal must in {action_map}')
+        bot = Bot.objects.filter(pk=bot_id).first()
+        if not bot:
+            return my_json_response({}, code=-1, msg=_('bot_id is illegal'))
+        # if bot.user_id == user_id:  # todo 有用户体系后调整
+        #     return my_json_response({}, code=-2, msg=_('can not subscribe self bot'))
         bot_subscribe(user_id, bot_id, action)
         return my_json_response({'bot_id': bot_id})
 

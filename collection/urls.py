@@ -10,6 +10,7 @@ urlpatterns = [
     path('collections/<str:collection_id>/documents', views.CollectionDocuments.as_view()),
 
     path('collections', views.Collections.as_view()),
+    path('collections/list/<str:list_type>', views.Collections.as_view()),
     path('collections/<str:collection_id>', views.Collections.as_view()),
     path('collections/<str:collection_id>/name', views.Collections.as_view()),
 

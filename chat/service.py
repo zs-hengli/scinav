@@ -8,12 +8,14 @@ from bot.rag_service import Conversations as RagConversation
 from chat.models import Conversation
 from chat.serializers import ConversationCreateSerializer, ConversationDetailSerializer, ConversationListSerializer
 from collection.models import Collection, CollectionDocument
+from document.models import DocumentLibrary
 
 logger = logging.getLogger(__name__)
 
 
 def conversation_create(validated_data):
     vd = validated_data
+    title = None
     # 判断 chat类型
     chat_type = ConversationCreateSerializer.get_chat_type(validated_data)
     if chat_type == Conversation.TypeChoices.BOT_COV:
@@ -24,6 +26,7 @@ def conversation_create(validated_data):
         public_collection_ids = bot.extension['public_collection_ids']
         documents = None
         collections = None
+        title = bot.title
     elif vd.get('documents'):
         # auto create collection.
         collection_title = RagConversation.generate_favorite_title(vd['document_tiles'])
@@ -34,10 +37,14 @@ def conversation_create(validated_data):
             total=len(vd['documents']),
         )
         c_doc_objs = []
+        d_lib = DocumentLibrary.objects.filter(
+            user_id=vd['user_id'], del_flag=False, document_id__in=vd['documents']
+        ).values_list('document_id', flat=True)
         for document_id in vd['documents']:
             c_doc_objs.append(CollectionDocument(
                 collection=collection,
                 document_id=document_id,
+                full_text_accessible=document_id in d_lib,  # todo v1.0 默认都有全文 v2.0需要考虑策略
             ))
         CollectionDocument.objects.bulk_create(c_doc_objs)
         agent_id = None
@@ -61,7 +68,7 @@ def conversation_create(validated_data):
     )
     conversation = Conversation.objects.create(
         id=conv['id'],
-        title="未命名-" + datetime.datetime.now().strftime("%Y%m%d%H%M%S"),
+        title="未命名-" + datetime.datetime.now().strftime("%Y%m%d%H%M%S") if title is None else title,
         user_id=conv['user_id'],
         agent_id=conv['agent_id'],
         documents=documents,
@@ -69,6 +76,7 @@ def conversation_create(validated_data):
         public_collection_ids=conv['public_collection_ids'],
         paper_ids=conv['paper_ids'],
         type=chat_type,
+        is_named=title is not None,
     )
     # 返回 Conversation id
     return str(conversation.id)
@@ -160,4 +168,4 @@ def chat_query(validated_data):
     else:
         conversation_id = validated_data['conversation_id']
     return RagConversation.query(
-        validated_data['user_id'], conversation_id, validated_data['content'])
+        validated_data['user_id'], conversation_id, validated_data['content'], validated_data.get('question_id'))

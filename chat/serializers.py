@@ -61,7 +61,7 @@ class ConversationCreateSerializer(serializers.Serializer):
         bot = vd.get('bot_id')
         doc_ids = vd.get('doc_ids')
         collections = vd.get('collections')
-        if bot and not doc_ids and not collections:
+        if bot:
             return Conversation.TypeChoices.BOT_COV
         elif doc_ids and not bot and not collections:
             if len(doc_ids) == 1: return Conversation.TypeChoices.DOC_COV
@@ -69,7 +69,7 @@ class ConversationCreateSerializer(serializers.Serializer):
         elif collections and not bot and not doc_ids:
             if len(collections) == 1: return Conversation.TypeChoices.COLLECTION_COV
             else: return Conversation.TypeChoices.COLLECTIONS_COV
-        elif bot or doc_ids or collections:
+        elif doc_ids and collections:
             return Conversation.TypeChoices.MIX_COV
         else:
             return Conversation.TypeChoices.SIMPLE_COV
@@ -110,6 +110,7 @@ class ConversationListSerializer(BaseModelSerializer):
 class ChatQuerySerializer(serializers.Serializer):
     user_id = serializers.CharField(required=True, min_length=32, max_length=36)
     conversation_id = serializers.CharField(required=False, min_length=32, max_length=36)
+    question_id = serializers.CharField(required=False, min_length=32, max_length=36)
     content = serializers.CharField(required=True, min_length=1, max_length=1024)
 
     documents = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)

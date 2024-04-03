@@ -12,7 +12,7 @@ from collection.serializers import (CollectionCreateSerializer,
                                     CollectionDocUpdateSerializer,
                                     CollectionUpdateSerializer)
 from collection.service import (collection_docs, collection_list,
-                                collections_docs)
+                                collections_docs, generate_collection_title, collection_delete)
 from core.utils.views import check_keys, extract_json, my_json_response
 
 logger = logging.getLogger(__name__)
@@ -36,23 +36,39 @@ class Index(APIView):
 class Collections(APIView):
 
     @staticmethod
-    def get(request, collection_id=None, *args, **kwargs):
+    def get(request, collection_id=None, list_type='my', *args, **kwargs):
+        logger.debug(f'collection_id: {collection_id}, list_type: {list_type}')
+        list_type = list_type.split(',')
+        types = ['my', 'public', 'subscribe']
+        if set(list_type) - set(types):
+            return my_json_response({}, code=-1, msg='list_type error')
         user_id = request.user.id
         if collection_id:
             collection = Collection.objects.get(pk=collection_id, user_id=user_id)
             data = CollectionDetailSerializer(collection).data
         else:
-            data = {'list': collection_list(user_id, True)}
+            data = {'list': collection_list(user_id, list_type=list_type)}
         return my_json_response(data)
 
     @staticmethod
     def post(request, *args, **kwargs):
-        request_data = request.data
-        request_data['user_id'] = request.user.id
-        serial = CollectionCreateSerializer(data=request_data)
+        query = request.data
+        query['user_id'] = request.user.id
+        serial = CollectionCreateSerializer(data=query)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
-        collection = serial.create(serial.validated_data)
+        vd = serial.validated_data
+        if vd.get('document_ids'):
+            title = generate_collection_title(document_titles=vd['document_titles'])
+            vd['title'] = title
+        elif vd.get('search_content'):
+            vd['title'] = generate_collection_title(content=vd['search_content'])
+
+        collection = serial.create({
+            'title': vd['title'],
+            'user_id': vd['user_id'],
+            'type': vd['type']
+        })
         data = CollectionDetailSerializer(collection).data
         return my_json_response(data)
 
@@ -78,8 +94,7 @@ class Collections(APIView):
         collection = Collection.objects.filter(pk=collection_id, user_id=user_id).first()
         if not collection:
             return my_json_response({}, code=-1, msg='validate collection_id error')
-        collection.del_flag = True
-        collection.save()
+        collection_delete(collection)
         return my_json_response({'collection_id': collection_id})
 
 
@@ -90,10 +105,11 @@ class CollectionDocuments(APIView):
 
     @staticmethod
     def get(request, collection_id=None, *args, **kwargs):
+        query = kwargs['request_data']['GET']
         if collection_id:
-            data = collection_docs(collection_id)
+            data = collection_docs(
+                collection_id, page_size=int(query.get('page_size', 10)), page_num=int(query.get('page_num', 1)))
         else:
-            query = kwargs['request_data']['GET']
             check_keys(query, ['collection_ids'])
             if isinstance(query['collection_ids'], str):
                 query['collection_ids'] = query['collection_ids'].split(',')
@@ -110,14 +126,19 @@ class CollectionDocuments(APIView):
         user_id = request.user.id
         collection = Collection.objects.filter(pk=collection_id, user_id=user_id).first()
         if not collection:
-            return my_json_response({}, code=-1, msg='validate collection_id error')
+            return my_json_response({}, code=-1, msg='收藏夹不存在')
+        if collection.type == Collection.TypeChoices.PUBLIC:
+            return my_json_response({}, code=-2, msg='此收藏夹不支持添加文献')
+
         post_data = request.data
         post_data['user_id'] = user_id
         post_data['collection_id'] = collection_id
         serial = CollectionDocUpdateSerializer(data=post_data)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
-        serial.create(serial.validated_data)
-        data = {'document_ids': serial.validated_data['document_ids']}
+        if serial.validated_data['action'] == 'add':
+            serial.create(serial.validated_data)
+        else:
+            serial.delete_document(serial.validated_data)
 
-        return my_json_response(data)
+        return my_json_response({})

@@ -2,13 +2,14 @@ import datetime
 import logging
 
 from django.utils.translation import gettext_lazy as _
+from django.db.models import Q
 
 from bot.models import Bot, BotCollection, BotSubscribe, HotBot
 from bot.rag_service import Bot as RagBot
-from bot.serializers import (BotDetailSerializer, BotListAllSerializer,
-                             HotBotListSerializer)
+from bot.serializers import (BotDetailSerializer, BotListAllSerializer, HotBotListSerializer, BotListChatMenuSerializer)
 from collection.models import Collection, CollectionDocument
-from core.utils.exceptions import InternalServerError
+from collection.serializers import CollectionCreateSerializer
+from core.utils.exceptions import InternalServerError, ValidationError
 from document.models import Document
 from document.serializers import DocumentListSerializer
 
@@ -36,6 +37,9 @@ def bot_create(body):
         }
     }
     collections = Collection.objects.filter(id__in=body['collections']).all()
+    bot_subscribe_collections = [c for c in collections if c.bot_id]
+    if bot_subscribe_collections:
+        raise ValidationError(_('订阅专题收藏夹不能用于创建专题'))
     public_collection_ids = [c.id for c in collections if c.type == c.TypeChoices.PUBLIC]
     rag_ret = RagBot.create(
         data['user_id'],
@@ -173,6 +177,18 @@ def hot_bots():
     return hot_bot_list_data
 
 
+def get_bot_list(validated_data):
+    vd = validated_data
+    if validated_data['list_type'] == 'all':
+        bot_list = bot_list_all(vd['user_id'], vd['page_size'], vd['page_num'])
+    elif validated_data['list_type'] == 'my':
+        bot_list = bot_list_my(vd['user_id'], vd['page_size'], vd['page_num'])
+    elif validated_data['list_type'] == 'subscribe':
+        bot_list = bot_list_subscribe(vd['user_id'], vd['page_size'], vd['page_num'])
+    else:
+        bot_list = bot_list_chat_menu(vd['user_id'], vd['page_size'], vd['page_num'])
+    return bot_list
+
 def bot_list_all(user_id, page_size=10, page_num=1):
     user_subscribe_bot = BotSubscribe.objects.filter(user_id=user_id, del_flag=False).all()
     us_bot_ids = [us_b.bot_id for us_b in user_subscribe_bot]
@@ -227,11 +243,49 @@ def bot_list_my(user_id, page_size=10, page_num=1):
     }
 
 
+def bot_list_chat_menu(user_id, page_size=10, page_num=1):
+    """
+    my bot + public bot
+    """
+    bot_sub = BotSubscribe.objects.filter(user_id=user_id, del_flag=False).all()
+    filter_query = (
+        Q(user_id=user_id, del_flag=False)
+        | Q(id__in=[b.bot_id for b in bot_sub], del_flag=False)
+    )
+    query_set = Bot.objects.filter(filter_query).order_by('-pub_date', '-created_at')
+    filter_count = query_set.count()
+    start_num = page_size * (page_num - 1)
+    logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
+    bots = query_set[start_num:(page_size * page_num)]
+    bot_list_data = BotListChatMenuSerializer(bots, many=True).data
+    return {
+        'list': bot_list_data,
+        'total': filter_count
+    }
+
+
 # 专题订阅和取消订阅
 def bot_subscribe(user_id, bot_id, action='subscribe'):
     # 订阅： 加个人文件库 创建同名收藏夹
     # 取消订阅 删除收藏夹
     # todo 收藏夹有调整 增加文献时修改订阅者的个人文件库
+    # if action == 'subscribe':
+    #     bot = Bot.objects.filter(pk=bot_id).values_list('title', 'type', 'user_id', named=True).first()
+    #     items = BotCollection.objects.filter(bot_id=bot_id, del_flag=False).all()
+    #     total_public = sum(items.values_list('collection__total_public', flat=True))
+    #     total_personal = sum(items.values_list('collection__total_personal', flat=True))
+    #     collect_data = {
+    #         'user_id': user_id,
+    #         'title': bot.title,
+    #         'type': Collection.TypeChoices.PERSONAL,
+    #         'bot_id': bot_id,
+    #         'total_public': total_public,
+    #         'total_personal': total_personal,
+    #         'del_flag': False,
+    #     }
+    #     Collection.objects.update_or_create(collect_data, user_id=user_id, bot_id=bot_id)
+    # else:
+    #     Collection.objects.filter(user_id=user_id, bot_id=bot_id).update(del_flag=True)
     data = {
         'user_id': user_id,
         'bot_id': bot_id,

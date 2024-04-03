@@ -3,37 +3,90 @@ import logging
 
 from django.utils.translation import gettext_lazy as _
 
-from bot.rag_service import Collection as RagCollection
+from bot.models import BotCollection, BotSubscribe, Bot
+from bot.rag_service import Collection as RagCollection, Conversations as RagConversations
 from collection.models import Collection, CollectionDocument
-from collection.serializers import CollectionPublicSerializer
+from collection.serializers import CollectionPublicSerializer, CollectionListSerializer, CollectionPublicListSerializer, \
+    CollectionSubscribeSerializer
+from core.utils.exceptions import ValidationError
 from document.models import Document
 from document.serializers import DocumentListSerializer
+from document.service import search_result_from_cache
 
 logger = logging.getLogger(__name__)
 
 
-def collection_list(user_id, include_public=False):
+def collection_list(user_id, list_type):
     coll_list = []
-    if include_public:
+    # 1 public collections
+    if 'public' in list_type:
         public_collections = RagCollection.list()
-        coll_list = [
-            {'id': c['id'], 'name': c['name'], 'total': c['total'], 'type': Collection.TypeChoices.PUBLIC}
-            for c in public_collections
-        ]
+        public_collections = [pc | {'updated_at': pc['update_time']} for pc in public_collections]
+        pub_serial = CollectionPublicListSerializer(data=public_collections, many=True)
+        pub_serial.is_valid(raise_exception=True)
+        coll_list = pub_serial.data
         ids = [c['id'] for c in public_collections]
         if Collection.objects.filter(id__in=ids, del_flag=False).count() != len(ids):
             _save_public_collection(Collection.objects.filter(id__in=ids).all(), public_collections)
-    collections = Collection.objects.filter(user_id=user_id, del_flag=False).all()
-    coll_list += [
-        {'id': c.id, 'name': c.title, 'total': c.total_public + c.total_personal,
-         'type': Collection.TypeChoices.PERSONAL
-         } for c in collections
-    ]
+    # 2 submit bot collections
+    if 'subscribe' in list_type:
+        sub_serial = CollectionSubscribeSerializer(data=_bot_subscribe_collection_list(user_id), many=True)
+        sub_serial.is_valid()
+        coll_list += sub_serial.data
+
+    # 3 user collections
+    if 'my' in list_type:
+        collections = Collection.objects.filter(user_id=user_id, del_flag=False).all()
+        coll_list += list(CollectionListSerializer(collections, many=True).data)
     return coll_list
+
+
+def _bot_subscribe_collection_list(user_id):
+    bot_sub = BotSubscribe.objects.filter(bot__user_id=user_id, del_flag=False).all()
+    bot_ids = [bc.bot_id for bc in bot_sub]
+    bots = Bot.objects.filter(id__in=bot_ids)
+    bots_dict = {b.id: b for b in bots}
+    bot_collections = BotCollection.objects.filter(
+        bot_id__in=bot_ids, del_flag=False).order_by('bot_id', '-updated_at').all()
+    bot_sub_collect = {}
+    for bc in bot_collections:
+        if bc.bot_id not in bot_sub_collect:
+            bot_sub_collect[bc.bot_id] = {
+                'id': None,
+                'bot_id': bc.bot_id,
+                'name': bots_dict[bc.bot_id].title,
+                'type': Collection.TypeChoices.SUBSCRIBE,
+                'updated_at': bc.updated_at,
+                'total': 0,
+            }
+        bot_sub_collect[bc.bot_id]['total'] += bc.collection.total_public + bc.collection.total_personal
+        bot_sub_collect[bc.bot_id]['updated_at'] = max(
+            bot_sub_collect[bc.bot_id]['updated_at'], bc.collection.updated_at)
+    return list(bot_sub_collect.values())
+
+
+def generate_collection_title(content=None, document_titles=None):
+    if content:
+        search_result = search_result_from_cache(content, 200, 1)
+        titles = [
+            sr['title'] for sr in search_result['list']
+        ] if search_result and search_result.get('list') else [content]
+    else:
+        titles = document_titles
+    return RagConversations.generate_favorite_title(titles)
 
 
 def collection_detail(user_id, collection_id):
     pass
+
+
+def collection_delete(collection):
+    if BotCollection.objects.filter(collection_id=collection.id, del_flag=False).exists():
+        raise ValidationError(_('此收藏夹被用于专题中，不能删除'))
+
+    collection.del_flag = True
+    collection.save()
+    return True
 
 
 def _save_public_collection(saved_collections, public_collections):
@@ -46,7 +99,7 @@ def _save_public_collection(saved_collections, public_collections):
             'type': Collection.TypeChoices.PUBLIC,
             'total_public': pc['total'],
             'del_flag': False,
-            'updated_at': datetime.datetime.strptime(pc['update_time'], '%Y-%m-%dT%H:%M:%S'),
+            'updated_at': datetime.datetime.strptime(pc['update_time'][:19], '%Y-%m-%dT%H:%M:%S'),
         }
         serial = CollectionPublicSerializer(data=coll_data)
         serial = CollectionPublicSerializer(data=coll_data)

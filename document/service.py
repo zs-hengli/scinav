@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 
@@ -8,6 +9,7 @@ from django.core.cache import cache
 from django.db.models import query as models_query
 
 from bot.rag_service import Document as Rag_Document
+from collection.models import Collection
 from core.utils.common import str_hash
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentRagGetSerializer, DocumentUpdateSerializer
@@ -56,23 +58,11 @@ def gen_s3_presigned_post(bucket: str, path: str) -> dict:
 # url, fields = generate_presigned_post('bucket', 'remote/path/of/file')
 
 
-def search(user_id, content, page_size=10, page_num=1, topn=1000):
-    doc_search_redis_key_prefix = 'doc:search'
-    search_result_expires = 86400 * 7  # 缓存过期时间 7天
-    content_hash = str_hash(content)
-    redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
-    search_cache = cache.get(redis_key)
-
+def search(user_id, content, page_size=10, page_num=1, topn=100):
     start_num = page_size * (page_num - 1)
     logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
-    if search_cache:
-        logger.info(f'search resp from cache: {redis_key}')
-        all_cache = json.loads(search_cache)
-        total = len(all_cache)
-        return {
-            'list': json.loads(search_cache)[start_num:(page_size * page_num)] if total > start_num else [],
-            'total': total
-        }
+    if cache_data := search_result_from_cache(content, page_size, page_num):
+        return cache_data
 
     rag_ret = Rag_Document.search(user_id, content, limit=topn)
     ret_data = []
@@ -93,7 +83,7 @@ def search(user_id, content, page_size=10, page_num=1, topn=1000):
             'journal': doc['journal'],
             'conference': doc['conference'],
             'keywords': doc['keywords'],
-            'is_open_access': doc['is_open_access'],
+            'full_text_accessible': doc['full_text_accessible'],
             'citation_count': doc['citation_count'],
             'reference_count': doc['reference_count'],
             'citations': doc['citations'],
@@ -102,12 +92,22 @@ def search(user_id, content, page_size=10, page_num=1, topn=1000):
             'checksum': doc['checksum'],
             'ref_collection_id': doc['ref_collection_id'],  # todo 分享只返回公共文章列表，如果是个人取ref_doc_id
             'ref_doc_id': doc['ref_doc_id'],
-            'state': Document.StateChoices.COMPLETE if doc['content_id'] == 'arxiv' else Document.StateChoices.UNDONE
+            'state': Document.StateChoices.COMPLETE if doc['collection_id'] == 'arxiv' else Document.StateChoices.UNDONE
         }
+        create_data = copy.deepcopy(data)
+        del_empty_fields = ['object_path', 'source_url', 'checksum', 'full_text_accessible']
+        for df in del_empty_fields:
+            if not data[df]: del create_data[df]
         models_query.MAX_GET_RESULTS = 1
         doc, _ = Document.objects.update_or_create(
-            data, doc_id=data['doc_id'], collection_id=data['collection_id'], collection_type=data['collection_type'])
+            defaults=create_data,
+            create_defaults=data,
+            doc_id=data['doc_id'], collection_id=data['collection_id'], collection_type=data['collection_type'])
         logger.debug(f'update_ret: {doc}')
+        if not Collection.objects.filter(id=doc.collection_id).exists():
+            collection_title = doc.collection_id
+        else:
+            collection_title = doc.collection.title
         ret_data.append({
             'id': str(doc.id),
             'title': doc.title,
@@ -117,15 +117,41 @@ def search(user_id, content, page_size=10, page_num=1, topn=1000):
             'citation_count': doc.citation_count,
             'reference_count': doc.reference_count,
             'collection_id': str(doc.collection_id),
-            'collection_title': doc.collection.title,
+            'collection_title': collection_title,
             'source': doc.journal if doc.journal else doc.conference if doc.conference else ''
         })
-    cache.set(redis_key, json.dumps(ret_data), search_result_expires)
+    search_result_save_cache(content, ret_data)
     total = len(ret_data)
     return {
         'list': ret_data[start_num:(page_size * page_num)] if total > start_num else [],
         'total': total,
     }
+
+
+def search_result_from_cache(content, page_size=10, page_num=1):
+    doc_search_redis_key_prefix = 'doc:search'
+    content_hash = str_hash(content)
+    redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
+    search_cache = cache.get(redis_key)
+
+    start_num = page_size * (page_num - 1)
+    logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
+    if search_cache:
+        logger.info(f'search resp from cache: {redis_key}')
+        all_cache = json.loads(search_cache)
+        total = len(all_cache)
+        return {
+            'list': json.loads(search_cache)[start_num:(page_size * page_num)] if total > start_num else [],
+            'total': total
+        }
+
+
+def search_result_save_cache(content, data, search_result_expires=86400 * 7):
+    doc_search_redis_key_prefix = 'doc:search'
+    content_hash = str_hash(content)
+    redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
+    res = cache.set(redis_key, json.dumps(data), search_result_expires)
+    return res
 
 
 def update_document_lib(user_id, document_ids):

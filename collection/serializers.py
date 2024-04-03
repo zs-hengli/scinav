@@ -6,8 +6,10 @@ from django.db.models import F
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
+from bot.models import BotCollection
 from collection.models import Collection, CollectionDocument
 from core.utils.common import str_hash
+from document.models import Document, DocumentLibrary
 
 logger = logging.getLogger(__name__)
 
@@ -17,14 +19,35 @@ class BaseModelSerializer(serializers.ModelSerializer):
     updated_at = serializers.DateTimeField(required=False, format="%Y-%m-%d %H:%M:%S")
 
 
-class CollectionCreateSerializer(BaseModelSerializer):
-    name = serializers.CharField(required=True, source='title')
+class CollectionCreateByDocsSerializer(serializers.Serializer):
+    doc_ids = serializers.ListField(required=True, child=serializers.CharField(min_length=32, max_length=36))
     user_id = serializers.CharField(required=True, min_length=32, max_length=36)
     type = serializers.ChoiceField(choices=Collection.TypeChoices.choices, default=Collection.TypeChoices.PERSONAL)
+    doc_titles = serializers.ListField(required=False, child=serializers.CharField(max_length=255))
 
     def validate(self, attrs):
+        titles = Document.objects.filter(id__in=attrs['doc_ids']).values_list("title", flat=True).all()
+        attrs['title'] = list(titles)
+        return attrs
+
+
+class CollectionCreateSerializer(BaseModelSerializer):
+    name = serializers.CharField(required=False, source='title')
+    document_ids = serializers.ListField(required=False, child=serializers.CharField(min_length=32, max_length=36))
+    search_content = serializers.CharField(required=False)
+    user_id = serializers.CharField(required=True, min_length=32, max_length=36)
+    type = serializers.ChoiceField(choices=Collection.TypeChoices.choices, default=Collection.TypeChoices.PERSONAL)
+    document_titles = serializers.ListField(required=False, child=serializers.CharField(max_length=255))
+
+    def validate(self, attrs):
+        if not attrs.get('title') and not attrs.get('document_ids') and not attrs.get('search_content'):
+            raise serializers.ValidationError(_('Please provide a name or document_ids or search_content'))
         if attrs.get('title') and len(attrs['title']) > 255:
             attrs['title'] = attrs['title'][:255]
+        elif attrs.get('document_ids'):
+            titles = Document.objects.filter(id__in=attrs['document_ids']).values_list("title", flat=True).all()
+            attrs['document_titles'] = list(titles)
+
         return attrs
 
     class Meta:
@@ -80,45 +103,82 @@ class CollectionDetailSerializer(BaseModelSerializer):
         fields = ['id', 'name', 'updated_at', 'total_public', 'total_personal']
 
 
+class CollectionSubscribeSerializer(serializers.Serializer):
+    id = serializers.CharField(required=True, allow_null=True)
+    bot_id = serializers.CharField(required=True)
+    name = serializers.CharField(required=True)
+    updated_at = serializers.DateTimeField(required=True, format="%Y-%m-%d %H:%M:%S")
+    total = serializers.IntegerField(required=True)
+    type = serializers.CharField(required=False, default=Collection.TypeChoices.PUBLIC)
+
+    class Meta:
+        fields = ['id', 'bot_id', 'name', 'total', 'updated_at', 'type']
+
+
+class CollectionPublicListSerializer(serializers.Serializer):
+    id = serializers.CharField(required=True)
+    name = serializers.CharField(required=True)
+    updated_at = serializers.DateTimeField(required=True, format="%Y-%m-%d %H:%M:%S")
+    total = serializers.IntegerField(required=True)
+    type = serializers.CharField(required=False, default=Collection.TypeChoices.PUBLIC)
+
+    class Meta:
+        fields = ['id', 'name', 'total', 'updated_at', 'type']
+
+
 class CollectionListSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source='title')
+    updated_at = serializers.DateTimeField(required=False, format="%Y-%m-%d %H:%M:%S")
+    total = serializers.SerializerMethodField()
+
+    def get_total(self, obj):
+        return obj.total_public + obj.total_personal
 
     class Meta:
         model = Collection
-        fields = ['id', 'name', 'updated_at']
+        fields = ['id', 'name', 'total', 'updated_at', 'type']
 
 
 class CollectionDocUpdateSerializer(serializers.Serializer):
+    user_id = serializers.CharField(required=True, max_length=36, min_length=32)
     collection_id = serializers.CharField(required=True, max_length=36, min_length=36)
     document_ids = serializers.ListField(
         required=False, child=serializers.CharField(required=True, max_length=36, min_length=36)
     )
     is_all = serializers.BooleanField(required=False, default=False)
+    action = serializers.ChoiceField(required=False, choices=['add', 'delete'], default='add')
     search_content = serializers.CharField(required=False, default=None)
 
     def validate(self, attrs):
         if not attrs.get('document_ids') and not attrs.get('is_all'):
             raise serializers.ValidationError(f"document_ids and is_all {_('cannot be empty at the same time')}")
-        if attrs.get('is_all') and not attrs.get('search_content'):
+        if attrs.get('is_all') and attrs.get('action') == 'add' and not attrs.get('search_content'):
             raise serializers.ValidationError("search_content required")
         return attrs
 
     def create(self, validated_data):
+        vd = validated_data
         instances = []
-        if not validated_data.get('document_ids') and validated_data.get('is_all'):
+        if not vd.get('document_ids') and vd.get('is_all'):
             doc_search_redis_key_prefix = 'doc:search'
-            content_hash = str_hash(validated_data['search_content'])
+            content_hash = str_hash(vd['search_content'])
             redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
             search_cache = cache.get(redis_key)
             if search_cache:
                 all_cache = json.loads(search_cache)
                 doc_ids = [c['id'] for c in all_cache]
-                validated_data['document_ids'] = doc_ids
-        created_num = 0
+                vd['document_ids'] = doc_ids
+        created_num, updated_num = 0, 0
+        updated_num = CollectionDocument.objects.filter(
+            collection_id=vd['collection_id'], document_id__in=vd['document_ids'], del_flag=True).update(del_flag=False)
+        d_lib = DocumentLibrary.objects.filter(
+            user_id=vd['user_id'], del_flag=False, document_id__in=vd['document_ids']
+        ).values_list('document_id', flat=True)
         for d_id in validated_data.get('document_ids', []):
             cd_data = {
                 'collection_id': validated_data['collection_id'],
                 'document_id': d_id,
+                'full_text_accessible': d_id in d_lib,  # todo v1.0 默认都有全文 v2.0需要考虑策略
             }
             collection_document, created = (CollectionDocument.objects.update_or_create(
                 cd_data, collection_id=cd_data['collection_id'], document_id=cd_data['document_id']))
@@ -128,7 +188,33 @@ class CollectionDocUpdateSerializer(serializers.Serializer):
             })
             if created:
                 created_num += 1
-        if created_num:
+        if created_num + updated_num:
             Collection.objects.filter(id=validated_data['collection_id']).update(
-                total_personal=F('total_personal') + created_num)
+                total_personal=F('total_personal') + created_num + updated_num)
         return instances
+
+    @staticmethod
+    def delete_document(validated_data):
+        vd = validated_data
+        if validated_data.get('document_ids'):
+            effect_num = CollectionDocument.objects.filter(
+                collection_id=vd['collection_id'], document_id__in=vd['document_ids'], del_flag=False
+            ).update(del_flag=True)
+            Collection.objects.filter(id=vd['collection_id']).update(total_personal=F('total_personal') - effect_num)
+        else:
+            CollectionDocument.objects.filter(
+                collection_id=vd['collection_id'], del_flag=False
+            ).update(del_flag=True)
+            Collection.objects.filter(id=vd['collection_id']).update(total_personal=0, total_public=0)
+        return validated_data
+
+    @staticmethod
+    def _update_bot_collections_doc_num(collection_id, num, action='update'):
+        # todo update
+        bot_collections = BotCollection.objects.filter(collection_id=collection_id, del_flag=False)
+        bot_ids = [bc.bot_id for bc in bot_collections]
+        if action == 'update':
+            Collection.objects.filter(bot_id__in=bot_ids).update(total_public=F('total_public') + num)
+        elif action == 'set':
+            Collection.objects.filter(bot_id__in=bot_ids).update(total_public=num)
+        return num
