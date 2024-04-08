@@ -9,6 +9,7 @@ urlpatterns = [
     path('documents/<str:document_id>', views.Documents.as_view()),
     path('documents/<str:document_id>/url', views.DocumentsUrl.as_view()),
 
+    path('documents/rag/update', views.DocumentsRagUpdate.as_view()),
     path('documents/rag/update/<int:begin_id>/<int:end_id>', views.DocumentsRagUpdate.as_view()),
 
 

@@ -185,9 +185,12 @@ def get_bot_list(validated_data):
         bot_list = bot_list_my(vd['user_id'], vd['page_size'], vd['page_num'])
     elif validated_data['list_type'] == 'subscribe':
         bot_list = bot_list_subscribe(vd['user_id'], vd['page_size'], vd['page_num'])
-    else:
+    elif validated_data['list_type'] == 'chat_menu':
         bot_list = bot_list_chat_menu(vd['user_id'], vd['page_size'], vd['page_num'])
+    else:
+        raise ValidationError('list_type error')
     return bot_list
+
 
 def bot_list_all(user_id, page_size=10, page_num=1):
     user_subscribe_bot = BotSubscribe.objects.filter(user_id=user_id, del_flag=False).all()
@@ -300,7 +303,7 @@ def bot_documents(bot_id, page_size=10, page_num=1):
     collections = [bc.collection for bc in bot_collections]
     collection_ids = [c.id for c in collections]
     query_set = CollectionDocument.objects.filter(
-        collection_id__in=collection_ids).distinct().values('document_id').order_by('-updated_at').all()
+        collection_id__in=collection_ids).distinct().values('document_id').order_by('document_id')
     total = query_set.count()
     start_num = page_size * (page_num - 1)
     logger.debug(f"limit: [{start_num}: {page_size * page_num}]")

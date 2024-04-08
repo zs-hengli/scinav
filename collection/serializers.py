@@ -4,6 +4,7 @@ import logging
 from django.core.cache import cache
 from django.db.models import F
 from django.utils.translation import gettext_lazy as _
+from django.db.models import Q
 from rest_framework import serializers
 
 from bot.models import BotCollection
@@ -56,6 +57,7 @@ class CollectionCreateSerializer(BaseModelSerializer):
 
 
 class CollectionUpdateSerializer(BaseModelSerializer):
+    id = serializers.CharField(required=False)
     name = serializers.CharField(required=True, source='title')
 
     def validate(self, attrs):
@@ -139,6 +141,19 @@ class CollectionListSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'total', 'updated_at', 'type']
 
 
+class CollectionDeleteQuerySerializer(serializers.Serializer):
+    user_id = serializers.CharField(required=True, max_length=36, min_length=32)
+    ids = serializers.ListField(
+        required=True, child=serializers.CharField(required=True, max_length=36, min_length=36)
+    )
+    is_all = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        if not attrs.get('ids') and not attrs.get('is_all'):
+            raise serializers.ValidationError(f"ids and is_all {_('cannot be empty at the same time')}")
+        return attrs
+
+
 class CollectionDocUpdateSerializer(serializers.Serializer):
     user_id = serializers.CharField(required=True, max_length=36, min_length=32)
     collection_id = serializers.CharField(required=True, max_length=36, min_length=36)
@@ -147,7 +162,7 @@ class CollectionDocUpdateSerializer(serializers.Serializer):
     )
     is_all = serializers.BooleanField(required=False, default=False)
     action = serializers.ChoiceField(required=False, choices=['add', 'delete'], default='add')
-    search_content = serializers.CharField(required=False, default=None)
+    search_content = serializers.CharField(required=False, allow_null=True, default=None)
 
     def validate(self, attrs):
         if not attrs.get('document_ids') and not attrs.get('is_all'):
@@ -159,7 +174,7 @@ class CollectionDocUpdateSerializer(serializers.Serializer):
     def create(self, validated_data):
         vd = validated_data
         instances = []
-        if not vd.get('document_ids') and vd.get('is_all'):
+        if vd.get('is_all'):
             doc_search_redis_key_prefix = 'doc:search'
             content_hash = str_hash(vd['search_content'])
             redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
@@ -167,7 +182,10 @@ class CollectionDocUpdateSerializer(serializers.Serializer):
             if search_cache:
                 all_cache = json.loads(search_cache)
                 doc_ids = [c['id'] for c in all_cache]
-                vd['document_ids'] = doc_ids
+                if vd.get('document_ids'):
+                    vd['document_ids'] = list(set(doc_ids) - set(vd['document_ids']))
+                else:
+                    vd['document_ids'] = doc_ids
         created_num, updated_num = 0, 0
         updated_num = CollectionDocument.objects.filter(
             collection_id=vd['collection_id'], document_id__in=vd['document_ids'], del_flag=True).update(del_flag=False)
@@ -196,16 +214,25 @@ class CollectionDocUpdateSerializer(serializers.Serializer):
     @staticmethod
     def delete_document(validated_data):
         vd = validated_data
-        if validated_data.get('document_ids'):
+        if vd.get('is_all'):
+            total = len(vd.get('document_ids', []))
+            if vd.get('document_id'):
+                filter_query = (
+                    Q(collection_id=vd['collection_id'], del_flag=False)
+                    & ~Q(document_id__in=vd['document_ids'])
+                )
+                CollectionDocument.objects.filter(filter_query).update(del_flag=True)
+            else:
+                CollectionDocument.objects.filter(
+                    collection_id=vd['collection_id'], del_flag=False
+                ).update(del_flag=True)
+
+            Collection.objects.filter(id=vd['collection_id']).update(total_personal=total, total_public=0)
+        else:
             effect_num = CollectionDocument.objects.filter(
                 collection_id=vd['collection_id'], document_id__in=vd['document_ids'], del_flag=False
             ).update(del_flag=True)
             Collection.objects.filter(id=vd['collection_id']).update(total_personal=F('total_personal') - effect_num)
-        else:
-            CollectionDocument.objects.filter(
-                collection_id=vd['collection_id'], del_flag=False
-            ).update(del_flag=True)
-            Collection.objects.filter(id=vd['collection_id']).update(total_personal=0, total_public=0)
         return validated_data
 
     @staticmethod
@@ -218,3 +245,13 @@ class CollectionDocUpdateSerializer(serializers.Serializer):
         elif action == 'set':
             Collection.objects.filter(bot_id__in=bot_ids).update(total_public=num)
         return num
+
+
+class CollectionDocumentListQuerySerializer(serializers.Serializer):
+    user_id = serializers.CharField(required=True, max_length=36, min_length=32)
+    collection_ids = serializers.ListField(
+        required=False, child=serializers.CharField(max_length=36, min_length=1)
+    )
+    list_type = serializers.ChoiceField(required=False, choices=['all', 'document_library', 'public'], default='all')
+    page_size = serializers.IntegerField(required=False, default=10)
+    page_num = serializers.IntegerField(required=False, default=1)

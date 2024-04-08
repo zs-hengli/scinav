@@ -244,6 +244,16 @@ class Conversations:
             "chunk": []
         }
         try:
+            if not question:
+                question = Question.objects.create(
+                    conversation_id=conversation_id,
+                    content=content,
+                    stream=stream,
+                    input_tokens=stream.get('statistics', {}).get('input_tokens', 0),
+                    output_tokens=stream.get('statistics', {}).get('output_tokens', 0),
+                    answer=''.join(stream['chunk'])
+                )
+
             for line in resp.iter_lines():
                 if line:
                     line = line.decode('utf-8')
@@ -254,22 +264,13 @@ class Conversations:
                         if line_data['event'] == 'tool_end':
                             line_data['output'] = stream['output']
                         yield json.dumps(line_data) + '\n'
-            if not question:
-                question = Question.objects.create(
-                    conversation_id=conversation_id,
-                    content=content,
-                    stream=stream,
-                    input_tokens=stream.get('statistics', {}).get('input_tokens', 0),
-                    output_tokens=stream.get('statistics', {}).get('output_tokens', 0),
-                    answer=''.join(stream['chunk'])
-                )
-            else:
-                question.content = content
-                question.stream = stream
-                question.input_tokens = stream.get('statistics', {}).get('input_tokens', 0)
-                question.output_tokens = stream.get('statistics', {}).get('output_tokens', 0)
-                question.answer = ''.join(stream['chunk'])
-                question.save()
+            # update question
+            question.content = content
+            question.stream = stream
+            question.input_tokens = stream.get('statistics', {}).get('input_tokens', 0)
+            question.output_tokens = stream.get('statistics', {}).get('output_tokens', 0)
+            question.answer = ''.join(stream['chunk'])
+            question.save()
         except Exception as exc:
             logger.error(f'query exception: {exc}')
             yield json.dumps({'event': 'on_error', 'error': error_msg, 'detail': str(exc)}) + '\n'

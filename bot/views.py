@@ -86,8 +86,8 @@ class Bots(APIView):
 
     @staticmethod
     def delete(request, bot_id, *args, **kwargs):
-        if HotBot.objects.filter(bot_id=bot_id, del_flag=False).exists():
-            return my_json_response({}, code=-1, msg=_('bot is hot, can not delete'))
+        # if HotBot.objects.filter(bot_id=bot_id, del_flag=False).exists():
+        #     return my_json_response({}, code=-1, msg=_('bot is hot, can not delete'))
         bot_delete(bot_id)
         return my_json_response({'bot_id': bot_id})
 

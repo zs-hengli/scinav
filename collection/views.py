@@ -10,9 +10,10 @@ from collection.models import Collection
 from collection.serializers import (CollectionCreateSerializer,
                                     CollectionDetailSerializer,
                                     CollectionDocUpdateSerializer,
-                                    CollectionUpdateSerializer)
+                                    CollectionUpdateSerializer, CollectionDeleteQuerySerializer,
+                                    CollectionDocumentListQuerySerializer)
 from collection.service import (collection_docs, collection_list,
-                                collections_docs, generate_collection_title, collection_delete)
+                                collections_docs, generate_collection_title, collection_delete, collections_delete)
 from core.utils.views import check_keys, extract_json, my_json_response
 
 logger = logging.getLogger(__name__)
@@ -42,12 +43,16 @@ class Collections(APIView):
         types = ['my', 'public', 'subscribe']
         if set(list_type) - set(types):
             return my_json_response({}, code=-1, msg='list_type error')
+        query = request.query_params
+        page_size = int(query.get('page_size', 10))
+        page_num = int(query.get('page_num', 1))
+
         user_id = request.user.id
         if collection_id:
             collection = Collection.objects.get(pk=collection_id, user_id=user_id)
             data = CollectionDetailSerializer(collection).data
         else:
-            data = {'list': collection_list(user_id, list_type=list_type)}
+            data = collection_list(user_id, list_type=list_type, page_size=page_size, page_num=page_num)
         return my_json_response(data)
 
     @staticmethod
@@ -69,6 +74,20 @@ class Collections(APIView):
             'user_id': vd['user_id'],
             'type': vd['type']
         })
+        # update collection document
+        update_data = {
+            'user_id': vd['user_id'],
+            'collection_id': str(collection.id),
+            'document_ids': vd.get('document_ids'),
+            'is_all': vd.get('search_content', None) is not None,
+            'action': 'add',
+        }
+        if vd.get('search_content'):
+            update_data['search_content'] = vd['search_content']
+        update_serial = CollectionDocUpdateSerializer(data=update_data)
+        update_serial.is_valid(raise_exception=True)
+        update_serial.create(update_serial.validated_data)
+
         data = CollectionDetailSerializer(collection).data
         return my_json_response(data)
 
@@ -89,13 +108,22 @@ class Collections(APIView):
         return my_json_response(data)
 
     @staticmethod
-    def delete(request, collection_id, *args, **kwargs):
+    def delete(request, collection_id=None, *args, **kwargs):
         user_id = request.user.id
-        collection = Collection.objects.filter(pk=collection_id, user_id=user_id).first()
-        if not collection:
-            return my_json_response({}, code=-1, msg='validate collection_id error')
-        collection_delete(collection)
-        return my_json_response({'collection_id': collection_id})
+        if collection_id:
+            collection = Collection.objects.filter(pk=collection_id, user_id=user_id).first()
+            if not collection:
+                return my_json_response({}, code=-1, msg='validate collection_id error')
+            collection_delete(collection)
+        else:
+            query = request.data
+            query['user_id'] = user_id
+            serial = CollectionDeleteQuerySerializer(data=query)
+            if not serial.is_valid():
+                return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
+            query_data = serial.validated_data
+            collections_delete(query_data)
+        return my_json_response({})
 
 
 @method_decorator([extract_json], name='dispatch')
@@ -105,20 +133,18 @@ class CollectionDocuments(APIView):
 
     @staticmethod
     def get(request, collection_id=None, *args, **kwargs):
-        query = kwargs['request_data']['GET']
+        query = request.query_params.dict()
+        query['user_id'] = request.user.id
         if collection_id:
-            data = collection_docs(
-                collection_id, page_size=int(query.get('page_size', 10)), page_num=int(query.get('page_num', 1)))
-        else:
-            check_keys(query, ['collection_ids'])
-            if isinstance(query['collection_ids'], str):
-                query['collection_ids'] = query['collection_ids'].split(',')
-            query_data = {
-                'collection_ids': query['collection_ids'],
-                'page_size': int(query.get('page_size', 10)),
-                'page_num': int(query.get('page_num', 1)),
-            }
-            data = collections_docs(query_data['collection_ids'], query_data['page_size'], query_data['page_num'])
+            query['collection_ids'] = [collection_id]
+        check_keys(query, ['collection_ids'])
+        if isinstance(query['collection_ids'], str):
+            query['collection_ids'] = query['collection_ids'].split(',')
+
+        serial = CollectionDocumentListQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
+        data = collections_docs(serial.validated_data)
         return my_json_response(data)
 
     @staticmethod

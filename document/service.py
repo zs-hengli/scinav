@@ -9,7 +9,7 @@ from django.core.cache import cache
 from django.db.models import query as models_query
 
 from bot.rag_service import Document as Rag_Document
-from collection.models import Collection
+from collection.models import Collection, CollectionDocument
 from core.utils.common import str_hash
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentRagGetSerializer, DocumentUpdateSerializer
@@ -195,3 +195,52 @@ def documents_update_from_rag(begin_id, end_id):
         document_update_from_rag(data)
         logger.debug(f"success update doc_Id: {d.doc_id}")
     return True
+
+
+def import_documents_from_json():
+    with open('doc/linfeng_zhang.json') as f:
+        info = json.load(f)
+    topic_name = info['topic_name']
+    collection_type = info['collection_type']
+    collection_id = info['collection_id']
+    doc_ids = info['doc_ids']
+    num = len(doc_ids)
+    count = 0
+    c_doc_objs = []
+    need_reload = False
+    for doc_id in doc_ids:
+        if need_reload:
+            data = import_one_document(collection_id, collection_type, doc_id)
+        else:
+            document = Document.objects.filter(
+                doc_id=doc_id, collection_id=collection_id, collection_type=collection_type).first()
+            if not document:
+                raise Exception(f'not found doc_id: {doc_id}')
+            data = DocumentUpdateSerializer(document).data
+        count += 1
+        # ewn_collection_id = '7ce9f633-696e-4dd7-84cb-4b58416a0de5'
+        zlf_collection_id = '253f05a7-c1e1-4f08-84d7-9c926f9e19ee'
+
+        c_doc_objs.append(CollectionDocument(
+            collection_id=zlf_collection_id,
+            document_id=data['id'],
+            full_text_accessible=True,
+        ))
+        logger.debug(f"ddddddddd total: {num}, count: {count}, doc_id: {doc_id}")
+
+    CollectionDocument.objects.bulk_create(c_doc_objs)
+    return {
+        'total': num,
+        'id_list': doc_ids
+    }
+
+
+def import_one_document(collection_id, collection_type, doc_id):
+    data = {
+        'collection_id': collection_id,
+        'collection_type': collection_type,
+        'doc_id': doc_id,
+    }
+    data = document_update_from_rag(data)
+    logger.debug(f"success update doc_id: {doc_id}")
+    return data

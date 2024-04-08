@@ -6,12 +6,12 @@ from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
+from bot.rag_service import Document as RagDocument
 from core.utils.views import check_keys, extract_json, my_json_response
 from document.models import Document
 from document.serializers import DocumentUpdateSerializer, DocumentRagGetSerializer, DocumentUrlSerializer, \
     DocumentDetailSerializer
 from document.service import gen_s3_presigned_post, search, documents_update_from_rag
-from bot.rag_service import Document as RagDocument
 
 logger = logging.getLogger(__name__)
 
@@ -107,9 +107,15 @@ class DocumentsUrl(APIView):
 
 
 @method_decorator([extract_json], name='dispatch')
-@method_decorator(require_http_methods(['PUT']), name='dispatch')
+@method_decorator(require_http_methods(['GET', 'PUT']), name='dispatch')
 # @permission_classes([AllowAny])
 class DocumentsRagUpdate(APIView):
+    @staticmethod
+    def get(request, *args, **kwargs):
+        data = {}
+        # data = import_documents_from_json()
+        return my_json_response(data)
+
     @staticmethod
     def put(request, begin_id, end_id, *args, **kwargs):
         data = documents_update_from_rag(begin_id, end_id)

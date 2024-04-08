@@ -23,6 +23,7 @@ class ConversationCreateSerializer(serializers.Serializer):
         required=False, child=serializers.CharField(min_length=1), allow_empty=True)
     paper_ids = serializers.ListField(
         required=False, child=serializers.JSONField(), allow_empty=True, allow_null=True, default=list())
+    question = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
     def validate(self, attrs):
         if (
@@ -32,6 +33,8 @@ class ConversationCreateSerializer(serializers.Serializer):
         ):
             raise serializers.ValidationError('documents, collections, bot_id are all empty')
         document_ids = []
+        if attrs.get('question'):
+            attrs['content'] = attrs['question']
         if attrs.get('documents'):
             document_ids = attrs['documents']
         if attrs.get('collections'):
@@ -44,14 +47,14 @@ class ConversationCreateSerializer(serializers.Serializer):
             document_ids = list(set(document_ids))
         if document_ids:
             documents = Document.objects.filter(id__in=document_ids)\
-                .values_list('id', 'collection_type', 'collection_id', 'doc_id', 'title', named=True).all()
-            attrs['document_titles'] = [d.title for d in documents if d.id in attrs.get('documents', [])]
+                .values('id', 'title', 'collection_type', 'collection_id', 'doc_id').all()
+            attrs['document_titles'] = [d['title'] for d in documents if d['id'] in attrs.get('documents', [])]
             attrs['paper_ids'] = []
             for d in documents:
                 attrs['paper_ids'].append({
-                    'collection_type': d.collection_type,
-                    'collection_id': d.collection_id,
-                    'doc_id': d.doc_id,
+                    'collection_type': d['collection_type'],
+                    'collection_id': d['collection_id'],
+                    'doc_id': d['doc_id'],
                 })
         return attrs
 
@@ -141,13 +144,14 @@ class ChatQuerySerializer(serializers.Serializer):
             document_ids = list(set(document_ids))
         if document_ids:
             documents = Document.objects.filter(id__in=document_ids)\
-                .values_list('id', 'collection_type', 'collection_id', 'doc_id', named=True).all()
+                .values('id', 'title', 'collection_type', 'collection_id', 'doc_id').all()
+            attrs['document_titles'] = [d['title'] for d in documents if d['id'] in attrs.get('documents', [])]
             attrs['paper_ids'] = []
             for d in documents:
                 attrs['paper_ids'].append({
-                    'collection_type': d.collection_type,
-                    'collection_id': d.collection_id,
-                    'doc_id': d.doc_id,
+                    'collection_type': d['collection_type'],
+                    'collection_id': d['collection_id'],
+                    'doc_id': d['doc_id'],
                 })
         return attrs
 

@@ -28,7 +28,7 @@ class Document(models.Model):
     collection = models.ForeignKey(
         'collection.Collection', db_constraint=False, on_delete=models.DO_NOTHING, null=True,
         db_column='collection_id')
-    title = models.CharField(null=True, blank=True, db_index=True, max_length=200, default=None, db_default=None)
+    title = models.CharField(null=True, blank=True, db_index=True, max_length=512, default=None, db_default=None)
     abstract = models.TextField(null=True, blank=True, db_default=None)
     authors = models.JSONField(null=True)
     doi = models.CharField(null=True, blank=True, max_length=128, default=None, db_default=None)

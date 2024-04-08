@@ -80,7 +80,7 @@ class DocumentRagGetSerializer(serializers.ModelSerializer):
                   'object_path', 'source_url', 'checksum', 'ref_collection_id', 'ref_doc_id']
 
 
-class DocumentDetailSerializer(serializers.ModelSerializer):
+class DocumentDetailSerializer(BaseModelSerializer):
     url = serializers.SerializerMethodField()
 
     @staticmethod

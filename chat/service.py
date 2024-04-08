@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def conversation_create(validated_data):
     vd = validated_data
-    title = None
+    title = vd['content'][:128] if vd.get('content') else None
     # 判断 chat类型
     chat_type = ConversationCreateSerializer.get_chat_type(validated_data)
     if chat_type == Conversation.TypeChoices.BOT_COV:
@@ -29,12 +29,12 @@ def conversation_create(validated_data):
         title = bot.title
     elif vd.get('documents'):
         # auto create collection.
-        collection_title = RagConversation.generate_favorite_title(vd['document_tiles'])
+        collection_title = RagConversation.generate_favorite_title(vd['document_titles'])
         collection = Collection.objects.create(
             user_id=vd['user_id'],
             title=collection_title,
             type=Collection.TypeChoices.PERSONAL,
-            total=len(vd['documents']),
+            total_personal=len(vd['documents']),
         )
         c_doc_objs = []
         d_lib = DocumentLibrary.objects.filter(
@@ -51,7 +51,7 @@ def conversation_create(validated_data):
         paper_ids = vd.get('paper_ids')
         public_collection_ids = vd.get('public_collection_ids')
         documents = vd.get('documents')
-        collections = vd.get('collections', []) + [collection.id]
+        collections = vd.get('collections', []) + [str(collection.id)]
     else:
         agent_id = None
         paper_ids = vd.get('paper_ids')
@@ -96,6 +96,9 @@ def conversation_update(conversation_id, validated_data):
 
 def conversation_detail(conversation_id):
     conversation = Conversation.objects.get(pk=conversation_id)
+    collections = Collection.objects.filter(id__in=conversation.collections, del_flag=False).values('id').all()
+    collections = [c['id'] for c in collections]
+    conversation.collections = collections
     return ConversationDetailSerializer(conversation).data
 
 
