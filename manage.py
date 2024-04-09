@@ -11,9 +11,8 @@ def main():
     """Run administrative tasks."""
     if not os.environ.get('DJANGO_SETTINGS_MODULE'):
         os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
-    os.environ.setdefault('DEBUG', 'True')
-    print(f"in manager.main DJANGO_SETTINGS_MODULE:{os.environ.get('DJANGO_SETTINGS_MODULE')}")
-    logger.info(f"in manager.main DJANGO_SETTINGS_MODULE:{os.environ.get('DJANGO_SETTINGS_MODULE')}")
+    if os.environ.get('DEBUG', 'false').lower() == 'true':
+        print(f"in manager.main DJANGO_SETTINGS_MODULE:{os.environ.get('DJANGO_SETTINGS_MODULE')}")
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

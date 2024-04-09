@@ -114,6 +114,60 @@ class Document:
         logger.info(f'url: {url}, response.len: {len(resp)}')
         return resp
 
+    @staticmethod
+    def presigned_url(user_id, public_key, filename):
+        """
+        return:
+        {
+            "presigned_url": "string",
+            "object_path": "string",
+            "expires_in": 0
+        }
+        """
+        url = RAG_HOST + '/api/v1/papers/presigned-url'
+        post_data = {
+            'public_key': public_key,
+            'filename': filename,
+            'user_id': user_id
+        }
+        resp = rag_requests(url, json=post_data, method='POST')
+        logger.info(f'url: {url}, response: {resp.text}')
+        resp = resp.json()
+        return resp
+
+    @staticmethod
+    def ingest_personal_paper(user_id, object_path):
+        url = RAG_HOST + '/api/v1/papers/ingest-task/personal'
+        post_data = {
+            'user_id': user_id,
+            'object_path': object_path
+        }
+        resp = rag_requests(url, json=post_data, method='POST')
+        logger.info(f'url: {url}, response: {resp.text}')
+        resp = resp.json()
+        return resp
+
+    @staticmethod
+    def ingest_public_paper(user_id, collection_id, doc_id):
+        url = RAG_HOST + '/api/v1/papers/ingest-task/public'
+        post_data = {
+            'user_id': user_id,
+            'collection_id': collection_id,
+            'doc_id': doc_id
+        }
+        resp = rag_requests(url, json=post_data, method='POST')
+        logger.info(f'url: {url}, response: {resp.text}')
+        resp = resp.json()
+        return resp
+
+    @staticmethod
+    def get_ingest_task(task_id):
+        url = RAG_HOST + f'/api/v1/ingest-tasks/{task_id}'
+        resp = rag_requests(url, method='GET')
+        logger.info(f'url: {url}, response: {resp.text}')
+        resp = resp.json()
+        return resp
+
 
 class Conversations:
     @staticmethod

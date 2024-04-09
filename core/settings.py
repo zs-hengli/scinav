@@ -110,7 +110,6 @@ DATABASES_ALL['default'] = DATABASES_ALL[DJANGO_DB_POSTGRESQL]
 DATABASES = {
     'default': DATABASES_ALL.get(os.environ.get('DJANGO_DB', 'default'))
 }
-print(f"DATABASES: {DATABASES}")
 
 # redis
 REDIS_HOST = os.environ.get('REDIS_HOST', '127.0.0.1')
@@ -127,7 +126,10 @@ CACHES = {
 }
 if REDIS_PASSWORD:
     CACHES['default']['OPTIONS']['PASSWORD'] = REDIS_PASSWORD
-print(f"CACHES: {CACHES}")
+
+if os.environ.get('DEBUG', 'false').lower() == 'true':
+    print(f"DATABASES: {DATABASES}")
+    print(f"CACHES: {CACHES}")
 
 # django-request-id
 REQUEST_ID_HEADER = None
@@ -240,10 +242,8 @@ CELERY_TASK_TIME_LIMIT = 50
 
 # DEFAULT_AUTO_FIELD = 'django.db.models.UUIDField'
 
-# S3
-S3_ENDPOINT = os.environ.get('S3_ENDPOINT', 'endpoint')
-S3_ACCESS_KEY = os.environ.get('S3_ACCESS_KEY', 'access_key')
-S3_SECRET_KEY = os.environ.get('S3_SECRET_KEY', 'secret_key')
+# oss
+OSS_PUBLIC_KEY = os.environ.get('OSS_PUBLIC_KEY', 'public_key')
 
 # rag api
 RAG_HOST = os.environ.get('RAG_HOST', 'https://api.scinav.myscale.cloud')

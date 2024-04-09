@@ -38,7 +38,7 @@ class Collections(APIView):
 
     @staticmethod
     def get(request, collection_id=None, list_type='my', *args, **kwargs):
-        logger.debug(f'collection_id: {collection_id}, list_type: {list_type}')
+        logger.info(f'collection_id: {collection_id}, list_type: {list_type}')
         list_type = list_type.split(',')
         types = ['my', 'public', 'subscribe']
         if set(list_type) - set(types):
@@ -79,7 +79,7 @@ class Collections(APIView):
             'user_id': vd['user_id'],
             'collection_id': str(collection.id),
             'document_ids': vd.get('document_ids'),
-            'is_all': vd.get('search_content', None) is not None,
+            'is_all': vd.get('is_all', False),
             'action': 'add',
         }
         if vd.get('search_content'):

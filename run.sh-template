@@ -1,8 +1,8 @@
 #!/bin/bash
 
 
-export DEBUG='true'
-export LOG_LEVEL='DEBUG'
+export DEBUG='false'  # true false
+export LOG_LEVEL='INFO'  # INFO DEBUG WARNING ERROR
 
 #export DJANGO_SETTINGS_MODULE='core.settings'
 export DJANGO_DB='postgresql'
@@ -20,9 +20,10 @@ export REDIS_PORT='6379'
 export REDIS_PASSWORD=''
 
 # S3 dev
-export S3_ENDPOINT='127.0.0.1:9001'
-export S3_ACCESS_KEY='HmwhMO1B9dmzww9tiuca'
-export S3_SECRET_KEY='b2CEVur4EtLywLBX8aXpKcxNps8eZmV3Vn49jyip'
+export OSS_PUBLIC_KEY='keykeykey'
+
+# object path url host
+export OBJECT_PATH_URL_HOST='https://xxxx.amazonaws.com'
 
 
 # rag api
@@ -32,5 +33,10 @@ export RAG_API_KEY='auth-token'
 # Install all package dependencies
 # pip install  -r deploy/requirements.txt
 
+# migrate
+python3 manage.py makemigrations
+python3 manage.py migrate
+
+
 # Start the server in development mode at http://localhost:8300
-python3 manage.py runserver 0.0.0.0:8300
+python3 manage.py runserver 0.0.0.0:8300  --noreload

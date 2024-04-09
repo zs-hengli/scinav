@@ -7,6 +7,7 @@ from botocore.config import Config
 from django.conf import settings
 from django.core.cache import cache
 from django.db.models import query as models_query
+from django.db.models import Q
 
 from bot.rag_service import Document as Rag_Document
 from collection.models import Collection, CollectionDocument
@@ -21,9 +22,18 @@ logger = logging.getLogger(__name__)
 
 def gen_s3_presigned_post(bucket: str, path: str) -> dict:
     """
-
-    :param bucket:
-    :param path:
+    1. 前端请求上传地址 返回 url 和 filed
+    2. 端根据url和filed 加上文件 发起post 请求S3文件上传服务，
+    > 单次只能单个文件上传，多个需要多次请求改接口依次上传
+    > post 请求的curl示例如下
+    curl --location 'http://172.23.15.206:9001/sci-nav-dev' \
+    --form 'key="doc/001.jpg"' \
+    --form 'x-amz-algorithm="AWS4-HMAC-SHA256"' \
+    --form 'x-amz-credential="HmwhMO1B9dmzww9tiucC/20240307/us-east-1/s3/aws4_request"' \
+    --form 'x-amz-date="20240307T054623Z"' \
+    --form 'policy="eyJleHBpcmF0aW9uIjogIjIwMjQtMDMtMDdUMDY6NDY6MjNaIiwgImNvbmRpdGlvbnMiOiBbeyJidWNrZXQiOiAic2NpLW5hdi1kZXYifSwgeyJrZXkiOiAiZG9jLzAwMS5qcGcifSwgeyJ4LWFtei1hbGdvcml0aG0iOiAiQVdTNC1ITUFDLVNIQTI1NiJ9LCB7IngtYW16LWNyZWRlbnRpYWwiOiAiSG13aE1PMUI5ZG16d3c5dGl1Y0MvMjAyNDAzMDcvdXMtZWFzdC0xL3MzL2F3czRfcmVxdWVzdCJ9LCB7IngtYW16LWRhdGUiOiAiMjAyNDAzMDdUMDU0NjIzWiJ9XX0="' \
+    --form 'x-amz-signature="fd5db4ee420b8a31f8470569861f18d894e63c28a639d8b36e245fc302b7f987"' \
+    --form 'file=@"pic/2022-06-10_09.52.44.png"'
     :return: example
         {
             "url": "https://s3-upload.bucket-name",
@@ -55,12 +65,14 @@ def gen_s3_presigned_post(bucket: str, path: str) -> dict:
     )
     return {'url': dict_['url'], 'fields': dict_['fields']}
 
-# url, fields = generate_presigned_post('bucket', 'remote/path/of/file')
+
+def presigned_url(user_id, filename):
+    return Rag_Document.presigned_url(user_id, settings.OSS_PUBLIC_KEY, filename)
 
 
 def search(user_id, content, page_size=10, page_num=1, topn=100):
     start_num = page_size * (page_num - 1)
-    logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
+    logger.info(f"limit: [{start_num}: {page_size * page_num}]")
     if cache_data := search_result_from_cache(content, page_size, page_num):
         return cache_data
 
@@ -135,7 +147,7 @@ def search_result_from_cache(content, page_size=10, page_num=1):
     search_cache = cache.get(redis_key)
 
     start_num = page_size * (page_num - 1)
-    logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
+    logger.info(f"limit: [{start_num}: {page_size * page_num}]")
     if search_cache:
         logger.info(f'search resp from cache: {redis_key}')
         all_cache = json.loads(search_cache)
@@ -154,23 +166,19 @@ def search_result_save_cache(content, data, search_result_expires=86400 * 7):
     return res
 
 
-def update_document_lib(user_id, document_ids):
-    for doc_id in document_ids:
-        data = {
-            'user_id': user_id,
-            'document_id': doc_id,
-        }
-        DocumentLibrary.objects.update_or_create(data, user_id=user_id, document_id=doc_id)
-    return True
-
-
 def get_url_by_object_path(object_path):
     return f'{settings.OBJECT_PATH_URL_HOST}/{object_path}'
 
 
 def document_update_from_rag(validated_data):
     doc_info = RagDocument.get(validated_data)
-    serial = DocumentRagGetSerializer(data=doc_info)
+    document = _document_update_from_rag_ret(doc_info)
+    data = DocumentUpdateSerializer(document).data
+    return data
+
+
+def _document_update_from_rag_ret(rag_ret):
+    serial = DocumentRagGetSerializer(data=rag_ret)
     if not serial.is_valid():
         raise Exception(serial.errors)
     document, _ = Document.objects.update_or_create(
@@ -179,8 +187,7 @@ def document_update_from_rag(validated_data):
         collection_type=serial.validated_data['collection_type'],
         collection_id=serial.validated_data['collection_id']
     )
-    data = DocumentUpdateSerializer(document).data
-    return data
+    return document
 
 
 def documents_update_from_rag(begin_id, end_id):
@@ -193,7 +200,7 @@ def documents_update_from_rag(begin_id, end_id):
             'doc_id': d.doc_id,
         }
         document_update_from_rag(data)
-        logger.debug(f"success update doc_Id: {d.doc_id}")
+        logger.info(f"success update doc_Id: {d.doc_id}")
     return True
 
 
@@ -242,5 +249,75 @@ def import_one_document(collection_id, collection_type, doc_id):
         'doc_id': doc_id,
     }
     data = document_update_from_rag(data)
-    logger.debug(f"success update doc_id: {doc_id}")
+    logger.info(f"success update doc_id: {doc_id}")
     return data
+
+
+def document_personal_upload(validated_data):
+    vd = validated_data
+    doc_lib_data = {
+        'user_id': vd['user_id'],
+        'filename': vd['filename'],
+        'object_path': vd['object_path'],
+    }
+    instance, _ = DocumentLibrary.objects.update_or_create(
+        doc_lib_data, user_id=vd['user_id'], filename=vd['filename'], object_path=vd['object_path'])
+    if not instance.task_id:
+        rag_ret = RagDocument.ingest_personal_paper(vd['user_id'], vd['object_path'])
+        instance.task_id = rag_ret['task_id']
+        instance.task_status = (
+            rag_ret['task_status']
+            if rag_ret['task_status'] != DocumentLibrary.TaskStatusChoices.COMPLETED
+            else DocumentLibrary.TaskStatusChoices.IN_PROGRESS
+        )
+        if instance.task_status == DocumentLibrary.TaskStatusChoices.ERROR:
+            instance.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message'], }
+        instance.save()
+    return vd
+
+
+def update_document_lib(user_id, document_ids):
+    for doc_id in document_ids:
+        data = {
+            'user_id': user_id,
+            'document_id': doc_id,
+        }
+        DocumentLibrary.objects.update_or_create(data, user_id=user_id, document_id=doc_id)
+    return True
+
+
+def async_document_library_task():
+    # no task_id
+    query_filter = Q(task_id__isnull=True) | Q(task_id='')
+    if instances := DocumentLibrary.objects.filter(query_filter).all():
+        for i in instances:
+            if not i.object_path:
+                rag_ret = RagDocument.ingest_public_paper(i.user_id, i.document.collection_id, i.document.doc_id)
+            else:
+                rag_ret = RagDocument.ingest_personal_paper(i.user_id, i.object_path)
+            i.task_id = rag_ret['task_id']
+            i.task_status = (
+                rag_ret['task_status']
+                if rag_ret['task_status'] != DocumentLibrary.TaskStatusChoices.COMPLETED
+                else DocumentLibrary.TaskStatusChoices.IN_PROGRESS
+            )
+            if i.task_status == DocumentLibrary.TaskStatusChoices.ERROR:
+                i.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_code']}
+            i.save()
+    # in progress
+    if instances := DocumentLibrary.objects.filter(task_status=DocumentLibrary.TaskStatusChoices.IN_PROGRESS).all():
+        for i in instances:
+            rag_ret = RagDocument.get_ingest_task(i.task_id)
+            task_status = rag_ret['task_status']
+            logger.info(f'async_document_library_task {i.task_id}, {task_status}')
+            if task_status == DocumentLibrary.TaskStatusChoices.IN_PROGRESS:
+                continue
+            elif task_status == DocumentLibrary.TaskStatusChoices.ERROR:
+                i.task_status = task_status
+                i.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_code']}
+            else:  # COMPLETED
+                i.task_status = task_status
+                document = _document_update_from_rag_ret(rag_ret['paper'])
+                i.document = document
+            i.save()
+    return True

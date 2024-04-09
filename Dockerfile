@@ -19,20 +19,13 @@ WORKDIR $ROOT_DIR
 
 COPY core/deploy/requirements.txt ./
 
-#RUN python -m pip install --no-cache-dir --upgrade pip pip-tools  \
-#    -i http://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
-#RUN python -m pip install --no-cache-dir -r requirements.txt  \
-#    -i http://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
-
-RUN python -m pip install --no-cache-dir --upgrade pip pip-tools  \
-    -i https://mirrors.cloud.aliyuncs.com/pypi/simple/ --trusted-host mirrors.cloud.aliyuncs.com
-RUN python -m pip install --no-cache-dir -r requirements.txt  \
-    -i https://mirrors.cloud.aliyuncs.com/pypi/simple/ --trusted-host mirrors.cloud.aliyuncs.com
+RUN python -m pip install --no-cache-dir --upgrade pip pip-tools
+RUN python -m pip install --no-cache-dir -r requirements.txt
 
 
 COPY . .
 
 
 # 执行命令行,启动django服务
-CMD ["python3", "manage.py", "runserver", "0.0.0.0:8000"]
-#ENTRYPOINT ["./run.sh"]
+#CMD ["python3", "manage.py", "runserver", "0.0.0.0:8000"]
+ENTRYPOINT ["./run.sh"]

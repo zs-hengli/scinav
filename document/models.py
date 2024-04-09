@@ -77,11 +77,29 @@ class IngestDocument(models.Model):
 
 
 class DocumentLibrary(models.Model):
+    class TaskStatusChoices(models.TextChoices):
+        PENDING = 'pending', _('pending')
+        IN_PROGRESS = 'in_progress', _('in_progress')
+        COMPLETED = 'completed', _('completed')
+        ERROR = 'error', _('error')
+        # CANCELED = 'canceled', _('canceled')
+
     id = models.CharField(max_length=36, primary_key=True, default=uuid.uuid4)
     user = models.ForeignKey(
         'user.MyUser', db_constraint=False, on_delete=models.DO_NOTHING, null=True, db_column='user_id')
     document = models.ForeignKey(
-        Document, db_constraint=False, on_delete=models.DO_NOTHING, db_column='document_id', related_name='doc_lib'
+        Document, db_constraint=False, on_delete=models.DO_NOTHING, db_column='document_id', related_name='doc_lib',
+        null=True,
+    )
+    task_id = models.CharField(null=True, blank=True, max_length=36)
+    task_status = models.CharField(
+        null=True, blank=True, max_length=32, db_index=True, default=TaskStatusChoices.PENDING)
+    error = models.JSONField(null=True)
+    filename = models.CharField(null=True, blank=True, max_length=512)
+    object_path = models.CharField(null=True, blank=True, max_length=512)
+    folder = models.ForeignKey(
+        'DocumentLibraryFolder', db_constraint=False, on_delete=models.DO_NOTHING, db_column='folder_id',
+        related_name='doc_lib_folder', null=True, default=None
     )
     del_flag = models.BooleanField(default=False, db_default=False)
     updated_at = models.DateTimeField(null=True, auto_now=True)
@@ -90,3 +108,17 @@ class DocumentLibrary(models.Model):
     class Meta:
         db_table = 'document_library'
         verbose_name = 'document_library'
+
+
+class DocumentLibraryFolder(models.Model):
+    id = models.CharField(max_length=36, primary_key=True, default=uuid.uuid4)
+    name = models.CharField(null=False, blank=False, max_length=200)
+    user = models.ForeignKey(
+        'user.MyUser', db_constraint=False, on_delete=models.DO_NOTHING, null=True, db_column='user_id')
+    del_flag = models.BooleanField(default=False, db_default=False)
+    updated_at = models.DateTimeField(null=True, auto_now=True)
+    created_at = models.DateTimeField(null=True, auto_now_add=True)
+
+    class Meta:
+        db_table = 'document_library_folder'
+        verbose_name = 'document_library_folder'

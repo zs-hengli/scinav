@@ -88,7 +88,7 @@ def my_json_response(data=None, code=0, msg='', status=200, set_cookie=None):
         'data': data,
         'request_id': datetime.datetime.now().strftime("%Y%m%d%H%M%S") + str(uuid.uuid4())[:8],
     }
-    logger.debug(f'response data: {res_data}')
+    logger.info(f'response data: {res_data}')
     response = JsonResponse(res_data, status=status)
     if set_cookie: response.set_cookie(**set_cookie)
     return response
@@ -152,7 +152,7 @@ def _extract_json(request):
             data['JSON'] = body_data
         except Exception:  # noqa
             logger.exception('load request.body error')
-    logger.debug(f"request_data: {data}")
+    logger.info(f"request_data: {data}")
     return data
 
 

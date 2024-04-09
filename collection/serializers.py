@@ -39,10 +39,13 @@ class CollectionCreateSerializer(BaseModelSerializer):
     user_id = serializers.CharField(required=True, min_length=32, max_length=36)
     type = serializers.ChoiceField(choices=Collection.TypeChoices.choices, default=Collection.TypeChoices.PERSONAL)
     document_titles = serializers.ListField(required=False, child=serializers.CharField(max_length=255))
+    is_all = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs):
         if not attrs.get('title') and not attrs.get('document_ids') and not attrs.get('search_content'):
             raise serializers.ValidationError(_('Please provide a name or document_ids or search_content'))
+        if attrs.get('is_all') and not attrs.get('search_content'):
+            raise serializers.ValidationError(_('Please provide a search_content'))
         if attrs.get('title') and len(attrs['title']) > 255:
             attrs['title'] = attrs['title'][:255]
         elif attrs.get('document_ids'):
@@ -99,10 +102,15 @@ class CollectionPublicSerializer(serializers.ModelSerializer):
 
 class CollectionDetailSerializer(BaseModelSerializer):
     name = serializers.CharField(source='title')
+    total = serializers.SerializerMethodField()
+
+    @staticmethod
+    def get_total(obj):
+        return obj.total_public + obj.total_personal
 
     class Meta:
         model = Collection
-        fields = ['id', 'name', 'updated_at', 'total_public', 'total_personal']
+        fields = ['id', 'name', 'updated_at', 'total']
 
 
 class CollectionSubscribeSerializer(serializers.Serializer):
@@ -133,7 +141,8 @@ class CollectionListSerializer(serializers.ModelSerializer):
     updated_at = serializers.DateTimeField(required=False, format="%Y-%m-%d %H:%M:%S")
     total = serializers.SerializerMethodField()
 
-    def get_total(self, obj):
+    @staticmethod
+    def get_total(obj):
         return obj.total_public + obj.total_personal
 
     class Meta:

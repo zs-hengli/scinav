@@ -25,7 +25,7 @@ def conversation_create(validated_data):
         paper_ids = bot.extension['paper_ids']
         public_collection_ids = bot.extension['public_collection_ids']
         documents = None
-        collections = None
+        collections = vd.get('collections')
         title = bot.title
     elif vd.get('documents'):
         # auto create collection.
@@ -77,6 +77,7 @@ def conversation_create(validated_data):
         paper_ids=conv['paper_ids'],
         type=chat_type,
         is_named=title is not None,
+        bot_id=vd.get('bot_id'),
     )
     # 返回 Conversation id
     return str(conversation.id)
@@ -96,7 +97,10 @@ def conversation_update(conversation_id, validated_data):
 
 def conversation_detail(conversation_id):
     conversation = Conversation.objects.get(pk=conversation_id)
-    collections = Collection.objects.filter(id__in=conversation.collections, del_flag=False).values('id').all()
+    collections = (
+        Collection.objects.filter(id__in=conversation.collections, del_flag=False).values('id').all()
+        if conversation.collections else []
+    )
     collections = [c['id'] for c in collections]
     conversation.collections = collections
     return ConversationDetailSerializer(conversation).data
@@ -110,7 +114,7 @@ def conversation_list(validated_data):
         'id', 'title', 'last_used_at', named=True).order_by('-last_used_at')
     filter_count = query_set.count()
     start_num = page_size * (page_num - 1)
-    logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
+    logger.info(f"limit: [{start_num}: {page_size * page_num}]")
     conversations = query_set[start_num:(page_size * page_num)]
     list_data = ConversationListSerializer(conversations, many=True).data
     return {

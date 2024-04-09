@@ -10,8 +10,8 @@ from bot.rag_service import Document as RagDocument
 from core.utils.views import check_keys, extract_json, my_json_response
 from document.models import Document
 from document.serializers import DocumentUpdateSerializer, DocumentRagGetSerializer, DocumentUrlSerializer, \
-    DocumentDetailSerializer
-from document.service import gen_s3_presigned_post, search, documents_update_from_rag
+    DocumentDetailSerializer, GenPresignedUrlQuerySerializer, DocumentUploadQuerySerializer
+from document.service import search, documents_update_from_rag, presigned_url, document_personal_upload
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +28,18 @@ class Index(APIView):
 
 
 @method_decorator([extract_json], name='dispatch')
-@method_decorator(require_http_methods(['GET']), name='dispatch')
+@method_decorator(require_http_methods(['POST']), name='dispatch')
 # @permission_classes([AllowAny])
 class GenPresignedUrl(APIView):
 
-    def get(self, request, *args, **kwargs):  # noqa
-        query = kwargs['request_data']['GET']
-        check_keys(query, ['bucket', 'path'])
-        ret = gen_s3_presigned_post(bucket=query['bucket'], path=query['path'])
+    def post(self, request, *args, **kwargs):  # noqa
+        query = request.data
+        query['user_id'] = request.user.id
+        serial = GenPresignedUrlQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, 400)
+        validated_data = serial.validated_data
+        ret = presigned_url(request.user.id, validated_data['filename'])
         data = ret
         return my_json_response(data)
 
@@ -62,6 +66,25 @@ class Search(APIView):
 @method_decorator(require_http_methods(['PUT', 'GET']), name='dispatch')
 # @permission_classes([AllowAny])
 class Documents(APIView):
+
+    @staticmethod
+    def get(request, document_id, *args, **kwargs):
+        document = Document.objects.filter(id=document_id).first()
+        if not document:
+            return my_json_response(code=1, msg=f'document not found by document_id={document_id}')
+        return my_json_response(DocumentDetailSerializer(document).data)
+
+    @staticmethod
+    def post(request, *args, **kwargs):
+        """
+        upload personal paper to document
+        """
+        query = request.data
+        query['user_id'] = request.user.id
+        serial = DocumentUploadQuerySerializer(data=query)
+        data = document_personal_upload(serial.validated_data)
+        return my_json_response(data)
+
     @staticmethod
     def put(request, *args, **kwargs):
         """
@@ -84,13 +107,6 @@ class Documents(APIView):
         )
         data = DocumentUpdateSerializer(document).data
         return my_json_response(data)
-
-    @staticmethod
-    def get(request, document_id, *args, **kwargs):
-        document = Document.objects.filter(id=document_id).first()
-        if not document:
-            return my_json_response(code=1, msg=f'document not found by document_id={document_id}')
-        return my_json_response(DocumentDetailSerializer(document).data)
 
 
 @method_decorator([extract_json], name='dispatch')

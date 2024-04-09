@@ -56,14 +56,26 @@ def collection_list(user_id, list_type, page_size, page_num):
             if coll['type'] in [Collection.TypeChoices.SUBSCRIBE, Collection.TypeChoices.PUBLIC]:
                 coll['is_all_in_document_library'] = True
             else:
-                coll['is_all_in_document_library'] = _is_all_in_document_library(coll['id'], user_id)
+                coll['is_all_in_document_library'] = _is_collection_docs_all_in_document_library(coll['id'], user_id)
+            coll['is_in_published_bot'], coll['bot_titles'] = _is_collection_in_published_bot(coll['id'])
     return {
         'list': coll_list,
         'total': my_total + subscribe_total,
     }
 
 
-def _is_all_in_document_library(collection_id, user_id):
+def _is_collection_in_published_bot(collection_id):
+    is_in_published_bot = BotCollection.objects.filter(
+        collection_id=collection_id, del_flag=False, bot__type=Bot.TypeChoices.PUBLIC).exists()
+    bot_titles = None
+    if is_in_published_bot:
+        bots = BotCollection.objects.filter(
+            collection_id=collection_id, del_flag=False, bot__type=Bot.TypeChoices.PUBLIC).values('bot__title').all()
+        bot_titles = [b['bot__title'] for b in bots]
+    return is_in_published_bot, bot_titles
+
+
+def _is_collection_docs_all_in_document_library(collection_id, user_id):
     doc_libs = CollectionDocument.objects.filter(collection_id=collection_id, del_flag=False).values(
         'document_id').distinct('document_id').all()
     doc_ids = [d['document_id'] for d in doc_libs]
@@ -163,7 +175,7 @@ def collection_docs(collection_id, page_size=10, page_num=1):
     query_set = CollectionDocument.objects.filter(collection_id=collection_id, del_flag=False).order_by('-updated_at')
     total = query_set.count()
     start_num = page_size * (page_num - 1)
-    logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
+    logger.info(f"limit: [{start_num}: {page_size * page_num}]")
     c_docs = query_set[start_num:(page_size * page_num)]
     docs = [cd.document for cd in c_docs]
 
@@ -212,7 +224,7 @@ def collections_docs(validated_data):
 
     total = query_set.count()
     start_num = page_size * (page_num - 1)
-    logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
+    logger.info(f"limit: [{start_num}: {page_size * page_num}]")
     c_docs = query_set[start_num:(page_size * page_num)]
     docs = Document.objects.filter(id__in=[cd['document_id'] for cd in c_docs]).all()
 

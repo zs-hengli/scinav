@@ -198,7 +198,7 @@ def bot_list_all(user_id, page_size=10, page_num=1):
     query_set = Bot.objects.filter(type=Bot.TypeChoices.PUBLIC, del_flag=False).order_by('-pub_date', '-created_at')
     filter_count = query_set.count()
     start_num = page_size * (page_num - 1)
-    logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
+    logger.info(f"limit: [{start_num}: {page_size * page_num}]")
     bots = query_set[start_num:(page_size * page_num)]
     bot_list_data = BotListAllSerializer(bots, many=True).data
     for index, b_data in enumerate(bot_list_data):
@@ -217,7 +217,7 @@ def bot_list_subscribe(user_id, page_size=10, page_num=1):
     query_set = Bot.objects.filter(id__in=bot_ids, del_flag=False).order_by('-pub_date')
     filter_count = query_set.count()
     start_num = page_size * (page_num - 1)
-    logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
+    logger.info(f"limit: [{start_num}: {page_size * page_num}]")
     bots = query_set[start_num:(page_size * page_num)]
 
     bot_list_data = BotListAllSerializer(bots, many=True).data
@@ -233,7 +233,7 @@ def bot_list_my(user_id, page_size=10, page_num=1):
     query_set = Bot.objects.filter(user_id=user_id, del_flag=False).order_by('-created_at')
     filter_count = query_set.count()
     start_num = page_size * (page_num - 1)
-    logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
+    logger.info(f"limit: [{start_num}: {page_size * page_num}]")
     bots = query_set[start_num:(page_size * page_num)]
 
     bot_list_data = BotListAllSerializer(bots, many=True).data
@@ -258,7 +258,7 @@ def bot_list_chat_menu(user_id, page_size=10, page_num=1):
     query_set = Bot.objects.filter(filter_query).order_by('-pub_date', '-created_at')
     filter_count = query_set.count()
     start_num = page_size * (page_num - 1)
-    logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
+    logger.info(f"limit: [{start_num}: {page_size * page_num}]")
     bots = query_set[start_num:(page_size * page_num)]
     bot_list_data = BotListChatMenuSerializer(bots, many=True).data
     return {
@@ -306,7 +306,7 @@ def bot_documents(bot_id, page_size=10, page_num=1):
         collection_id__in=collection_ids).distinct().values('document_id').order_by('document_id')
     total = query_set.count()
     start_num = page_size * (page_num - 1)
-    logger.debug(f"limit: [{start_num}: {page_size * page_num}]")
+    logger.info(f"limit: [{start_num}: {page_size * page_num}]")
     c_docs = query_set[start_num:(page_size * page_num)] if total > start_num else []
     docs = Document.objects.filter(id__in=[cd['document_id'] for cd in c_docs]).all()
     # docs = [cd.document for cd in c_docs]

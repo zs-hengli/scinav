@@ -1,4 +1,5 @@
 import logging
+import os
 
 from django.conf import settings
 from rest_framework import serializers
@@ -38,6 +39,18 @@ class DocumentUpdateSerializer(BaseModelSerializer):
     class Meta:
         model = Document
         fields = ['id', 'doc_id', 'title', 'collection_type', 'collection_id', 'updated_at', 'created_at']
+
+
+class DocumentUploadQuerySerializer(serializers.Serializer):
+    user_id = serializers.CharField(required=True, allow_blank=False, allow_null=False)
+    object_path = serializers.CharField(required=True, allow_blank=False, allow_null=False)
+    filename = serializers.CharField(required=True, allow_blank=False, allow_null=False)
+
+    def validate(self, attrs):
+        filename = attrs.get('filename')
+        basename = os.path.basename(filename)
+        attrs['name'] = os.path.splitext(basename)[0]
+        return attrs
 
 
 class DocumentRagGetSerializer(serializers.ModelSerializer):
@@ -103,3 +116,8 @@ class DocumentUrlSerializer(serializers.ModelSerializer):
     class Meta:
         model = Document
         fields = ['id', 'url']
+
+
+class GenPresignedUrlQuerySerializer(serializers.Serializer):
+    user_id = serializers.CharField(required=True)
+    filename = serializers.CharField(required=True, allow_blank=False, allow_null=False)
