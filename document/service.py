@@ -6,16 +6,19 @@ import boto3
 from botocore.config import Config
 from django.conf import settings
 from django.core.cache import cache
-from django.db.models import query as models_query
 from django.db.models import Q
+from django.db.models import query as models_query
+from django.utils.translation import gettext_lazy as _
 
+from bot.models import BotSubscribe, Bot, BotCollection
+from bot.rag_service import Document as RagDocument
 from bot.rag_service import Document as Rag_Document
 from collection.models import Collection, CollectionDocument
 from core.utils.common import str_hash
+from core.utils.exceptions import ValidationError
 from document.models import Document, DocumentLibrary
-from document.serializers import DocumentRagGetSerializer, DocumentUpdateSerializer
-
-from bot.rag_service import Document as RagDocument
+from document.serializers import DocumentRagGetSerializer, DocumentRagUpdateSerializer, \
+    DocumentLibrarySubscribeSerializer, DocumentLibraryPersonalSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -170,10 +173,81 @@ def get_url_by_object_path(object_path):
     return f'{settings.OBJECT_PATH_URL_HOST}/{object_path}'
 
 
+def get_document_library_list(user_id, page_size=10, page_num=1):
+    # {'filename': '', 'document_title': '', 'status': '-', 'record_time': '-'}
+    start_num = page_size * (page_num - 1)
+    list_data = []
+    public_total, subscribe_total, sub_add_list, my_total = 0, 0, [], 0
+    # public
+    arxiv_coll = Collection.objects.filter(id='arxiv', del_flag=False).first()
+    if arxiv_coll:
+        public_total = 1
+        if start_num == 0:
+            list_data.append({
+                'id': None,
+                'filename': f"{_('公共库')}: {arxiv_coll.title}",
+                'document_title': '-',
+                'status': '-',
+                'record_time': '-',
+                'type': 'public',
+            })
+
+    # subscribe
+    sub_serial = DocumentLibrarySubscribeSerializer(data=_bot_subscribe_document_library_list(user_id), many=True)
+    sub_serial.is_valid()
+    subscribe_total = len(sub_serial.data)
+    sub_add_list = list(sub_serial.data)[start_num:start_num + page_size - public_total]
+    list_data += sub_add_list
+
+    # personal
+    query_set = DocumentLibrary.objects.filter(user_id=user_id, del_flag=False).order_by('-updated_at')
+    my_total = query_set.count()
+    if len(list_data) < page_size:
+        my_start_num = 0 if list_data else max(start_num - public_total - subscribe_total, 0)
+        my_end_num = my_start_num + page_size - len(list_data)
+        query_set = query_set[my_start_num:my_end_num]
+        my_list_data = []
+        for doc_lib in query_set:
+            filename = doc_lib.filename if doc_lib.filename else '-'
+            my_list_data.append({
+                'id': str(doc_lib.id),
+                'filename': doc_lib.filename if doc_lib.filename else '-',
+                'document_title': doc_lib.document.title if doc_lib.document else filename,
+                'status': doc_lib.task_status,
+                'record_time': doc_lib.created_at,
+                'type': 'personal',
+            })
+        my_seral = DocumentLibraryPersonalSerializer(data=my_list_data, many=True)
+        if not my_seral.is_valid():
+            raise ValidationError(my_seral.errors)
+        list_data += list(my_seral.data)
+    return {
+        'list': list_data,
+        'total': my_total + subscribe_total + public_total,
+    }
+
+
+def _bot_subscribe_document_library_list(user_id):
+    bot_sub = BotSubscribe.objects.filter(bot__user_id=user_id, del_flag=False).all()
+    bots = Bot.objects.filter(id__in=[bc.bot_id for bc in bot_sub])
+    list_data = []
+    for bot in bots:
+        list_data.append({
+            'id': None,
+            'filename': f"{_('专题名称')}: {bot.title}",
+            'document_title': '-',
+            'status': '-',
+            'record_time': bot.created_at,
+            'type': 'subscribe',
+            'bot_id': bot.id,
+        })
+    return list_data
+
+
 def document_update_from_rag(validated_data):
     doc_info = RagDocument.get(validated_data)
     document = _document_update_from_rag_ret(doc_info)
-    data = DocumentUpdateSerializer(document).data
+    data = DocumentRagUpdateSerializer(document).data
     return data
 
 
@@ -223,7 +297,7 @@ def import_documents_from_json():
                 doc_id=doc_id, collection_id=collection_id, collection_type=collection_type).first()
             if not document:
                 raise Exception(f'not found doc_id: {doc_id}')
-            data = DocumentUpdateSerializer(document).data
+            data = DocumentRagUpdateSerializer(document).data
         count += 1
         # ewn_collection_id = '7ce9f633-696e-4dd7-84cb-4b58416a0de5'
         zlf_collection_id = '253f05a7-c1e1-4f08-84d7-9c926f9e19ee'
@@ -255,25 +329,51 @@ def import_one_document(collection_id, collection_type, doc_id):
 
 def document_personal_upload(validated_data):
     vd = validated_data
-    doc_lib_data = {
-        'user_id': vd['user_id'],
-        'filename': vd['filename'],
-        'object_path': vd['object_path'],
-    }
-    instance, _ = DocumentLibrary.objects.update_or_create(
-        doc_lib_data, user_id=vd['user_id'], filename=vd['filename'], object_path=vd['object_path'])
-    if not instance.task_id:
-        rag_ret = RagDocument.ingest_personal_paper(vd['user_id'], vd['object_path'])
-        instance.task_id = rag_ret['task_id']
-        instance.task_status = (
-            rag_ret['task_status']
-            if rag_ret['task_status'] != DocumentLibrary.TaskStatusChoices.COMPLETED
-            else DocumentLibrary.TaskStatusChoices.IN_PROGRESS
-        )
-        if instance.task_status == DocumentLibrary.TaskStatusChoices.ERROR:
-            instance.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message'], }
-        instance.save()
+    files = vd.get('files')
+    for file in files:
+        doc_lib_data = {
+            'user_id': vd['user_id'],
+            'filename': file['filename'],
+            'object_path': file['object_path'],
+        }
+        # todo for test
+        # logger.debug(f'dddddddd doc_lib_data: {doc_lib_data}')
+        # continue
+        instance, _ = DocumentLibrary.objects.update_or_create(
+            doc_lib_data, user_id=vd['user_id'], filename=file['filename'], object_path=file['object_path'])
+        if not instance.task_id:
+            rag_ret = RagDocument.ingest_personal_paper(vd['user_id'], file['object_path'])
+            instance.task_id = rag_ret['task_id']
+            instance.task_status = (
+                rag_ret['task_status']
+                if rag_ret['task_status'] != DocumentLibrary.TaskStatusChoices.COMPLETED
+                else DocumentLibrary.TaskStatusChoices.IN_PROGRESS
+            )
+            if instance.task_status == DocumentLibrary.TaskStatusChoices.ERROR:
+                instance.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message'], }
+            instance.save()
     return vd
+
+
+def document_library_add(user_id, document_ids, collection_id, bot_id):
+    # get document_ids
+    collection_ids = []
+    if bot_id:
+        if Bot.objects.filter(id=bot_id, user_id=user_id, del_flag=False).exists():
+            bot_coll = BotCollection.objects.filter(bot_id=bot_id, del_flag=False).values('collection_id').all()
+            collection_ids = [c['collection_id'] for c in bot_coll]
+    if collection_id:
+        collection_ids.append(collection_id)
+    collections = Collection.objects.filter(
+        id__in=collection_ids, del_flag=False, type=Collection.TypeChoices.PERSONAL).values('id').all()
+    collection_ids = [c['id'] for c in collections]
+    coll_document = CollectionDocument.objects.filter(
+        collection__id__in=collection_ids, del_flag=False).values('document_id').all()
+    if not document_ids:
+        document_ids = []
+    document_ids += [c['document_id'] for c in coll_document]
+    update_document_lib(user_id, document_ids)
+    return True
 
 
 def update_document_lib(user_id, document_ids):

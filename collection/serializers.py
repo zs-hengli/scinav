@@ -125,7 +125,7 @@ class CollectionSubscribeSerializer(serializers.Serializer):
         fields = ['id', 'bot_id', 'name', 'total', 'updated_at', 'type']
 
 
-class CollectionPublicListSerializer(serializers.Serializer):
+class CollectionRagPublicListSerializer(serializers.Serializer):
     id = serializers.CharField(required=True)
     name = serializers.CharField(required=True)
     updated_at = serializers.DateTimeField(required=True, format="%Y-%m-%d %H:%M:%S")
@@ -153,11 +153,13 @@ class CollectionListSerializer(serializers.ModelSerializer):
 class CollectionDeleteQuerySerializer(serializers.Serializer):
     user_id = serializers.CharField(required=True, max_length=36, min_length=32)
     ids = serializers.ListField(
-        required=True, child=serializers.CharField(required=True, max_length=36, min_length=36)
+        required=False, child=serializers.CharField(required=True, max_length=36, min_length=36)
     )
     is_all = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs):
+        if not attrs.get('ids'):
+            attrs['ids'] = [cid for cid in attrs['ids'] if cid]
         if not attrs.get('ids') and not attrs.get('is_all'):
             raise serializers.ValidationError(f"ids and is_all {_('cannot be empty at the same time')}")
         return attrs

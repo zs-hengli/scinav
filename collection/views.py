@@ -2,6 +2,7 @@ import logging
 
 from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
+from django.utils.translation import gettext_lazy as _
 from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
@@ -50,6 +51,7 @@ class Collections(APIView):
         user_id = request.user.id
         if collection_id:
             collection = Collection.objects.get(pk=collection_id, user_id=user_id)
+
             data = CollectionDetailSerializer(collection).data
         else:
             data = collection_list(user_id, list_type=list_type, page_size=page_size, page_num=page_num)
@@ -109,11 +111,16 @@ class Collections(APIView):
 
     @staticmethod
     def delete(request, collection_id=None, *args, **kwargs):
+        def has_public_collection(c_ids):
+            return Collection.objects.filter(id__in=c_ids, del_flag=False, type=Collection.TypeChoices.PUBLIC).exists()
+
         user_id = request.user.id
         if collection_id:
             collection = Collection.objects.filter(pk=collection_id, user_id=user_id).first()
             if not collection:
-                return my_json_response({}, code=-1, msg='validate collection_id error')
+                return my_json_response({}, code=-1, msg='收藏夹不存在')
+            if collection.type == Collection.TypeChoices.PUBLIC:
+                return my_json_response({}, code=-2, msg=_('您无法删除公共库或订阅专题收藏夹，请重新选择。'))
             collection_delete(collection)
         else:
             query = request.data
@@ -122,6 +129,8 @@ class Collections(APIView):
             if not serial.is_valid():
                 return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
             query_data = serial.validated_data
+            if not query_data['is_all'] and query_data.get('ids') and has_public_collection(query_data['ids']):
+                return my_json_response({}, code=-2, msg=_('您无法删除公共库或订阅专题收藏夹，请重新选择。'))
             collections_delete(query_data)
         return my_json_response({})
 

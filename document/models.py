@@ -53,6 +53,7 @@ class Document(models.Model):
     checksum = models.CharField(null=True, blank=True, db_index=True, max_length=64)
     ref_collection_id = models.CharField(null=True, blank=True, db_index=True, max_length=36)
     ref_doc_id = models.BigIntegerField(null=True)
+    del_flag = models.BooleanField(default=False, db_default=False)
     updated_at = models.DateTimeField(null=True, auto_now=True)
     created_at = models.DateTimeField(null=True, auto_now_add=True)
 

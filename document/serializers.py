@@ -4,6 +4,7 @@ import os
 from django.conf import settings
 from rest_framework import serializers
 
+from collection.models import Collection
 from document.models import Document
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,7 @@ class BaseModelSerializer(serializers.ModelSerializer):
     updated_at = serializers.DateTimeField(required=False, format="%Y-%m-%d %H:%M:%S")
 
 
-class DocumentListSerializer(serializers.ModelSerializer):
+class DocumentApaListSerializer(serializers.ModelSerializer):
     doc_apa = serializers.SerializerMethodField()
 
     @staticmethod
@@ -31,7 +32,11 @@ class DocumentListSerializer(serializers.ModelSerializer):
         fields = ['id', 'doc_apa']
 
 
-class DocumentUpdateSerializer(BaseModelSerializer):
+class DocumentUpdateFilenameQuerySerializer(BaseModelSerializer):
+    filename = serializers.CharField(required=True, allow_blank=False, allow_null=False)
+
+
+class DocumentRagUpdateSerializer(BaseModelSerializer):
     doc_id = serializers.IntegerField(required=True)
     collection_type = serializers.ChoiceField(required=True, choices=Document.TypeChoices)
     collection_id = serializers.CharField(required=True)
@@ -41,8 +46,7 @@ class DocumentUpdateSerializer(BaseModelSerializer):
         fields = ['id', 'doc_id', 'title', 'collection_type', 'collection_id', 'updated_at', 'created_at']
 
 
-class DocumentUploadQuerySerializer(serializers.Serializer):
-    user_id = serializers.CharField(required=True, allow_blank=False, allow_null=False)
+class DocumentUploadFileSerializer(serializers.Serializer):
     object_path = serializers.CharField(required=True, allow_blank=False, allow_null=False)
     filename = serializers.CharField(required=True, allow_blank=False, allow_null=False)
 
@@ -51,6 +55,11 @@ class DocumentUploadQuerySerializer(serializers.Serializer):
         basename = os.path.basename(filename)
         attrs['name'] = os.path.splitext(basename)[0]
         return attrs
+
+
+class DocumentUploadQuerySerializer(serializers.Serializer):
+    user_id = serializers.CharField(required=True, allow_blank=False, allow_null=False)
+    files = DocumentUploadFileSerializer(many=True, required=True, allow_null=False)
 
 
 class DocumentRagGetSerializer(serializers.ModelSerializer):
@@ -121,3 +130,37 @@ class DocumentUrlSerializer(serializers.ModelSerializer):
 class GenPresignedUrlQuerySerializer(serializers.Serializer):
     user_id = serializers.CharField(required=True)
     filename = serializers.CharField(required=True, allow_blank=False, allow_null=False)
+
+
+class DocumentLibraryListQuerySerializer(serializers.Serializer):
+    page_size = serializers.IntegerField(required=True)
+    page_num = serializers.IntegerField(required=True)
+
+
+class DocumentLibraryPersonalSerializer(serializers.Serializer):
+    id = serializers.CharField(required=True, allow_null=True)
+    filename = serializers.CharField(required=True)
+    document_title = serializers.CharField(required=True)
+    record_time = serializers.DateTimeField(required=True, format="%Y-%m-%d %H:%M:%S")
+    type = serializers.CharField(required=False, default=Collection.TypeChoices.PUBLIC)
+    status = serializers.CharField(required=False, default='-')
+
+
+class DocumentLibrarySubscribeSerializer(DocumentLibraryPersonalSerializer):
+    bot_id = serializers.CharField(required=True)
+
+
+class DocLibUpdateNameQuerySerializer(serializers.Serializer):
+    filename = serializers.CharField(required=True, allow_null=False, allow_blank=False)
+
+
+class DocLibAddQuerySerializer(serializers.Serializer):
+    document_ids = serializers.ListField(
+        required=False, child=serializers.CharField(allow_null=False, allow_blank=False), default=None)
+    collection_id = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
+    bot_id = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
+
+    def validate(self, attrs):
+        if not attrs.get('document_ids') and not attrs.get('collection_id') and not attrs.get('bot_id'):
+            raise serializers.ValidationError('document_ids or collection_id or bot_id is required')
+        return attrs

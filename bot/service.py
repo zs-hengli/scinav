@@ -11,7 +11,7 @@ from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionCreateSerializer
 from core.utils.exceptions import InternalServerError, ValidationError
 from document.models import Document
-from document.serializers import DocumentListSerializer
+from document.serializers import DocumentApaListSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +167,7 @@ def bot_docs(bot_id):
     collections = [ag_c.collection for ag_c in ag_collections]
     collection_ids = [c.id for c in collections]
     c_documents = CollectionDocument.objects.filter(collection_id__in=collection_ids, del_flag=False).all()
-    return DocumentListSerializer(c_documents, many=True).data
+    return DocumentApaListSerializer(c_documents, many=True).data
 
 
 # 专题列表
@@ -310,7 +310,7 @@ def bot_documents(bot_id, page_size=10, page_num=1):
     c_docs = query_set[start_num:(page_size * page_num)] if total > start_num else []
     docs = Document.objects.filter(id__in=[cd['document_id'] for cd in c_docs]).all()
     # docs = [cd.document for cd in c_docs]
-    docs_data = DocumentListSerializer(docs, many=True).data
+    docs_data = DocumentApaListSerializer(docs, many=True).data
 
     public_collections = Collection.objects.filter(id__in=collection_ids, type=Collection.TypeChoices.PUBLIC).all()
     res_data = []
