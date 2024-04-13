@@ -1,8 +1,8 @@
 import logging
 
 from django.utils.decorators import method_decorator
-from django.views.decorators.http import require_http_methods
 from django.utils.translation import gettext_lazy as _
+from django.views.decorators.http import require_http_methods
 from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
@@ -12,9 +12,9 @@ from collection.serializers import (CollectionCreateSerializer,
                                     CollectionDetailSerializer,
                                     CollectionDocUpdateSerializer,
                                     CollectionUpdateSerializer, CollectionDeleteQuerySerializer,
-                                    CollectionDocumentListQuerySerializer)
-from collection.service import (collection_docs, collection_list,
-                                collections_docs, generate_collection_title, collection_delete, collections_delete)
+                                    CollectionDocumentListQuerySerializer, CollectionCheckQuerySerializer)
+from collection.service import (collection_list, collections_docs, generate_collection_title, collection_delete,
+                                collections_delete, collection_chat_operation_check, collection_delete_operation_check)
 from core.utils.views import check_keys, extract_json, my_json_response
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,6 @@ class Index(APIView):
 
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['GET', 'POST', 'PUT', 'DELETE']), name='dispatch')
-@permission_classes([AllowAny])
 class Collections(APIView):
 
     @staticmethod
@@ -137,7 +136,6 @@ class Collections(APIView):
 
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['GET', 'PUT']), name='dispatch')
-@permission_classes([AllowAny])
 class CollectionDocuments(APIView):
 
     @staticmethod
@@ -177,3 +175,41 @@ class CollectionDocuments(APIView):
             serial.delete_document(serial.validated_data)
 
         return my_json_response({})
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['POST']), name='dispatch')
+class CollectionChatOperationCheck(APIView):
+
+    @staticmethod
+    def post(request, *args, **kwargs):
+        query = request.data
+        query['user_id'] = request.user.id
+        serial = CollectionCheckQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        code, data = collection_chat_operation_check(request.user.id, serial.validated_data)
+        if code == 0:
+            return my_json_response(data)
+        else:
+            return my_json_response({}, code=code, msg=data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['POST']), name='dispatch')
+class CollectionDeleteOperationCheck(APIView):
+
+    @staticmethod
+    def post(request, *args, **kwargs):
+        query = request.data
+        query['user_id'] = request.user.id
+        serial = CollectionCheckQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        code, data = collection_delete_operation_check(request.user.id, serial.validated_data)
+        if code == 0:
+            return my_json_response(data)
+        else:
+            return my_json_response(data, code=code, msg=data['msg'])
+
+

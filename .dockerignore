@@ -48,4 +48,6 @@ tmp
 .viminfo
 .pg_*
 
-/apidr/base_image/.idea/
+
+celery-*.log
+celery-*.pid

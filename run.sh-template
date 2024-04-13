@@ -22,13 +22,24 @@ export REDIS_PASSWORD=''
 # S3 dev
 export OSS_PUBLIC_KEY='keykeykey'
 
-# object path url host
-export OBJECT_PATH_URL_HOST='https://xxxx.amazonaws.com'
-
-
 # rag api
 export RAG_HOST='https://myscale.cloud'
 export RAG_API_KEY='auth-token'
+
+# object path url host
+export OBJECT_PATH_URL_HOST='https://xxxx.amazonaws.com'
+
+# authing
+export AUTHING_APP_ID='app_id'
+export AUTHING_APP_SECRET='app_secret'
+export AUTHING_APP_HOST='app_host'
+export AUTHING_APP_REDIRECT_URI='redirect_uri'
+
+
+# Start celery beat and worker
+celery -A core beat -l debug -f ./celery-beat.log  --pidfile=./celery-beat.pid --detach
+celery -A core worker -l debug -f ./celery-worker.log  --pidfile=./celery-worker.pid --detach
+
 
 # Install all package dependencies
 # pip install  -r deploy/requirements.txt

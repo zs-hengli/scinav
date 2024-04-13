@@ -33,7 +33,6 @@ class Index(APIView):
 
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['GET', 'POST', 'PUT', 'DELETE']), name='dispatch')
-# @permission_classes([AllowAny])
 class Conversations(APIView):
     @staticmethod
     def get(request, conversation_id=None, *args, **kwargs):
@@ -83,7 +82,6 @@ class Conversations(APIView):
 
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['POST', 'OPTIONS']), name='dispatch')
-# @permission_classes([AllowAny])
 @renderer_classes([ServerSentEventRenderer])
 class Chat(APIView):
     @staticmethod
@@ -99,7 +97,6 @@ class Chat(APIView):
 
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['PUT']), name='dispatch')
-# @permission_classes([AllowAny])
 class QuestionAnswer(APIView):
 
     @staticmethod

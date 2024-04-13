@@ -7,11 +7,12 @@ from django.db.models import Q
 from bot.models import BotCollection, BotSubscribe, Bot
 from bot.rag_service import Collection as RagCollection, Conversations as RagConversations
 from collection.models import Collection, CollectionDocument
-from collection.serializers import CollectionPublicSerializer, CollectionListSerializer, CollectionRagPublicListSerializer, \
-    CollectionSubscribeSerializer
+from collection.serializers import CollectionPublicSerializer, CollectionListSerializer, \
+    CollectionRagPublicListSerializer, \
+    CollectionSubscribeSerializer, CollectionDocumentListSerializer
 from core.utils.exceptions import ValidationError
 from document.models import Document, DocumentLibrary
-from document.serializers import DocumentApaListSerializer
+from document.serializers import DocumentApaListSerializer, CollectionDocumentListCollectionSerializer
 from document.service import search_result_from_cache
 
 logger = logging.getLogger(__name__)
@@ -57,20 +58,20 @@ def collection_list(user_id, list_type, page_size, page_num):
                 coll['is_all_in_document_library'] = True
             else:
                 coll['is_all_in_document_library'] = _is_collection_docs_all_in_document_library(coll['id'], user_id)
-            coll['is_in_published_bot'], coll['bot_titles'] = _is_collection_in_published_bot(coll['id'])
+            coll['is_in_published_bot'], coll['bot_titles'] = _is_collection_in_published_bot([coll['id']])
     return {
         'list': coll_list,
         'total': my_total + subscribe_total + public_total,
     }
 
 
-def _is_collection_in_published_bot(collection_id):
+def _is_collection_in_published_bot(collection_ids):
     is_in_published_bot = BotCollection.objects.filter(
-        collection_id=collection_id, del_flag=False, bot__type=Bot.TypeChoices.PUBLIC).exists()
+        collection_id__in=collection_ids, del_flag=False, bot__type=Bot.TypeChoices.PUBLIC).exists()
     bot_titles = None
     if is_in_published_bot:
         bots = BotCollection.objects.filter(
-            collection_id=collection_id, del_flag=False, bot__type=Bot.TypeChoices.PUBLIC).values('bot__title').all()
+            collection_id__in=collection_ids, del_flag=False, bot__type=Bot.TypeChoices.PUBLIC).values('bot__title').all()
         bot_titles = [b['bot__title'] for b in bots]
     return is_in_published_bot, bot_titles
 
@@ -85,7 +86,7 @@ def _is_collection_docs_all_in_document_library(collection_id, user_id):
 
 
 def _bot_subscribe_collection_list(user_id):
-    bot_sub = BotSubscribe.objects.filter(bot__user_id=user_id, del_flag=False).all()
+    bot_sub = BotSubscribe.objects.filter(user_id=user_id, del_flag=False).all()
     bot_ids = [bc.bot_id for bc in bot_sub]
     bots = Bot.objects.filter(id__in=bot_ids)
     bots_dict = {b.id: b for b in bots}
@@ -141,7 +142,8 @@ def collections_delete(validated_data):
             query_filter &= ~Q(id__in=vd['ids'])
         effect_num = Collection.objects.filter(query_filter).update(del_flag=True)
     else:
-        effect_num = Collection.objects.filter(id__in=vd['ids'], del_flag=False).update(del_flag=True)
+        effect_num = Collection.objects.filter(
+            id__in=vd['ids'], del_flag=False, type=Collection.TypeChoices.PERSONAL).update(del_flag=True)
     logger.debug(f"collections_delete effect_num: {effect_num}")
     return effect_num
 
@@ -201,26 +203,8 @@ def collections_docs(validated_data):
     page_size = vd['page_size']
     page_num = vd['page_num']
     res_data = []
-    if vd['list_type'] == 'all':
-        public_collections = Collection.objects.filter(id__in=collection_ids, type=Collection.TypeChoices.PUBLIC).all()
-        if public_collections:
-            for p_c in public_collections:
-                res_data.append({
-                    'id': None,
-                    'doc_apa': f"{_('公共库')}: {p_c.title}"
-                })
-        query_set = CollectionDocument.objects.filter(
-            collection_id__in=collection_ids, del_flag=False).values('document_id') \
-            .order_by('document_id').distinct()
-    elif vd['list_type'] == 'public':
-        query_set = CollectionDocument.objects.filter(
-            collection_id__in=collection_ids, del_flag=False, document__collection_type=Document.TypeChoices.PUBLIC
-        ).values('document_id').order_by('document_id').distinct()
-    else:
-        # todo DocumentLibrary 完善后添加
-        query_set = CollectionDocument.objects.filter(
-            collection_id__in=collection_ids, del_flag=False, document__collection_type=Document.TypeChoices.PERSONAL
-        ).values('document_id').order_by('document_id').distinct()
+    query_set = CollectionDocumentListSerializer.get_collection_documents(
+        vd['user_id'], collection_ids, vd['list_type'])
 
     total = query_set.count()
     start_num = page_size * (page_num - 1)
@@ -228,11 +212,72 @@ def collections_docs(validated_data):
     c_docs = query_set[start_num:(page_size * page_num)]
     docs = Document.objects.filter(id__in=[cd['document_id'] for cd in c_docs]).all()
 
-    docs_data = DocumentApaListSerializer(docs, many=True).data
-    for i, d in enumerate(docs_data):
-        d['doc_apa'] = f"[{start_num + i + 1}] {d['doc_apa']}"
-        res_data.append(d)
+    if vd['list_type'] == 'all':
+        docs_data = DocumentApaListSerializer(docs, many=True).data
+        for i, d in enumerate(docs_data):
+            d['doc_apa'] = f"[{start_num + i + 1}] {d['doc_apa']}"
+            res_data.append(d)
+    else:
+        res_data = CollectionDocumentListCollectionSerializer(docs, many=True).data
+        if vd['list_type'] == 'all_documents':
+            query_set = CollectionDocumentListSerializer.get_collection_documents(
+                vd['user_id'], collection_ids, 'personal')
+            document_ids = [cd['document_id'] for cd in query_set.all()]
+            for index, d_id in enumerate(res_data):
+                if d_id in document_ids:
+                    res_data[index]['type'] = 'personal'
+        else:
+            for index, d_id in enumerate(res_data):
+                res_data[index]['type'] = vd['list_type']
     return {
         'list': res_data,
         'total': total
     }
+
+
+def collection_chat_operation_check(user_id, validated_data):
+    subscribe_collection_id_prefix = 'bot_'  # 订阅收藏夹id拼装：'bot_<bot_id>'
+    vd = validated_data
+    ids = vd['ids'] if vd.get('ids') else []
+    # 过滤无效collection_id
+    sub_collection_ids = [cid for cid in ids if cid.startswith(subscribe_collection_id_prefix)]
+    collections = Collection.objects.filter(id__in=ids, del_flag=False).all()
+    ids = [c.id for c in collections] + sub_collection_ids
+
+    public_collections = RagCollection.list()
+    public_collection_ids = [pc['id'] for pc in public_collections]
+    subscribe_collections = BotSubscribe.objects.filter(user_id=user_id, del_flag=False).all()
+    all_sub_collection_bot_ids = [f"{subscribe_collection_id_prefix}{sc.bot_id}" for sc in subscribe_collections]
+    if vd.get('is_all'):
+        personal_collections = Collection.objects.filter(user_id=user_id, del_flag=False).all()
+        real_collection_ids = [c.id for c in personal_collections] + public_collection_ids
+        ids = list(set(real_collection_ids + all_sub_collection_bot_ids) - set(ids))
+    if (set(all_sub_collection_bot_ids) & set(ids)) and (set(ids) - set(all_sub_collection_bot_ids)):
+        return 140002, '订阅收藏夹无法与其他收藏夹共同生成对话，请重新选择'
+    # 全是 订阅收藏夹
+    if set(all_sub_collection_bot_ids) & set(ids):
+        if len(ids) > 1:  # 订阅收藏夹不能有多个
+            return 140002, '订阅收藏夹无法与其他收藏夹共同生成对话，请重新选择'
+        else:
+            return 0, {'bot_id': ids[0][len(subscribe_collection_id_prefix):]}
+    else:  # 全是公共收藏夹或者个人收藏夹
+        return 0, {'collection_ids': ids}
+
+
+def collection_delete_operation_check(user_id, validated_data):
+    vd = validated_data
+    ids = vd['ids'] if vd.get('ids') else []
+    if vd.get('is_all'):
+        filter_query = Q(user_id=user_id, del_flag=False)
+        if vd.get('ids'):
+            filter_query &= ~Q(id__in=vd['ids'])
+        all_colls = Collection.objects.filter(filter_query).all()
+        ids = [c.id for c in all_colls]
+    is_in_published_bot, bot_titles = _is_collection_in_published_bot(ids)
+    if is_in_published_bot:
+        return 140003, {
+            'msg': f'您当前删除收藏夹，涉及 {len(bot_titles)}条 已发布专题，如删除收藏夹后，将自动更新该专题中对应文献列表。',
+            'bot_titles': bot_titles,
+        }
+    else:
+        return 0, ''

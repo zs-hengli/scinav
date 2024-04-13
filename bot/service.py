@@ -1,14 +1,13 @@
 import datetime
 import logging
 
-from django.utils.translation import gettext_lazy as _
 from django.db.models import Q
+from django.utils.translation import gettext_lazy as _
 
 from bot.models import Bot, BotCollection, BotSubscribe, HotBot
 from bot.rag_service import Bot as RagBot
 from bot.serializers import (BotDetailSerializer, BotListAllSerializer, HotBotListSerializer, BotListChatMenuSerializer)
 from collection.models import Collection, CollectionDocument
-from collection.serializers import CollectionCreateSerializer
 from core.utils.exceptions import InternalServerError, ValidationError
 from document.models import Document
 from document.serializers import DocumentApaListSerializer

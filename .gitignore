@@ -57,3 +57,6 @@ deploy/nginx/certs/*
 
 doc/*
 run.sh
+
+celery-*.log
+celery-*.pid

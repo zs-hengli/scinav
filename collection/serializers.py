@@ -36,9 +36,32 @@ class CollectionCreateSerializer(BaseModelSerializer):
     name = serializers.CharField(required=False, source='title')
     document_ids = serializers.ListField(required=False, child=serializers.CharField(min_length=32, max_length=36))
     search_content = serializers.CharField(required=False)
-    user_id = serializers.CharField(required=True, min_length=32, max_length=36)
+    user_id = serializers.CharField(required=True, max_length=36)
     type = serializers.ChoiceField(choices=Collection.TypeChoices.choices, default=Collection.TypeChoices.PERSONAL)
     document_titles = serializers.ListField(required=False, child=serializers.CharField(max_length=255))
+    is_all = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        if not attrs.get('title') and not attrs.get('document_ids') and not attrs.get('search_content'):
+            raise serializers.ValidationError(_('Please provide a name or document_ids or search_content'))
+        if attrs.get('is_all') and not attrs.get('search_content'):
+            raise serializers.ValidationError(_('Please provide a search_content'))
+        if attrs.get('title') and len(attrs['title']) > 255:
+            attrs['title'] = attrs['title'][:255]
+        elif attrs.get('document_ids'):
+            titles = Document.objects.filter(id__in=attrs['document_ids']).values_list("title", flat=True).all()
+            attrs['document_titles'] = list(titles)
+
+        return attrs
+
+    class Meta:
+        model = Collection
+        fields = '__all__'
+
+
+class CollectionCreateByDocLibSerializer(BaseModelSerializer):
+    name = serializers.CharField(required=False, source='title')
+    document_ids = serializers.ListField(required=False, child=serializers.CharField(min_length=32, max_length=36))
     is_all = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs):
@@ -151,7 +174,7 @@ class CollectionListSerializer(serializers.ModelSerializer):
 
 
 class CollectionDeleteQuerySerializer(serializers.Serializer):
-    user_id = serializers.CharField(required=True, max_length=36, min_length=32)
+    user_id = serializers.CharField(required=True, max_length=36)
     ids = serializers.ListField(
         required=False, child=serializers.CharField(required=True, max_length=36, min_length=36)
     )
@@ -166,7 +189,7 @@ class CollectionDeleteQuerySerializer(serializers.Serializer):
 
 
 class CollectionDocUpdateSerializer(serializers.Serializer):
-    user_id = serializers.CharField(required=True, max_length=36, min_length=32)
+    user_id = serializers.CharField(required=True, max_length=36)
     collection_id = serializers.CharField(required=True, max_length=36, min_length=36)
     document_ids = serializers.ListField(
         required=False, child=serializers.CharField(required=True, max_length=36, min_length=36)
@@ -259,10 +282,60 @@ class CollectionDocUpdateSerializer(serializers.Serializer):
 
 
 class CollectionDocumentListQuerySerializer(serializers.Serializer):
-    user_id = serializers.CharField(required=True, max_length=36, min_length=32)
+    user_id = serializers.CharField(required=True, max_length=36)
     collection_ids = serializers.ListField(
         required=False, child=serializers.CharField(max_length=36, min_length=1)
     )
-    list_type = serializers.ChoiceField(required=False, choices=['all', 'document_library', 'public'], default='all')
+    list_type = serializers.ChoiceField(
+        required=False,
+        choices=['all', 'all_documents', 'arxiv', 's2', 'personal', 'document_library', 'public'],
+        default='all'
+    )
     page_size = serializers.IntegerField(required=False, default=10)
     page_num = serializers.IntegerField(required=False, default=1)
+
+
+class CollectionDocumentListSerializer(serializers.Serializer):
+    @staticmethod
+    def get_collection_documents(user_id, collection_ids, list_type):
+        if list_type in ['all', 'all_documents']:
+            query_set = CollectionDocument.objects.filter(
+                collection_id__in=collection_ids, del_flag=False).values('document_id') \
+                .order_by('document_id').distinct()
+        elif list_type == 'publish':
+            query_set = CollectionDocument.objects.filter(
+                collection_id__in=collection_ids, del_flag=False, document__collection_type=Document.TypeChoices.PUBLIC
+            ).values('document_id').order_by('document_id').distinct()
+        elif list_type == 'arxiv':
+            doc_libs = DocumentLibrary.objects.filter(user_id=user_id, del_flag=False,).values('document_id')
+            document_ids = [d['document_id'] for d in doc_libs]
+            filter_query = \
+                ~Q(document_id__in=document_ids) \
+                & Q(collection_id__in=collection_ids, del_flag=False, document__collection_id='arxiv')
+            query_set = CollectionDocument.objects.filter(
+                filter_query).values('document_id').order_by('document_id').distinct()
+        elif list_type == 's2':
+            doc_libs = DocumentLibrary.objects.filter(user_id=user_id, del_flag=False,).values('document_id')
+            document_ids = [d['document_id'] for d in doc_libs]
+            filter_query = ~Q(document_id__in=document_ids) \
+                           & Q(collection_id__in=collection_ids, del_flag=False, document__collection_id='s2')
+            query_set = CollectionDocument.objects.filter(
+                filter_query).values('document_id').order_by('document_id').distinct()
+        else:  # document_library personal
+            # todo 订阅个人文件库处理
+            doc_libs = DocumentLibrary.objects.filter(user_id=user_id, del_flag=False,).values('document_id')
+            document_ids = [d['document_id'] for d in doc_libs]
+            filter_query = Q(document_id__in=document_ids) & Q(collection_id__in=collection_ids, del_flag=False)
+            query_set = CollectionDocument.objects.filter(
+                filter_query).values('document_id').order_by('document_id').distinct()
+        return query_set
+
+
+class CollectionCheckQuerySerializer(serializers.Serializer):
+    ids = serializers.ListField(required=False, child=serializers.CharField(), default=None)
+    is_all = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        if not attrs.get('is_all') and not attrs.get('ids'):
+            raise serializers.ValidationError(_('ids or is_all must be set'))
+        return attrs

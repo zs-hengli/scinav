@@ -15,7 +15,7 @@ class BaseModelSerializer(serializers.ModelSerializer):
     
 
 class ConversationCreateSerializer(serializers.Serializer):
-    user_id = serializers.CharField(required=True, min_length=32, max_length=36)
+    user_id = serializers.CharField(required=True, max_length=36)
     documents = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
     collections = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
     bot_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, min_length=32, max_length=36)
@@ -79,7 +79,7 @@ class ConversationCreateSerializer(serializers.Serializer):
 
 
 class ConversationUpdateSerializer(serializers.Serializer):
-    user_id = serializers.CharField(required=True, min_length=32, max_length=36)
+    user_id = serializers.CharField(required=True, max_length=36)
     title = serializers.CharField(required=True, min_length=1, max_length=128)
 
     def validate(self, attrs):
@@ -111,7 +111,7 @@ class ConversationListSerializer(BaseModelSerializer):
 
 
 class ChatQuerySerializer(serializers.Serializer):
-    user_id = serializers.CharField(required=True, min_length=32, max_length=36)
+    user_id = serializers.CharField(required=True, max_length=36)
     conversation_id = serializers.CharField(required=False, min_length=32, max_length=36)
     question_id = serializers.CharField(required=False, min_length=32, max_length=36)
     content = serializers.CharField(required=True, min_length=1, max_length=1024)
@@ -163,7 +163,7 @@ class QuestionConvDetailSerializer(serializers.ModelSerializer):
 
 
 class QuestionAnswerSerializer(serializers.Serializer):
-    user_id = serializers.CharField(required=True, min_length=32, max_length=36)
+    user_id = serializers.CharField(required=True, max_length=36)
     question_id = serializers.CharField(required=True, min_length=32, max_length=36)
     is_like = serializers.BooleanField(required=True)
 

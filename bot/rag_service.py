@@ -19,7 +19,7 @@ RAG_API_KEY = settings.RAG_API_KEY
 def rag_requests(url, json=None, method='POST', headers=None, timeout=60, stream=None):
     if headers is None:
         headers = {}
-    request_id = settings.REQUEST_ID[:24] + str(uuid.uuid4())[24:]
+    request_id = settings.REQUEST_ID[:24] + str(uuid.uuid4())[24:] if settings.REQUEST_ID else str(uuid.uuid4())
     logger.info(f'url: {url}, request_id: {request_id}, json: {json}')
     headers.update({'X-API-KEY': RAG_API_KEY, 'X-REQUEST-ID': request_id})
     try:

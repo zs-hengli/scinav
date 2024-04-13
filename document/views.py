@@ -13,9 +13,9 @@ from document.models import Document, DocumentLibrary
 from document.serializers import DocumentRagGetSerializer, DocumentUrlSerializer, \
     DocumentDetailSerializer, GenPresignedUrlQuerySerializer, DocumentUploadQuerySerializer, \
     DocumentLibraryListQuerySerializer, DocumentRagUpdateSerializer, DocLibUpdateNameQuerySerializer, \
-    DocLibAddQuerySerializer
+    DocLibAddQuerySerializer, DocLibDeleteQuerySerializer, DocLibCheckQuerySerializer
 from document.service import search, documents_update_from_rag, presigned_url, document_personal_upload, \
-    get_document_library_list, document_library_add
+    get_document_library_list, document_library_add, document_library_delete, doc_lib_batch_operation_check
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ class DocumentsLibrary(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg='invalid post data')
         vd = serial.validated_data
-        data = get_document_library_list(user_id, vd['page_size'], vd['page_num'])
+        data = get_document_library_list(user_id, vd['list_type'], vd['page_size'], vd['page_num'])
         return my_json_response(data)
 
     @staticmethod
@@ -99,7 +99,9 @@ class DocumentsLibrary(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg='invalid post data')
         vd = serial.validated_data
-        document_library_add(request.user.id, vd['document_ids'], vd['collection_id'], vd['bot_id'])
+        document_library_add(
+            request.user.id, vd['document_ids'], vd['collection_id'], vd['bot_id'], vd['add_type'], vd['search_content']
+        )
         return my_json_response({})
 
     @staticmethod
@@ -117,15 +119,30 @@ class DocumentsLibrary(APIView):
         return my_json_response({})
 
     @staticmethod
-    def delete(request, document_library_id, *args, **kwargs):
-        doclib = DocumentLibrary.objects.filter(id=document_library_id, user_id=request.user.id).first()
-        if not doclib:
-            return my_json_response(code=100002, msg='document library not found')
-        if doclib.document_id and doclib.document.type == Document.TypeChoices.PERSONAL:
-            doclib.document.del_flag = True
-            doclib.document.save()
-        DocumentLibrary.objects.filter(id=document_library_id, user_id=request.user.id).update(del_flag=True)
+    def delete(request, *args, **kwargs):
+        user_id = request.user.id
+        serial = DocLibDeleteQuerySerializer(data=request.data)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg='invalid post data')
+        vd = serial.validated_data
+        document_library_delete(user_id, vd.get('ids'), vd.get('is_all'))
         return my_json_response({})
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['POST']), name='dispatch')
+class DocumentsLibraryOperationCheck(APIView):
+    @staticmethod
+    def post(request, *args, **kwargs):
+        query = request.data
+        serial = DocLibCheckQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg='invalid post data')
+        code, data = doc_lib_batch_operation_check(request.user.id, serial.validated_data)
+        if code == 0:
+            return my_json_response({'document_ids': data})
+        else:
+            return my_json_response(code=code, msg=data, data={})
 
 
 @method_decorator([extract_json], name='dispatch')
@@ -148,7 +165,6 @@ class DocumentsPersonal(APIView):
 
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['GET']), name='dispatch')
-# @permission_classes([AllowAny])
 class DocumentsUrl(APIView):
     @staticmethod
     def get(request, document_id, *args, **kwargs):

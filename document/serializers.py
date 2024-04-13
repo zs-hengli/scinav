@@ -2,7 +2,9 @@ import logging
 import os
 
 from django.conf import settings
+from django.db import models
 from rest_framework import serializers
+from django.utils.translation import gettext_lazy as _
 
 from collection.models import Collection
 from document.models import Document
@@ -30,6 +32,31 @@ class DocumentApaListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Document
         fields = ['id', 'doc_apa']
+
+
+class CollectionDocumentListCollectionSerializer(serializers.ModelSerializer):
+    doc_apa = serializers.SerializerMethodField()
+    type = serializers.SerializerMethodField()
+
+    @staticmethod
+    def get_doc_apa(obj: Document):
+        # 作者1,作者2;标题.期刊 时间
+        authors = ','.join(obj.authors)
+        title = obj.title
+        year = obj.year
+        source = obj.journal if obj.journal else obj.conference if obj.conference else ''
+        return f'{authors};{title}.{source} {year}'  # noqa
+
+    @staticmethod
+    def get_type(obj: Document):
+        if obj.collection_type == Document.TypeChoices.PUBLIC:
+            return obj.collection_id
+        else:
+            return obj.collection_type
+
+    class Meta:
+        model = Document
+        fields = ['id', 'doc_apa', 'title', 'type']
 
 
 class DocumentUpdateFilenameQuerySerializer(BaseModelSerializer):
@@ -133,6 +160,12 @@ class GenPresignedUrlQuerySerializer(serializers.Serializer):
 
 
 class DocumentLibraryListQuerySerializer(serializers.Serializer):
+    class ListTypeChoices(models.TextChoices):
+        ALL = 'all', _('all')
+        IN_PROGRESS = 'in_progress', _('in_progress')
+        COMPLETE = 'complete', _('complete')
+
+    list_type = serializers.ChoiceField(required=False, choices=ListTypeChoices, default=ListTypeChoices.ALL)
     page_size = serializers.IntegerField(required=True)
     page_num = serializers.IntegerField(required=True)
 
@@ -141,8 +174,10 @@ class DocumentLibraryPersonalSerializer(serializers.Serializer):
     id = serializers.CharField(required=True, allow_null=True)
     filename = serializers.CharField(required=True)
     document_title = serializers.CharField(required=True)
+    document_id = serializers.CharField(required=True, allow_null=True)
     record_time = serializers.DateTimeField(required=True, format="%Y-%m-%d %H:%M:%S")
     type = serializers.CharField(required=False, default=Collection.TypeChoices.PUBLIC)
+    reference_type = serializers.CharField(required=False, allow_null=True, default=None)
     status = serializers.CharField(required=False, default='-')
 
 
@@ -155,12 +190,51 @@ class DocLibUpdateNameQuerySerializer(serializers.Serializer):
 
 
 class DocLibAddQuerySerializer(serializers.Serializer):
+    class AddTypeChoices(models.TextChoices):
+        COLLECTION_ARXIV = 'collection_arxiv'
+        COLLECTION_S2 = 'collection_s2'
+        COLLECTION_DOCUMENT_LIBRARY = 'collection_document_library'
+        COLLECTION_ALL = 'collection_all'
+        DOCUMENT_SEARCH = 'document_search'
+
     document_ids = serializers.ListField(
         required=False, child=serializers.CharField(allow_null=False, allow_blank=False), default=None)
     collection_id = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
     bot_id = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
+    add_type = serializers.ChoiceField(required=False, choices=AddTypeChoices, default=None)
+    search_content = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
 
     def validate(self, attrs):
         if not attrs.get('document_ids') and not attrs.get('collection_id') and not attrs.get('bot_id'):
             raise serializers.ValidationError('document_ids or collection_id or bot_id is required')
+        if attrs.get('collection_id') and attrs.get('bot_id'):
+            raise serializers.ValidationError('collection_id and bot_id cannot be set at the same time')
+        if attrs.get('add_type') and not attrs.get('collection_id'):
+            raise serializers.ValidationError('collection_id is required')
+        return attrs
+
+
+class DocLibDeleteQuerySerializer(serializers.Serializer):
+    ids = serializers.ListField(
+        required=False, allow_null=True, child=serializers.CharField(allow_null=False, allow_blank=False))
+    is_all = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        if attrs.get('ids'):
+            attrs['ids'] = [i for i in attrs['ids'] if i]
+        if not attrs.get('ids') and not attrs.get('is_all'):
+            raise serializers.ValidationError('ids or is_all is required')
+        return attrs
+
+
+class DocLibCheckQuerySerializer(serializers.Serializer):
+    ids = serializers.ListField(
+        required=False, allow_null=True, child=serializers.CharField(allow_null=True, allow_blank=False))
+    is_all = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        if attrs.get('ids'):
+            attrs['ids'] = [i for i in attrs['ids'] if i]
+        if not attrs.get('ids') and not attrs.get('is_all'):
+            raise serializers.ValidationError('ids or is_all is required')
         return attrs

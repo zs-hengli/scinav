@@ -41,7 +41,6 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django_celery_results',
     'request_id',
     'corsheaders',
     'user',
@@ -49,6 +48,8 @@ INSTALLED_APPS = [
     'chat',
     'collection',
     'document',
+    'django_celery_results',
+    'django_celery_beat',
 ]
 
 MIDDLEWARE = [
@@ -251,3 +252,9 @@ RAG_API_KEY = os.environ.get('RAG_API_KEY', 'api_key')
 
 # object path url host
 OBJECT_PATH_URL_HOST = os.environ.get('OBJECT_PATH_URL_HOST', 'object_path_url_host')
+
+# authing
+AUTHING_APP_ID = os.environ.get('AUTHING_APP_ID', 'authing_app_id')
+AUTHING_APP_SECRET = os.environ.get('AUTHING_APP_SECRET', 'authing_app_secret')
+AUTHING_APP_HOST = os.environ.get('AUTHING_APP_HOST', 'authing_app_host')
+AUTHING_APP_REDIRECT_URI = os.environ.get('AUTHING_APP_REDIRECT_URI', 'authing_app_redirect_uri')

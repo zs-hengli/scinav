@@ -14,11 +14,15 @@ from bot.models import BotSubscribe, Bot, BotCollection
 from bot.rag_service import Document as RagDocument
 from bot.rag_service import Document as Rag_Document
 from collection.models import Collection, CollectionDocument
+from collection.serializers import CollectionDocumentListSerializer
 from core.utils.common import str_hash
 from core.utils.exceptions import ValidationError
+from document.base_service import document_update_from_rag_ret
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentRagGetSerializer, DocumentRagUpdateSerializer, \
-    DocumentLibrarySubscribeSerializer, DocumentLibraryPersonalSerializer
+    DocumentLibrarySubscribeSerializer, DocumentLibraryPersonalSerializer, DocLibAddQuerySerializer, \
+    DocumentLibraryListQuerySerializer
+from document.tasks import async_document_library_task
 
 logger = logging.getLogger(__name__)
 
@@ -173,34 +177,52 @@ def get_url_by_object_path(object_path):
     return f'{settings.OBJECT_PATH_URL_HOST}/{object_path}'
 
 
-def get_document_library_list(user_id, page_size=10, page_num=1):
+def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
     # {'filename': '', 'document_title': '', 'status': '-', 'record_time': '-'}
     start_num = page_size * (page_num - 1)
     list_data = []
     public_total, subscribe_total, sub_add_list, my_total = 0, 0, [], 0
-    # public
-    arxiv_coll = Collection.objects.filter(id='arxiv', del_flag=False).first()
-    if arxiv_coll:
-        public_total = 1
-        if start_num == 0:
-            list_data.append({
-                'id': None,
-                'filename': f"{_('公共库')}: {arxiv_coll.title}",
-                'document_title': '-',
-                'status': '-',
-                'record_time': '-',
-                'type': 'public',
-            })
+    if list_type == DocumentLibraryListQuerySerializer.ListTypeChoices.ALL:
+        # public
+        public_colles = Collection.objects.filter(id__in=['arxiv'], del_flag=False).all()
+        if public_colles:
+            public_total = len(public_colles)
+            if start_num == 0:
+                for public_colle in public_colles:
+                    list_data.append({
+                        'id': None,
+                        'collection_id': public_colle.id,
+                        'filename': f"{_('公共库')}: {public_colle.title}",
+                        'document_title': '-',
+                        'document_id': None,
+                        'status': '-',
+                        'record_time': '-',
+                        'type': 'public',
+                    })
 
-    # subscribe
-    sub_serial = DocumentLibrarySubscribeSerializer(data=_bot_subscribe_document_library_list(user_id), many=True)
-    sub_serial.is_valid()
-    subscribe_total = len(sub_serial.data)
-    sub_add_list = list(sub_serial.data)[start_num:start_num + page_size - public_total]
-    list_data += sub_add_list
+        # subscribe
+        sub_serial = DocumentLibrarySubscribeSerializer(data=_bot_subscribe_document_library_list(user_id), many=True)
+        sub_serial.is_valid()
+        subscribe_total = len(sub_serial.data)
+        sub_add_list = list(sub_serial.data)[start_num:start_num + page_size - public_total]
+        list_data += sub_add_list
 
     # personal
-    query_set = DocumentLibrary.objects.filter(user_id=user_id, del_flag=False).order_by('-updated_at')
+    if list_type == DocumentLibraryListQuerySerializer.ListTypeChoices.ALL:
+        query_set = DocumentLibrary.objects.filter(user_id=user_id, del_flag=False).order_by('-updated_at')
+    elif list_type == DocumentLibraryListQuerySerializer.ListTypeChoices.IN_PROGRESS:
+        query_set = DocumentLibrary.objects.filter(
+            user_id=user_id, del_flag=False,
+            task_status__in=[DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
+                             DocumentLibrary.TaskStatusChoices.PENDING,
+                             DocumentLibrary.TaskStatusChoices.ERROR,
+                             ]
+        ).order_by('-updated_at')
+    else:
+        query_set = DocumentLibrary.objects.filter(
+            user_id=user_id, del_flag=False,
+            task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
+        ).order_by('-updated_at')
     my_total = query_set.count()
     if len(list_data) < page_size:
         my_start_num = 0 if list_data else max(start_num - public_total - subscribe_total, 0)
@@ -209,11 +231,24 @@ def get_document_library_list(user_id, page_size=10, page_num=1):
         my_list_data = []
         for doc_lib in query_set:
             filename = doc_lib.filename if doc_lib.filename else '-'
+            ref_type, document = None, None
+            if doc_lib.document_id:
+                document = doc_lib.document
+                if document.ref_doc_id:
+                    ref_type = 'reference'
+                    ref_document = Document.objects.filter(
+                        doc_id=document.ref_doc_id, collection_id=document.ref_collection_id,
+                        full_text_accessible=True, del_flag=False
+                    ).first()
+                    if ref_document:
+                        ref_type = 'reference&full_text_accessible'
             my_list_data.append({
                 'id': str(doc_lib.id),
                 'filename': doc_lib.filename if doc_lib.filename else '-',
                 'document_title': doc_lib.document.title if doc_lib.document else filename,
+                'document_id': str(doc_lib.document_id) if doc_lib.document_id else None,
                 'status': doc_lib.task_status,
+                'reference_type': ref_type,
                 'record_time': doc_lib.created_at,
                 'type': 'personal',
             })
@@ -228,7 +263,7 @@ def get_document_library_list(user_id, page_size=10, page_num=1):
 
 
 def _bot_subscribe_document_library_list(user_id):
-    bot_sub = BotSubscribe.objects.filter(bot__user_id=user_id, del_flag=False).all()
+    bot_sub = BotSubscribe.objects.filter(user_id=user_id, del_flag=False).all()
     bots = Bot.objects.filter(id__in=[bc.bot_id for bc in bot_sub])
     list_data = []
     for bot in bots:
@@ -236,6 +271,7 @@ def _bot_subscribe_document_library_list(user_id):
             'id': None,
             'filename': f"{_('专题名称')}: {bot.title}",
             'document_title': '-',
+            'document_id': None,
             'status': '-',
             'record_time': bot.created_at,
             'type': 'subscribe',
@@ -246,22 +282,9 @@ def _bot_subscribe_document_library_list(user_id):
 
 def document_update_from_rag(validated_data):
     doc_info = RagDocument.get(validated_data)
-    document = _document_update_from_rag_ret(doc_info)
+    document = document_update_from_rag_ret(doc_info)
     data = DocumentRagUpdateSerializer(document).data
     return data
-
-
-def _document_update_from_rag_ret(rag_ret):
-    serial = DocumentRagGetSerializer(data=rag_ret)
-    if not serial.is_valid():
-        raise Exception(serial.errors)
-    document, _ = Document.objects.update_or_create(
-        serial.validated_data,
-        doc_id=serial.validated_data['doc_id'],
-        collection_type=serial.validated_data['collection_type'],
-        collection_id=serial.validated_data['collection_id']
-    )
-    return document
 
 
 def documents_update_from_rag(begin_id, end_id):
@@ -355,25 +378,91 @@ def document_personal_upload(validated_data):
     return vd
 
 
-def document_library_add(user_id, document_ids, collection_id, bot_id):
-    # get document_ids
-    collection_ids = []
-    if bot_id:
-        if Bot.objects.filter(id=bot_id, user_id=user_id, del_flag=False).exists():
-            bot_coll = BotCollection.objects.filter(bot_id=bot_id, del_flag=False).values('collection_id').all()
-            collection_ids = [c['collection_id'] for c in bot_coll]
-    if collection_id:
-        collection_ids.append(collection_id)
-    collections = Collection.objects.filter(
-        id__in=collection_ids, del_flag=False, type=Collection.TypeChoices.PERSONAL).values('id').all()
-    collection_ids = [c['id'] for c in collections]
-    coll_document = CollectionDocument.objects.filter(
-        collection__id__in=collection_ids, del_flag=False).values('document_id').all()
+def document_library_add(user_id, document_ids, collection_id, bot_id, add_type, search_content):
+    """
+    添加个人库：
+     1. 搜索结果添加
+     2. 收藏夹添加  all arxiv 全量库 个人库
+     3. 文献列表添加
+    """
+    all_document_ids = []
+    if add_type == DocLibAddQuerySerializer.AddTypeChoices.DOCUMENT_SEARCH:
+        search_result = search_result_from_cache(search_content, 200, 1)
+        if search_result:
+            all_document_ids = [d['id'] for d in search_result['list']]
+    elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_ARXIV:
+        coll_documents = CollectionDocumentListSerializer.get_collection_documents(user_id, [collection_id], 'arxiv')
+        all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
+    elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_S2:
+        coll_documents = CollectionDocumentListSerializer.get_collection_documents(user_id, [collection_id], 's2')
+        all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
+    elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_DOCUMENT_LIBRARY:
+        coll_documents = CollectionDocumentListSerializer.get_collection_documents(
+            user_id, [collection_id], 'document_library')
+        all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
+    elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_ALL:
+        coll_documents = CollectionDocumentListSerializer.get_collection_documents(user_id, [collection_id], 'all')
+        all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
+    else:
+        # get document_ids
+        collection_ids = []
+        if bot_id:
+            if Bot.objects.filter(id=bot_id, user_id=user_id, del_flag=False).exists():
+                bot_coll = BotCollection.objects.filter(bot_id=bot_id, del_flag=False).values('collection_id').all()
+                collection_ids = [c['collection_id'] for c in bot_coll]
+        if collection_id:
+            collection_ids.append(collection_id)
+        collections = Collection.objects.filter(
+            id__in=collection_ids, del_flag=False, type=Collection.TypeChoices.PERSONAL).values('id').all()
+        collection_ids = [c['id'] for c in collections]
+        coll_document = CollectionDocument.objects.filter(
+            collection__id__in=collection_ids, del_flag=False).values('document_id').all()
+        all_document_ids = [d['document_id'] for d in coll_document]
     if not document_ids:
-        document_ids = []
-    document_ids += [c['document_id'] for c in coll_document]
+        document_ids = all_document_ids
+    else:
+        document_ids = list(set(all_document_ids) - set(document_ids))
     update_document_lib(user_id, document_ids)
+    async_document_library_task.apply_async()
     return True
+
+
+def doc_lib_batch_operation_check(user_id, validated_data):
+    ids = validated_data.get('ids')
+    is_all = validated_data.get('is_all')
+    if is_all:
+        filter_query = Q(user_id=user_id, del_flag=False)
+        if ids:
+            filter_query &= ~Q(id__in=ids,)
+        doc_libs = DocumentLibrary.objects.filter(filter_query)
+    else:
+        doc_libs = DocumentLibrary.objects.filter(user_id=user_id, del_flag=False, id__in=ids)
+    cannot_status = [
+        DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
+        DocumentLibrary.TaskStatusChoices.ERROR,
+        DocumentLibrary.TaskStatusChoices.PENDING,
+    ]
+    cannot_filter_query = Q(task_status__in=cannot_status) | Q(document_id__isnull=True)
+    if doc_libs.filter(cannot_filter_query).exists():
+        return 130003, '您选择的文件当前尚未收录完成，无法执行该操作，请您耐心等待或修改选择对象。'
+    document_ids = [doclib.document_id for doclib in doc_libs.all() if doclib.document_id]
+    return 0, document_ids
+
+
+def document_library_delete(user_id, ids, is_all):
+    if is_all:
+        filter_query = Q(user_id=user_id, del_flag=False)
+        if ids:
+            filter_query &= ~Q(id__in=ids)
+    else:
+        filter_query = Q(user_id=user_id, del_flag=False, id__in=ids)
+    doc_libs = DocumentLibrary.objects.filter(filter_query)
+    if doc_libs.count():
+        document_ids = [doclib.document_id for doclib in doc_libs.all() if doclib.document_id]
+        if document_ids:
+            Document.objects.filter(id__in=document_ids, user_id=user_id).update(del_flag=True)
+    effected_num = doc_libs.update(del_flag=True)
+    return effected_num
 
 
 def update_document_lib(user_id, document_ids):
@@ -385,39 +474,3 @@ def update_document_lib(user_id, document_ids):
         DocumentLibrary.objects.update_or_create(data, user_id=user_id, document_id=doc_id)
     return True
 
-
-def async_document_library_task():
-    # no task_id
-    query_filter = Q(task_id__isnull=True) | Q(task_id='')
-    if instances := DocumentLibrary.objects.filter(query_filter).all():
-        for i in instances:
-            if not i.object_path:
-                rag_ret = RagDocument.ingest_public_paper(i.user_id, i.document.collection_id, i.document.doc_id)
-            else:
-                rag_ret = RagDocument.ingest_personal_paper(i.user_id, i.object_path)
-            i.task_id = rag_ret['task_id']
-            i.task_status = (
-                rag_ret['task_status']
-                if rag_ret['task_status'] != DocumentLibrary.TaskStatusChoices.COMPLETED
-                else DocumentLibrary.TaskStatusChoices.IN_PROGRESS
-            )
-            if i.task_status == DocumentLibrary.TaskStatusChoices.ERROR:
-                i.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_code']}
-            i.save()
-    # in progress
-    if instances := DocumentLibrary.objects.filter(task_status=DocumentLibrary.TaskStatusChoices.IN_PROGRESS).all():
-        for i in instances:
-            rag_ret = RagDocument.get_ingest_task(i.task_id)
-            task_status = rag_ret['task_status']
-            logger.info(f'async_document_library_task {i.task_id}, {task_status}')
-            if task_status == DocumentLibrary.TaskStatusChoices.IN_PROGRESS:
-                continue
-            elif task_status == DocumentLibrary.TaskStatusChoices.ERROR:
-                i.task_status = task_status
-                i.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_code']}
-            else:  # COMPLETED
-                i.task_status = task_status
-                document = _document_update_from_rag_ret(rag_ret['paper'])
-                i.document = document
-            i.save()
-    return True

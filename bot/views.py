@@ -30,7 +30,6 @@ class Index(APIView):
 
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['GET']), name='dispatch')
-@permission_classes([AllowAny])
 class HotBots(APIView):
 
     @staticmethod
@@ -41,7 +40,6 @@ class HotBots(APIView):
 
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['GET', 'POST', 'PUT', 'DELETE']), name='dispatch')
-# @permission_classes([AllowAny])
 class Bots(APIView):
 
     @staticmethod
@@ -94,7 +92,6 @@ class Bots(APIView):
 
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['POST']), name='dispatch')
-# @permission_classes([AllowAny])
 class BotSubscribe(APIView):
 
     @staticmethod
@@ -114,7 +111,6 @@ class BotSubscribe(APIView):
 
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['GET']), name='dispatch')
-# @permission_classes([AllowAny])
 class BotDocuments(APIView):
 
     @staticmethod
@@ -130,7 +126,6 @@ class BotDocuments(APIView):
 
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['GET']), name='dispatch')
-# @permission_classes([AllowAny])
 class BotPublish(APIView):
 
     @staticmethod

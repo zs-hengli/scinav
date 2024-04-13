@@ -15,7 +15,7 @@ class BaseModelSerializer(serializers.ModelSerializer):
 
 
 class BotCreateSerializer(serializers.Serializer):
-    user_id = serializers.CharField(required=True, min_length=32, max_length=36)
+    user_id = serializers.CharField(required=True, max_length=36)
     author = serializers.CharField(required=True)
     title = serializers.CharField(required=True, allow_blank=False)
     description = serializers.CharField(allow_null=True, allow_blank=True)
@@ -100,7 +100,7 @@ class BotListQuerySerializer(serializers.Serializer):
         SUBSCRIBE = 'subscribe', _('subscribe'),
         CHAT_MENU = 'chat_menu', _('chat_menu')
 
-    user_id = serializers.CharField(required=True, min_length=32, max_length=36)
+    user_id = serializers.CharField(required=True, max_length=36)
     list_type = serializers.ChoiceField(required=False, choices=ListTypeChoices, default=ListTypeChoices.ALL)
     page_num = serializers.IntegerField(required=False, default=1)
     page_size = serializers.IntegerField(required=False, default=10)
