@@ -230,7 +230,8 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
         query_set = query_set[my_start_num:my_end_num]
         my_list_data = []
         for doc_lib in query_set:
-            filename = doc_lib.filename if doc_lib.filename else '-'
+            document_title = doc_lib.document.title if doc_lib.document else '-'
+            filename = doc_lib.filename if doc_lib.filename else document_title
             ref_type, document = None, None
             if doc_lib.document_id:
                 document = doc_lib.document
@@ -244,8 +245,8 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
                         ref_type = 'reference&full_text_accessible'
             my_list_data.append({
                 'id': str(doc_lib.id),
-                'filename': doc_lib.filename if doc_lib.filename else '-',
-                'document_title': doc_lib.document.title if doc_lib.document else filename,
+                'filename': filename,
+                'document_title': document_title,
                 'document_id': str(doc_lib.document_id) if doc_lib.document_id else None,
                 'status': doc_lib.task_status,
                 'reference_type': ref_type,
@@ -385,6 +386,7 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
      2. 收藏夹添加  all arxiv 全量库 个人库
      3. 文献列表添加
     """
+    is_all = True
     all_document_ids = []
     if add_type == DocLibAddQuerySerializer.AddTypeChoices.DOCUMENT_SEARCH:
         search_result = search_result_from_cache(search_content, 200, 1)
@@ -405,6 +407,7 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     else:
         # get document_ids
+        is_all = False
         collection_ids = []
         if bot_id:
             if Bot.objects.filter(id=bot_id, user_id=user_id, del_flag=False).exists():
@@ -421,7 +424,8 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
     if not document_ids:
         document_ids = all_document_ids
     else:
-        document_ids = list(set(all_document_ids) - set(document_ids))
+        document_ids = list(set(all_document_ids) - set(document_ids)) \
+            if is_all else list(set(document_ids + all_document_ids))
     update_document_lib(user_id, document_ids)
     async_document_library_task.apply_async()
     return True

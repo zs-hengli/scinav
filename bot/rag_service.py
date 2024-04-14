@@ -162,7 +162,7 @@ class Document:
 
     @staticmethod
     def get_ingest_task(task_id):
-        url = RAG_HOST + f'/api/v1/ingest-tasks/{task_id}'
+        url = RAG_HOST + f'/api/v1/papers/ingest-task/{task_id}'
         resp = rag_requests(url, method='GET')
         logger.info(f'url: {url}, response: {resp.text}')
         resp = resp.json()
