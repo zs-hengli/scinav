@@ -114,7 +114,7 @@ class DocumentRagGetSerializer(serializers.ModelSerializer):
     citations = serializers.JSONField(required=True, allow_null=True)
     references = serializers.JSONField(required=True, allow_null=True)
     state = serializers.ChoiceField(
-        required=False, choices=Document.StateChoices, default=Document.StateChoices.COMPLETE)
+        required=False, choices=Document.StateChoices, default=Document.StateChoices.COMPLETED)
     object_path = serializers.CharField(required=True, allow_null=True, allow_blank=True)
     source_url = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     checksum = serializers.CharField(required=True, allow_null=True, allow_blank=True)
@@ -163,7 +163,7 @@ class DocumentLibraryListQuerySerializer(serializers.Serializer):
     class ListTypeChoices(models.TextChoices):
         ALL = 'all', _('all')
         IN_PROGRESS = 'in_progress', _('in_progress')
-        COMPLETE = 'complete', _('complete')
+        COMPLETED = 'completed', _('completed')
 
     list_type = serializers.ChoiceField(required=False, choices=ListTypeChoices, default=ListTypeChoices.ALL)
     page_size = serializers.IntegerField(required=True)

@@ -16,7 +16,7 @@ class Document(models.Model):
         # UPLOADING = 'uploading', _('uploading')
         UNDONE = 'undone', _('undone')
         PARSING = 'in_progress', _('in_progress')
-        COMPLETE = 'complete', _('complete')
+        COMPLETED = 'completed', _('completed')
         FAILED = 'error', _('error')
 
     id = models.CharField(max_length=36, primary_key=True, default=uuid.uuid4)
@@ -47,7 +47,7 @@ class Document(models.Model):
     citations = models.JSONField(null=True)
     references = models.JSONField(null=True)
     state = models.CharField(
-        null=True, blank=True, max_length=32, default=StateChoices.COMPLETE, db_default=StateChoices.COMPLETE)
+        null=True, blank=True, max_length=32, default=StateChoices.COMPLETED, db_default=StateChoices.COMPLETED)
     object_path = models.CharField(null=True, blank=True, max_length=256)
     source_url = models.CharField(null=True, blank=True, max_length=256)
     checksum = models.CharField(null=True, blank=True, db_index=True, max_length=64)

@@ -42,7 +42,7 @@ class Migration(migrations.Migration):
                 ('reference_count', models.IntegerField(null=True)),
                 ('citations', models.JSONField(null=True)),
                 ('state', models.CharField(
-                    blank=True, db_default='complete', default='complete', max_length=32, null=True)),
+                    blank=True, db_default='completed', default='completed', max_length=32, null=True)),
                 ('object_path', models.CharField(blank=True, max_length=256, null=True)),
                 ('source_url', models.CharField(blank=True, max_length=256, null=True)),
                 ('checksum', models.CharField(blank=True, db_index=True, max_length=64, null=True)),

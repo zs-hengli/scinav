@@ -111,7 +111,8 @@ def search(user_id, content, page_size=10, page_num=1, topn=100):
             'checksum': doc['checksum'],
             'ref_collection_id': doc['ref_collection_id'],  # todo 分享只返回公共文章列表，如果是个人取ref_doc_id
             'ref_doc_id': doc['ref_doc_id'],
-            'state': Document.StateChoices.COMPLETE if doc['collection_id'] == 'arxiv' else Document.StateChoices.UNDONE
+            'state': (Document.StateChoices.COMPLETED
+                      if doc['collection_id'] == 'arxiv' else Document.StateChoices.UNDONE)
         }
         create_data = copy.deepcopy(data)
         del_empty_fields = ['object_path', 'source_url', 'checksum', 'full_text_accessible']
