@@ -212,6 +212,7 @@ class DocumentLibraryPersonalSerializer(serializers.Serializer):
     filename = serializers.CharField(required=True)
     document_title = serializers.CharField(required=True)
     document_id = serializers.CharField(required=True, allow_null=True)
+    pages = serializers.IntegerField(required=False, allow_null=True, default=None)
     record_time = serializers.DateTimeField(required=True, format="%Y-%m-%d %H:%M:%S")
     type = serializers.CharField(required=False, default=Collection.TypeChoices.PUBLIC)
     reference_type = serializers.CharField(required=False, allow_null=True, default=None)

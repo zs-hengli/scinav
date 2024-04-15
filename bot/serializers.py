@@ -78,7 +78,8 @@ class BotDetailSerializer(BaseModelSerializer):
     class Meta:
         model = Bot
 
-        fields = ['id', 'author', 'title', 'description', 'prompt_spec', 'questions', 'collections', 'updated_at']
+        fields = [
+            'id', 'user_id', 'author', 'title', 'description', 'prompt_spec', 'questions', 'collections', 'updated_at']
 
 
 class HotBotListSerializer(BaseModelSerializer):
@@ -116,7 +117,7 @@ class BotListAllSerializer(BaseModelSerializer):
 
     class Meta:
         model = Bot
-        fields = ['id', 'author', 'title', 'description', 'doc_total', 'updated_at']
+        fields = ['id', 'author', 'title', 'description', 'doc_total', 'updated_at', 'user_id']
 
 
 class BotListMySerializer(BaseModelSerializer):

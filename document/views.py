@@ -10,13 +10,13 @@ from rest_framework.views import APIView
 from bot.rag_service import Document as RagDocument
 from core.utils.views import check_keys, extract_json, my_json_response
 from document.models import Document, DocumentLibrary
-from document.serializers import DocumentRagGetSerializer, \
-    DocumentDetailSerializer, GenPresignedUrlQuerySerializer, DocumentUploadQuerySerializer, \
+from document.serializers import DocumentDetailSerializer, GenPresignedUrlQuerySerializer, \
+    DocumentUploadQuerySerializer, \
     DocumentLibraryListQuerySerializer, DocumentRagUpdateSerializer, DocLibUpdateNameQuerySerializer, \
     DocLibAddQuerySerializer, DocLibDeleteQuerySerializer, DocLibCheckQuerySerializer, DocumentRagCreateSerializer
 from document.service import search, documents_update_from_rag, presigned_url, document_personal_upload, \
     get_document_library_list, document_library_add, document_library_delete, doc_lib_batch_operation_check, \
-    get_url_by_object_path
+    get_url_by_object_path, get_reference_formats
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,9 @@ class Documents(APIView):
         document = Document.objects.filter(id=document_id).first()
         if not document:
             return my_json_response(code=1, msg=f'document not found by document_id={document_id}')
-        return my_json_response(DocumentDetailSerializer(document).data)
+        document_data = DocumentDetailSerializer(document).data
+        document_data['reference_formats'] = get_reference_formats(document_data)
+        return my_json_response(document_data)
 
 
 @method_decorator([extract_json], name='dispatch')
@@ -186,6 +188,7 @@ class DocumentsRagUpdate(APIView):
     def get(request, *args, **kwargs):
         data = {}
         # data = import_documents_from_json()
+        # update_exist_documents()
         return my_json_response(data)
 
     @staticmethod

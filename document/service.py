@@ -21,7 +21,7 @@ from document.base_service import document_update_from_rag_ret
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentRagUpdateSerializer, \
     DocumentLibrarySubscribeSerializer, DocumentLibraryPersonalSerializer, DocLibAddQuerySerializer, \
-    DocumentLibraryListQuerySerializer
+    DocumentLibraryListQuerySerializer, DocumentDetailSerializer, DocumentRagGetSerializer
 from document.tasks import async_document_library_task
 
 logger = logging.getLogger(__name__)
@@ -144,7 +144,8 @@ def search(user_id, content, page_size=10, page_num=1, topn=100):
             'reference_count': doc.reference_count,
             'collection_id': str(doc.collection_id),
             'collection_title': collection_title,
-            'source': doc.journal if doc.journal else doc.conference if doc.conference else ''
+            'source': doc.journal if doc.journal else doc.conference if doc.conference else '',
+            'reference_formats': get_reference_formats(DocumentRagGetSerializer(doc).data),
         })
     search_result_save_cache(content, ret_data)
     total = len(ret_data)
@@ -198,7 +199,7 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
                         'filename': f"{_('公共库')}: {public_colle.title}",
                         'document_title': '-',
                         'document_id': None,
-                        'pages': '-',
+                        'pages': None,
                         'status': '-',
                         'record_time': '-',
                         'type': 'public',
@@ -251,7 +252,7 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
                 'filename': filename,
                 'document_title': document_title,
                 'document_id': str(doc_lib.document_id) if doc_lib.document_id else None,
-                'pages': '-' if not document else document.pages,
+                'pages': None if not document else document.pages,
                 'status': doc_lib.task_status,
                 'reference_type': ref_type,
                 'record_time': doc_lib.created_at,
@@ -277,7 +278,7 @@ def _bot_subscribe_document_library_list(user_id):
             'filename': f"{_('专题名称')}: {bot.title}",
             'document_title': '-',
             'document_id': None,
-            'pages': '-',
+            'pages': None,
             'status': '-',
             'record_time': bot.created_at,
             'type': 'subscribe',
@@ -355,6 +356,28 @@ def import_one_document(collection_id, collection_type, doc_id):
     data = document_update_from_rag(data)
     logger.info(f"success update doc_id: {doc_id}")
     return data
+
+
+def update_exist_documents():
+    page_size = 200
+    page_num = 9
+    documents = Document.objects.filter(del_flag=False).values(
+        'collection_type', 'doc_id', 'collection_id').order_by(
+        'updated_at')[page_size*(page_num-1):page_size*page_num]
+    while documents:
+        logger.debug(f'ddddddddd page_size: {page_size}, page_num: {page_num}')
+        for d in documents:
+            data = {
+                'collection_id': d['collection_id'],
+                'collection_type': d['collection_type'],
+                'doc_id': d['doc_id'],
+            }
+            document_update_from_rag(data)
+            logger.debug(f"ddddddddd success update doc_id: {d['doc_id']}")
+        page_num += 1
+        documents = Document.objects.filter(del_flag=False).values(
+            'collection_type', 'doc_id', 'collection_id').order_by(
+            'updated_at')[page_size*(page_num-1):page_size*page_num]
 
 
 def document_personal_upload(validated_data):
@@ -483,4 +506,84 @@ def update_document_lib(user_id, document_ids):
         }
         DocumentLibrary.objects.update_or_create(data, user_id=user_id, document_id=doc_id)
     return True
+
+
+def get_reference_formats(document):
+    authors = ','.join(document['authors'])
+    title = document['title']
+    year = document['year']
+    source = document['journal'] if document['journal'] else document['conference'] \
+        if document['conference'] else document['venue']
+    pages = document['pages'] if document['pages'] else ''
+    venue = document['venue'] if document['venue'] else ''
+    pub_type = document['pub_type'] if document['pub_type'] else ''
+    pub_data = document['pub_date'] if document['pub_date'] else ''
+    # apa
+    apa = f'{authors};{title}.{source} {year}'  # noqa
+    '''
+    * 引用中 APA 格式 （参考 https://wordvice.cn/citation-guide/apa）
+    * 引用中 MLA 格式 （参考 https://wordvice.cn/citation-guide/mla）
+    * 引用中 GB/T 7714 （文案有 GB/T 修改为 GB/T 7714）格式 （参考 GB/T 7714-2015 国标要求）
+    * 引用中 BibTeX（中间无空格）
+'''
+    # mla 作者. "来源标题." 出版物名称, 其他贡献者, 版本, 编号, 出版社, 出版日期, 地点.
+    mla = f'{authors}. "{title}." {venue}, {pub_data}.'
+    # gbt 作者. 会议文集名：会议文集其他信息[C]. 出版地：出版者，出版年. 获取和访问路径.
+    pub_type_tag = '[C]' if pub_type == 'conference' else '[J]' if pub_type == 'journal' else ''
+    gbt = f'{authors}. {title}: {venue}{pub_type_tag}, {year}.'
+    # bibtex
+    # conference
+    # @conference{RN04,
+    #   author    = "Holleis, Paul and Wagner, Matthias and Koolwaaij, Johan",
+    #   title     = "Studying mobile context-aware social services in the wild",
+    #   booktitle = "Proc. of the 6th Nordic Conf. on Human-Computer Interaction",
+    #   series    = "NordiCHI",
+    #   year      = 2010,
+    #   pages     = "207--216",
+    #   publisher = "ACM",
+    #   address   = "New York, NY"
+    # }
+    bibtex = ''
+    info = {
+        'authors': authors,
+        'title': title,
+        'venue': venue,
+        'year': year,
+        'pages': pages,
+    }
+    if pub_type == 'conference':
+        template = '''@conference{RN04,
+    author={authors},
+    title={title},
+    booktitle={venue},
+    year={year}
+}
+'''
+        bibtex = template.format(**info)
+    # journal
+    # @article{RN01,
+    #   author   = "P. J. Cohen",
+    #   title    = "The independence of the continuum hypothesis",
+    #   journal  = "Proceedings of the National Academy of Sciences",
+    #   year     = 1963,
+    #   volume   = "50",
+    #   number   = "6",
+    #   pages    = "1143--1148",
+    # }
+    elif pub_type == 'journal':
+        template = '''@article{RN01,
+    author={authors},
+    title={title},
+    journal={venue},
+    year={year}
+    number={pages}
+'''
+        bibtex = template.format(**info)
+
+    return {
+        'apa': apa,
+        'mla': mla,
+        'gbt': gbt,
+        'bibtex': bibtex,
+    }
 
