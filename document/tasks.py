@@ -47,7 +47,7 @@ def async_document_library_task(self, task_id=None):
                 continue
             elif task_status == DocumentLibrary.TaskStatusChoices.ERROR:
                 i.task_status = task_status
-                i.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_code']}
+                i.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message']}
             else:  # COMPLETED
                 i.task_status = task_status
                 document = document_update_from_rag_ret(rag_ret['paper'])
