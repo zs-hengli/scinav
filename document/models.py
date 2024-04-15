@@ -33,7 +33,7 @@ class Document(models.Model):
     authors = models.JSONField(null=True)
     doi = models.CharField(null=True, blank=True, max_length=128, default=None, db_default=None)
     categories = models.JSONField(null=True)
-    page_num = models.IntegerField(null=True)
+    pages = models.IntegerField(null=True)
     year = models.IntegerField(null=True)
     pub_date = models.DateField(null=True)
     pub_type = models.CharField(null=True, blank=True, max_length=32, default=None, db_default=None)

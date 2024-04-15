@@ -10,12 +10,13 @@ from rest_framework.views import APIView
 from bot.rag_service import Document as RagDocument
 from core.utils.views import check_keys, extract_json, my_json_response
 from document.models import Document, DocumentLibrary
-from document.serializers import DocumentRagGetSerializer, DocumentUrlSerializer, \
+from document.serializers import DocumentRagGetSerializer, \
     DocumentDetailSerializer, GenPresignedUrlQuerySerializer, DocumentUploadQuerySerializer, \
     DocumentLibraryListQuerySerializer, DocumentRagUpdateSerializer, DocLibUpdateNameQuerySerializer, \
-    DocLibAddQuerySerializer, DocLibDeleteQuerySerializer, DocLibCheckQuerySerializer
+    DocLibAddQuerySerializer, DocLibDeleteQuerySerializer, DocLibCheckQuerySerializer, DocumentRagCreateSerializer
 from document.service import search, documents_update_from_rag, presigned_url, document_personal_upload, \
-    get_document_library_list, document_library_add, document_library_delete, doc_lib_batch_operation_check
+    get_document_library_list, document_library_add, document_library_delete, doc_lib_batch_operation_check, \
+    get_url_by_object_path
 
 logger = logging.getLogger(__name__)
 
@@ -171,8 +172,11 @@ class DocumentsUrl(APIView):
         document = Document.objects.filter(id=document_id).values_list('id', 'object_path', named=True).first()
         if not document:
             return my_json_response(code=1, msg=f'document not found by document_id={document_id}')
-        data = DocumentUrlSerializer(document).data
-        return my_json_response(data)
+        url = get_url_by_object_path(request.user.id, document.object_path)
+        return my_json_response({
+            'id': document.id,
+            'url': url
+        })
 
 
 @method_decorator([extract_json], name='dispatch')
@@ -200,7 +204,7 @@ class DocumentsRagUpdate(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=1, msg='invalid put data')
         doc_info = RagDocument.get(serial.validated_data)
-        serial = DocumentRagGetSerializer(data=doc_info)
+        serial = DocumentRagCreateSerializer(data=doc_info)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=2, msg='invalid get rag paper info')
         document, _ = Document.objects.update_or_create(

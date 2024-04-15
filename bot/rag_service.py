@@ -99,6 +99,22 @@ class Document:
         return resp
 
     @staticmethod
+    def citations(collection_type, collection_id, doc_id):
+        url = RAG_HOST + f"/api/v1/papers/{collection_type}/{collection_id}/{doc_id}/citations"
+        resp = rag_requests(url, method='GET')
+        logger.info(f'url: {url}, response: {resp.text}')
+        resp = resp.json()
+        return resp
+
+    @staticmethod
+    def references(collection_type, collection_id, doc_id):
+        url = RAG_HOST + f"/api/v1/papers/{collection_type}/{collection_id}/{doc_id}/references"
+        resp = rag_requests(url, method='GET')
+        logger.info(f'url: {url}, response: {resp.text}')
+        resp = resp.json()
+        return resp
+
+    @staticmethod
     def search(user_id, content, search_type='embedding', limit=1000, filter_conditions=None):
         url = RAG_HOST + '/api/v1/papers/search'
         post_data = {
@@ -115,7 +131,7 @@ class Document:
         return resp
 
     @staticmethod
-    def presigned_url(user_id, public_key, filename):
+    def presigned_url(user_id, public_key, operation_type, filename=None, object_path=None):
         """
         return:
         {
@@ -125,11 +141,21 @@ class Document:
         }
         """
         url = RAG_HOST + '/api/v1/papers/presigned-url'
-        post_data = {
-            'public_key': public_key,
-            'filename': filename,
-            'user_id': user_id
-        }
+        if operation_type == 'put_object':
+            post_data = {
+                'public_key': public_key,
+                'user_id': user_id,
+                'operation_type': operation_type,
+                'filename': filename,
+            }
+        else:
+            post_data = {
+                'public_key': public_key,
+                'user_id': user_id,
+                'operation_type': operation_type,
+                'object_path': object_path,
+            }
+
         resp = rag_requests(url, json=post_data, method='POST')
         logger.info(f'url: {url}, response: {resp.text}')
         resp = resp.json()

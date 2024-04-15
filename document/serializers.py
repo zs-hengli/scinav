@@ -6,6 +6,8 @@ from django.db import models
 from rest_framework import serializers
 from django.utils.translation import gettext_lazy as _
 
+from bot.rag_service import Document as RagDocument
+
 from collection.models import Collection
 from document.models import Document
 
@@ -89,7 +91,7 @@ class DocumentUploadQuerySerializer(serializers.Serializer):
     files = DocumentUploadFileSerializer(many=True, required=True, allow_null=False)
 
 
-class DocumentRagGetSerializer(serializers.ModelSerializer):
+class DocumentRagCreateSerializer(BaseModelSerializer):
     id = serializers.CharField(read_only=True)
     user_id = serializers.CharField(required=False, allow_null=False)
     doc_id = serializers.IntegerField(required=True, allow_null=True)
@@ -100,7 +102,7 @@ class DocumentRagGetSerializer(serializers.ModelSerializer):
     authors = serializers.ListField(required=True, child=serializers.CharField(allow_blank=False), allow_null=True)
     doi = serializers.CharField(required=True, allow_null=True)
     categories = serializers.JSONField(required=True, allow_null=True)
-    page_num = serializers.IntegerField(required=False, allow_null=True, default=None)
+    pages = serializers.IntegerField(required=False, allow_null=True, default=None)
     year = serializers.IntegerField(required=True, allow_null=True)
     pub_date = serializers.DateField(required=True, allow_null=True)
     pub_type = serializers.CharField(required=True, allow_null=True, allow_blank=True)
@@ -111,8 +113,6 @@ class DocumentRagGetSerializer(serializers.ModelSerializer):
     full_text_accessible = serializers.BooleanField(required=True, allow_null=True)
     citation_count = serializers.IntegerField(required=True, allow_null=True)
     reference_count = serializers.IntegerField(required=True, allow_null=True)
-    citations = serializers.JSONField(required=True, allow_null=True)
-    references = serializers.JSONField(required=True, allow_null=True)
     state = serializers.ChoiceField(
         required=False, choices=Document.StateChoices, default=Document.StateChoices.COMPLETED)
     object_path = serializers.CharField(required=True, allow_null=True, allow_blank=True)
@@ -124,34 +124,71 @@ class DocumentRagGetSerializer(serializers.ModelSerializer):
     class Meta:
         model = Document
         fields = ['id', 'doc_id', 'user_id', 'collection_type', 'collection_id', 'title', 'abstract', 'authors', 'doi',
-                  'categories', 'page_num', 'year', 'pub_date', 'pub_type', 'venue', 'journal', 'conference',
-                  'keywords', 'full_text_accessible', 'citation_count', 'reference_count', 'citations', 'references', 'state',
-                  'object_path', 'source_url', 'checksum', 'ref_collection_id', 'ref_doc_id']
+                  'categories', 'pages', 'year', 'pub_date', 'pub_type', 'venue', 'journal', 'conference',
+                  'keywords', 'full_text_accessible', 'citation_count', 'reference_count',
+                  'state', 'object_path', 'source_url', 'checksum', 'ref_collection_id', 'ref_doc_id']
+
+
+class DocumentRagGetSerializer(serializers.ModelSerializer):
+    citations = serializers.JSONField(required=True, allow_null=True)
+    references = serializers.JSONField(required=True, allow_null=True)
+
+    class Meta:
+        model = Document
+        fields = ['id', 'doc_id', 'user_id', 'collection_type', 'collection_id', 'title', 'abstract', 'authors', 'doi',
+                  'categories', 'pages', 'year', 'pub_date', 'pub_type', 'venue', 'journal', 'conference',
+                  'keywords', 'full_text_accessible', 'citation_count', 'reference_count', 'citations', 'references',
+                  'state', 'object_path', 'source_url', 'checksum', 'ref_collection_id', 'ref_doc_id']
 
 
 class DocumentDetailSerializer(BaseModelSerializer):
-    url = serializers.SerializerMethodField()
+    citations = serializers.SerializerMethodField()
+    references = serializers.SerializerMethodField()
 
     @staticmethod
-    def get_url(obj):
-        return f'{settings.OBJECT_PATH_URL_HOST}/{obj.object_path}' if obj.object_path else None
+    def get_citations(obj: Document):
+        citations = RagDocument.citations(obj.collection_type, obj.collection_id, obj.doc_id)
+        if citations:
+            ret_data = []
+            for i, c in enumerate(citations):
+                authors = ','.join(c['authors'])
+                title = c['title']
+                year = c['year']
+                source = c['journal'] if c['journal'] else c['conference'] if c['conference'] else c['venue']
+                doc_apa = f'[{i + 1}] {authors};{title}.{source} {year}'  # noqa
+                ret_data.append({
+                    'doc_id': c['doc_id'],
+                    'doc_apa': doc_apa
+                })
+            return ret_data
+        return None
+
+    @staticmethod
+    def get_references(obj: Document):
+        references = RagDocument.references(obj.collection_type, obj.collection_id, obj.doc_id)
+        if references:
+            ret_data = []
+            for i, r in enumerate(references):
+                authors = ','.join(r['authors'])
+                title = r['title']
+                year = r['year']
+                source = r['journal'] if r['journal'] else r['conference'] if r['conference'] else r['venue']
+                doc_apa = f'[{i + 1}] {authors};{title}.{source} {year}'  # noqa
+                ret_data.append({
+                    'doc_id': r['doc_id'],
+                    'doc_apa': doc_apa
+                })
+            return ret_data
+        return None
 
     class Meta:
         model = Document
         fields = '__all__'
 
 
-class DocumentUrlSerializer(serializers.ModelSerializer):
+class DocumentUrlResSerializer(serializers.Serializer):
     id = serializers.CharField(read_only=True)
-    url = serializers.SerializerMethodField()
-
-    @staticmethod
-    def get_url(obj):
-        return f'{settings.OBJECT_PATH_URL_HOST}/{obj.object_path}' if obj.object_path else None
-
-    class Meta:
-        model = Document
-        fields = ['id', 'url']
+    url = serializers.CharField(required=True)
 
 
 class GenPresignedUrlQuerySerializer(serializers.Serializer):

@@ -19,7 +19,7 @@ from core.utils.common import str_hash
 from core.utils.exceptions import ValidationError
 from document.base_service import document_update_from_rag_ret
 from document.models import Document, DocumentLibrary
-from document.serializers import DocumentRagGetSerializer, DocumentRagUpdateSerializer, \
+from document.serializers import DocumentRagUpdateSerializer, \
     DocumentLibrarySubscribeSerializer, DocumentLibraryPersonalSerializer, DocLibAddQuerySerializer, \
     DocumentLibraryListQuerySerializer
 from document.tasks import async_document_library_task
@@ -74,7 +74,12 @@ def gen_s3_presigned_post(bucket: str, path: str) -> dict:
 
 
 def presigned_url(user_id, filename):
-    return Rag_Document.presigned_url(user_id, settings.OSS_PUBLIC_KEY, filename)
+    return Rag_Document.presigned_url(user_id, settings.OSS_PUBLIC_KEY, 'put_object', filename=filename)
+
+
+def get_url_by_object_path(user_id, object_path):
+    rag_ret = Rag_Document.presigned_url(user_id, settings.OSS_PUBLIC_KEY, 'get_object', object_path=object_path)
+    return rag_ret['presigned_url'] if rag_ret and rag_ret.get('presigned_url') else None
 
 
 def search(user_id, content, page_size=10, page_num=1, topn=100):
@@ -103,9 +108,10 @@ def search(user_id, content, page_size=10, page_num=1, topn=100):
             'conference': doc['conference'],
             'keywords': doc['keywords'],
             'full_text_accessible': doc['full_text_accessible'],
+            'pages': doc['pages'],
             'citation_count': doc['citation_count'],
             'reference_count': doc['reference_count'],
-            'citations': doc['citations'],
+            # 'citations': doc['citations'],
             'object_path': doc['object_path'],
             'source_url': doc['source_url'],
             'checksum': doc['checksum'],
@@ -174,10 +180,6 @@ def search_result_save_cache(content, data, search_result_expires=86400 * 7):
     return res
 
 
-def get_url_by_object_path(object_path):
-    return f'{settings.OBJECT_PATH_URL_HOST}/{object_path}'
-
-
 def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
     # {'filename': '', 'document_title': '', 'status': '-', 'record_time': '-'}
     start_num = page_size * (page_num - 1)
@@ -196,6 +198,7 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
                         'filename': f"{_('公共库')}: {public_colle.title}",
                         'document_title': '-',
                         'document_id': None,
+                        'pages': '-',
                         'status': '-',
                         'record_time': '-',
                         'type': 'public',
@@ -216,7 +219,6 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
             user_id=user_id, del_flag=False,
             task_status__in=[DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
                              DocumentLibrary.TaskStatusChoices.PENDING,
-                             DocumentLibrary.TaskStatusChoices.ERROR,
                              ]
         ).order_by('-updated_at')
     else:
@@ -249,6 +251,7 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
                 'filename': filename,
                 'document_title': document_title,
                 'document_id': str(doc_lib.document_id) if doc_lib.document_id else None,
+                'pages': '-' if not document else document.pages,
                 'status': doc_lib.task_status,
                 'reference_type': ref_type,
                 'record_time': doc_lib.created_at,
@@ -266,7 +269,7 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
 
 def _bot_subscribe_document_library_list(user_id):
     bot_sub = BotSubscribe.objects.filter(user_id=user_id, del_flag=False).all()
-    bots = Bot.objects.filter(id__in=[bc.bot_id for bc in bot_sub])
+    bots = Bot.objects.filter(id__in=[bc.bot_id for bc in bot_sub], del_flag=False).all()
     list_data = []
     for bot in bots:
         list_data.append({
@@ -274,6 +277,7 @@ def _bot_subscribe_document_library_list(user_id):
             'filename': f"{_('专题名称')}: {bot.title}",
             'document_title': '-',
             'document_id': None,
+            'pages': '-',
             'status': '-',
             'record_time': bot.created_at,
             'type': 'subscribe',
@@ -284,6 +288,7 @@ def _bot_subscribe_document_library_list(user_id):
 
 def document_update_from_rag(validated_data):
     doc_info = RagDocument.get(validated_data)
+
     document = document_update_from_rag_ret(doc_info)
     data = DocumentRagUpdateSerializer(document).data
     return data

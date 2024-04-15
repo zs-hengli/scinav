@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'request_id',
     'corsheaders',
+    'rest_framework',
     'user',
     'bot',
     'chat',

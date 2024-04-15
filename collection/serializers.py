@@ -116,6 +116,7 @@ class CollectionPublicSerializer(serializers.ModelSerializer):
         instance.title = validated_data.get('title', instance.title)
         instance.updated_at = validated_data.get('updated_at', instance.updated_at)
         instance.del_flag = validated_data.get('del_flag', instance.del_flag)
+        instance.total_public = validated_data.get('total_public', instance.total_public)
         instance.save()
 
     class Meta:

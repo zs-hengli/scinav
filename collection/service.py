@@ -32,8 +32,7 @@ def collection_list(user_id, list_type, page_size, page_num):
         if start_num == 0:
             coll_list = pub_serial.data
             ids = [c['id'] for c in public_collections]
-            if Collection.objects.filter(id__in=ids, del_flag=False).count() != len(ids):
-                _save_public_collection(Collection.objects.filter(id__in=ids).all(), public_collections)
+            _save_public_collection(Collection.objects.filter(id__in=ids).all(), public_collections)
     # 2 submit bot collections
     if 'subscribe' in list_type:
         sub_serial = CollectionSubscribeSerializer(data=_bot_subscribe_collection_list(user_id), many=True)
@@ -160,7 +159,6 @@ def _save_public_collection(saved_collections, public_collections):
             'del_flag': False,
             'updated_at': datetime.datetime.strptime(pc['update_time'][:19], '%Y-%m-%dT%H:%M:%S'),
         }
-        serial = CollectionPublicSerializer(data=coll_data)
         serial = CollectionPublicSerializer(data=coll_data)
         if not serial.is_valid():
             logger.error(f"public collection data is invalid: {serial.errors}")

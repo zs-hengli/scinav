@@ -111,7 +111,7 @@ class BotListAllSerializer(BaseModelSerializer):
 
     @staticmethod
     def get_doc_total(obj):
-        bot_collections = BotCollection.objects.filter(bot_id=obj.id).all()
+        bot_collections = BotCollection.objects.filter(bot_id=obj.id, del_flag=False).all()
         return sum([bc.collection.total_public + bc.collection.total_personal for bc in bot_collections])
 
     class Meta:

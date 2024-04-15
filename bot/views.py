@@ -78,6 +78,7 @@ class Bots(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=-2, msg=f'validate error, {list(serial.errors.keys())}')
         validated_data = serial.validated_data
+        del validated_data['type']  # update bot not update type
         updated_bot, bot_collections, updated_attrs = serial.updated_attrs(bot, validated_data)
         data = bot_update(updated_bot, bot_collections, updated_attrs, validated_data)
         return my_json_response(data)
@@ -126,6 +127,7 @@ class BotDocuments(APIView):
 
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['GET']), name='dispatch')
+@permission_classes([AllowAny])
 class BotPublish(APIView):
 
     @staticmethod
