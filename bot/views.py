@@ -8,7 +8,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from bot.models import Bot, HotBot
-from bot.serializers import BotCreateSerializer, BotListQuerySerializer
+from bot.serializers import BotCreateSerializer, BotListQuerySerializer, BotDocumentsQuerySerializer
 from bot.service import (bot_create, bot_delete, bot_detail, bot_documents,
                          bot_publish, bot_subscribe, bot_update, hot_bots, get_bot_list)
 from core.utils.exceptions import ValidationError
@@ -116,12 +116,15 @@ class BotDocuments(APIView):
 
     @staticmethod
     def get(request, bot_id, *args, **kwargs):
-        query = kwargs['request_data']['GET']
-        query_data = {
-            'page_size': int(query.get('page_size', 10)),
-            'page_num': int(query.get('page_num', 1)),
-        }
-        docs = bot_documents(bot_id, query_data['page_size'], query_data['page_num'])
+        query = request.query_params
+        bot = Bot.objects.filter(pk=bot_id).first()
+        if not bot:
+            return my_json_response({}, code=100002, msg=_('bot_id is illegal'))
+        serial = BotDocumentsQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        vd = serial.validated_data
+        docs = bot_documents(request.user.id, bot, vd['list_type'], vd['page_size'], vd['page_num'])
         return my_json_response(docs)
 
 

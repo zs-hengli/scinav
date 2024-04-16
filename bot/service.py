@@ -8,9 +8,10 @@ from bot.models import Bot, BotCollection, BotSubscribe, HotBot
 from bot.rag_service import Bot as RagBot
 from bot.serializers import (BotDetailSerializer, BotListAllSerializer, HotBotListSerializer, BotListChatMenuSerializer)
 from collection.models import Collection, CollectionDocument
+from collection.serializers import CollectionDocumentListSerializer
 from core.utils.exceptions import InternalServerError, ValidationError
 from document.models import Document
-from document.serializers import DocumentApaListSerializer
+from document.serializers import DocumentApaListSerializer, CollectionDocumentListCollectionSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -159,16 +160,6 @@ def is_subscribed(user_id, bot: Bot):
     return False
 
 
-# 专题文献列表
-# bot collection list
-def bot_docs(bot_id):
-    ag_collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False).all()
-    collections = [ag_c.collection for ag_c in ag_collections]
-    collection_ids = [c.id for c in collections]
-    c_documents = CollectionDocument.objects.filter(collection_id__in=collection_ids, del_flag=False).all()
-    return DocumentApaListSerializer(c_documents, many=True).data
-
-
 # 专题列表
 def hot_bots():
     hot_bot = HotBot.objects.filter(del_flag=False, bot__del_flag=False).order_by('order_num').all()
@@ -297,31 +288,60 @@ def bot_subscribe(user_id, bot_id, action='subscribe'):
 
 
 # 专题文献列表
-def bot_documents(bot_id, page_size=10, page_num=1):
+def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
+    bot_id = bot.id
     bot_collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False)
     collections = [bc.collection for bc in bot_collections]
     collection_ids = [c.id for c in collections]
-    query_set = CollectionDocument.objects.filter(
-        collection_id__in=collection_ids).distinct().values('document_id').order_by('document_id')
-    total = query_set.count()
+    # query_set = CollectionDocument.objects.filter(
+    #     collection_id__in=collection_ids).distinct().values('document_id').order_by('document_id')
+    public_count, need_public_count, personal_count, public_collections = 0, 0, 0, []
+    public_collections = Collection.objects.filter(id__in=collection_ids, type=Collection.TypeChoices.PUBLIC).all()
+    public_count = len(public_collections)
+    if page_num == 1 and list_type in ['all', 'all_documents']:
+        need_public_count = public_count
+    query_set = CollectionDocumentListSerializer.get_collection_documents(user_id, collection_ids, list_type)
+    personal_count = query_set.count()
+    total = public_count + personal_count
     start_num = page_size * (page_num - 1)
     logger.info(f"limit: [{start_num}: {page_size * page_num}]")
-    c_docs = query_set[start_num:(page_size * page_num)] if total > start_num else []
+    c_docs = query_set[start_num:(page_size * page_num - need_public_count)] if total > start_num else []
     docs = Document.objects.filter(id__in=[cd['document_id'] for cd in c_docs]).all()
     # docs = [cd.document for cd in c_docs]
-    docs_data = DocumentApaListSerializer(docs, many=True).data
-
-    public_collections = Collection.objects.filter(id__in=collection_ids, type=Collection.TypeChoices.PUBLIC).all()
     res_data = []
-    if public_collections:
-        for p_c in public_collections:
-            res_data.append({
-                'id': None,
-                'doc_apa': f"{_('公共库')}: {p_c.title}"
-            })
-    for i, d in enumerate(docs_data):
-        d['doc_apa'] = f"[{start_num + i + 1}] {d['doc_apa']}"
-        res_data.append(d)
+    if list_type == 'all':
+        if public_collections and need_public_count:
+            for p_c in public_collections:
+                res_data.append({
+                    'id': None,
+                    'collection_id': p_c.id,
+                    'doc_apa': f"{_('公共库')}: {p_c.title}"
+                })
+        docs_data = DocumentApaListSerializer(docs, many=True).data
+        for i, d in enumerate(docs_data):
+            d['doc_apa'] = f"[{start_num + i + 1}] {d['doc_apa']}"
+            res_data.append(d)
+    else:
+        if list_type == 'all_documents':
+            if public_collections and need_public_count:
+                for p_c in public_collections:
+                    res_data.append({
+                        'id': None,
+                        'collection_id': p_c.id,
+                        'doc_apa': f"{_('公共库')}: {p_c.title}",
+                        'title': f"{_('公共库')}: {p_c.title}",
+                        'type': 'public_collection'
+                    })
+            res_data += CollectionDocumentListCollectionSerializer(docs, many=True).data
+            query_set = CollectionDocumentListSerializer.get_collection_documents(user_id, collection_ids, 'personal')
+            document_ids = [cd['document_id'] for cd in query_set.all()]
+            for index, d_id in enumerate(res_data):
+                if d_id['id'] in document_ids:
+                    res_data[index]['type'] = 'personal'
+        else:
+            res_data += CollectionDocumentListCollectionSerializer(docs, many=True).data
+            for index, d_id in enumerate(res_data):
+                res_data[index]['type'] = list_type
 
     return {
         'list': res_data,
@@ -338,5 +358,8 @@ def bot_publish(bot_id, action=Bot.TypeChoices.PUBLIC):
         bot.pub_date = datetime.datetime.now()
     else:
         bot.type = Bot.TypeChoices.PERSONAL
+    # 本人专题自动订阅
+    BotSubscribe.objects.update_or_create(
+        user_id=bot.user_id, bot_id=bot_id, defaults={'del_flag': False})
     bot.save()
     return 0, ''

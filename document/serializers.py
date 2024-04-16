@@ -213,7 +213,7 @@ class DocumentLibraryPersonalSerializer(serializers.Serializer):
     document_title = serializers.CharField(required=True)
     document_id = serializers.CharField(required=True, allow_null=True)
     pages = serializers.IntegerField(required=False, allow_null=True, default=None)
-    record_time = serializers.DateTimeField(required=True, format="%Y-%m-%d %H:%M:%S")
+    record_time = serializers.DateTimeField(required=True, format="%Y-%m-%d %H:%M:%S", allow_null=True)
     type = serializers.CharField(required=False, default=Collection.TypeChoices.PUBLIC)
     reference_type = serializers.CharField(required=False, allow_null=True, default=None)
     status = serializers.CharField(required=False, default='-')
@@ -269,6 +269,8 @@ class DocLibCheckQuerySerializer(serializers.Serializer):
     ids = serializers.ListField(
         required=False, allow_null=True, child=serializers.CharField(allow_null=True, allow_blank=False))
     is_all = serializers.BooleanField(required=False, default=False)
+    list_type = serializers.ChoiceField(
+        required=False, choices=['all', 'in_progress', 'completed'], default='all')
 
     def validate(self, attrs):
         if attrs.get('ids'):

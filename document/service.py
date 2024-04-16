@@ -78,8 +78,10 @@ def presigned_url(user_id, filename):
 
 
 def get_url_by_object_path(user_id, object_path):
-    rag_ret = Rag_Document.presigned_url(user_id, settings.OSS_PUBLIC_KEY, 'get_object', object_path=object_path)
-    return rag_ret['presigned_url'] if rag_ret and rag_ret.get('presigned_url') else None
+    if object_path:
+        rag_ret = Rag_Document.presigned_url(user_id, settings.OSS_PUBLIC_KEY, 'get_object', object_path=object_path)
+        return rag_ret['presigned_url'] if rag_ret and rag_ret.get('presigned_url') else None
+    return None
 
 
 def search(user_id, content, page_size=10, page_num=1, topn=100):
@@ -201,7 +203,7 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
                         'document_id': None,
                         'pages': None,
                         'status': '-',
-                        'record_time': '-',
+                        'record_time': None,
                         'type': 'public',
                     })
 
@@ -247,6 +249,7 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
                     ).first()
                     if ref_document:
                         ref_type = 'reference&full_text_accessible'
+            stat_comp = DocumentLibrary.TaskStatusChoices.COMPLETED
             my_list_data.append({
                 'id': str(doc_lib.id),
                 'filename': filename,
@@ -255,7 +258,7 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
                 'pages': None if not document else document.pages,
                 'status': doc_lib.task_status,
                 'reference_type': ref_type,
-                'record_time': doc_lib.created_at,
+                'record_time': doc_lib.created_at if doc_lib.task_status == stat_comp else None,
                 'type': 'personal',
             })
         my_seral = DocumentLibraryPersonalSerializer(data=my_list_data, many=True)
@@ -463,9 +466,18 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
 
 def doc_lib_batch_operation_check(user_id, validated_data):
     ids = validated_data.get('ids')
+    list_type = validated_data.get('list_type')
     is_all = validated_data.get('is_all')
     if is_all:
-        filter_query = Q(user_id=user_id, del_flag=False)
+        if list_type == 'all':
+            filter_query = Q(user_id=user_id, del_flag=False)
+        elif list_type == 'in_progress':
+            filter_query = Q(user_id=user_id, del_flag=False, task_status__in=[
+                DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
+                DocumentLibrary.TaskStatusChoices.PENDING,
+            ])
+        else:
+            filter_query = Q(user_id=user_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.COMPLETED)
         if ids:
             filter_query &= ~Q(id__in=ids,)
         doc_libs = DocumentLibrary.objects.filter(filter_query)

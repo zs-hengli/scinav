@@ -1,3 +1,4 @@
+import datetime
 import logging
 
 from django.utils.decorators import method_decorator
@@ -14,7 +15,8 @@ from collection.serializers import (CollectionCreateSerializer,
                                     CollectionUpdateSerializer, CollectionDeleteQuerySerializer,
                                     CollectionDocumentListQuerySerializer, CollectionCheckQuerySerializer)
 from collection.service import (collection_list, collections_docs, generate_collection_title, collection_delete,
-                                collections_delete, collection_chat_operation_check, collection_delete_operation_check)
+                                collections_delete, collection_chat_operation_check, collection_delete_operation_check,
+                                collections_published_bot_titles, collections_create_bot_check)
 from core.utils.views import check_keys, extract_json, my_json_response
 
 logger = logging.getLogger(__name__)
@@ -73,7 +75,8 @@ class Collections(APIView):
         collection = serial.create({
             'title': vd['title'],
             'user_id': vd['user_id'],
-            'type': vd['type']
+            'type': vd['type'],
+            'updated_at': datetime.datetime.now()
         })
         # update collection document
         update_data = {
@@ -213,3 +216,35 @@ class CollectionDeleteOperationCheck(APIView):
             return my_json_response(data, code=code, msg=data['msg'])
 
 
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['POST']), name='dispatch')
+class CollectionsCreateBotCheck(APIView):
+
+    @staticmethod
+    def post(request, *args, **kwargs):
+        query = request.data
+        query['user_id'] = request.user.id
+        check_keys(query, ['ids'])
+        code, msg = collections_create_bot_check(request.user.id, query['ids'])
+        if code == 0:
+            return my_json_response({})
+        else:
+            return my_json_response({}, code=code, msg=msg)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+class PublishedBotTitles(APIView):
+    @staticmethod
+    def get(request, *args, **kwargs):
+        query = request.query_params.dict()
+        query['user_id'] = request.user.id
+        check_keys(query, ['collection_ids'])
+        if isinstance(query['collection_ids'], str):
+            query['collection_ids'] = query['collection_ids'].split(',')
+        is_in_published_bot, bot_titles = collections_published_bot_titles(query['collection_ids'])
+        data = {
+            'is_in_published_bot': is_in_published_bot,
+            'bot_titles': bot_titles,
+        }
+        return my_json_response(data)

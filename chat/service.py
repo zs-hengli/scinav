@@ -8,7 +8,7 @@ from bot.rag_service import Conversations as RagConversation
 from chat.models import Conversation
 from chat.serializers import ConversationCreateSerializer, ConversationDetailSerializer, ConversationListSerializer
 from collection.models import Collection, CollectionDocument
-from document.models import DocumentLibrary
+from document.models import DocumentLibrary, Document
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,8 @@ def conversation_create(validated_data):
         collections = vd.get('collections')
         title = bot.title
     elif vd.get('documents'):
+        if vd.get('document_titles') and len(vd['document_titles']) == 1:
+            title = vd['document_titles'][0]
         # auto create collection.
         collection_title = RagConversation.generate_favorite_title(vd['document_titles'])
         collection = Collection.objects.create(
@@ -35,6 +37,7 @@ def conversation_create(validated_data):
             title=collection_title,
             type=Collection.TypeChoices.PERSONAL,
             total_personal=len(vd['documents']),
+            updated_at=datetime.datetime.now(),
         )
         c_doc_objs = []
         d_lib = DocumentLibrary.objects.filter(
@@ -123,10 +126,15 @@ def conversation_list(validated_data):
     }
 
 
-def conversation_menu_list(validated_data):
-    user_id = validated_data['user_id']
-    query_set = Conversation.objects.filter(user_id=user_id, del_flag=False).values_list(
-        'id', 'title', 'last_used_at', named=True).order_by('-last_used_at')
+def conversation_menu_list(user_id, list_type='all'):
+    if list_type == 'all':
+        query_set = Conversation.objects.filter(user_id=user_id, del_flag=False).values_list(
+            'id', 'title', 'last_used_at', 'bot_id', named=True).order_by('-last_used_at')
+    else:  # list_type == 'no_bot'
+        query_set = Conversation.objects.filter(
+            user_id=user_id, del_flag=False, bot_id__isnull=True).values_list(
+            'id', 'title', 'last_used_at', 'bot_id', named=True).order_by('-last_used_at')
+
     list_data = ConversationListSerializer(query_set.all(), many=True).data
     data = {
         # 'today': [],

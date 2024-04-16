@@ -75,6 +75,8 @@ class Documents(APIView):
         if not document:
             return my_json_response(code=1, msg=f'document not found by document_id={document_id}')
         document_data = DocumentDetailSerializer(document).data
+        document_data['citation_count'] = len(document_data['citations']) if document_data['citations'] else document_data['citation_count']
+        document_data['reference_count'] = len(document_data['references']) if document_data['references'] else document_data['reference_count']
         document_data['reference_formats'] = get_reference_formats(document_data)
         return my_json_response(document_data)
 
@@ -182,7 +184,7 @@ class DocumentsUrl(APIView):
 
 
 @method_decorator([extract_json], name='dispatch')
-@method_decorator(require_http_methods(['GET', 'PUT']), name='dispatch')
+@method_decorator(require_http_methods(['GET', 'PUT', 'POST']), name='dispatch')
 class DocumentsRagUpdate(APIView):
     @staticmethod
     def get(request, *args, **kwargs):
@@ -197,7 +199,7 @@ class DocumentsRagUpdate(APIView):
         return my_json_response(data)
 
     @staticmethod
-    def POST(request, *args, **kwargs):
+    def post(request, *args, **kwargs):
         """
         update or create document by (doc_id,collection_type,collection_id)
         from rag paper info

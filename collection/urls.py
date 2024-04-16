@@ -11,6 +11,9 @@ urlpatterns = [
 
     path('collections/chat/operation/check', views.CollectionChatOperationCheck.as_view()),
     path('collections/delete/operation/check', views.CollectionDeleteOperationCheck.as_view()),
+    path('collections/create/bot/check', views.CollectionsCreateBotCheck.as_view()),
+
+    path('collections/published/bot/titles', views.PublishedBotTitles.as_view()),
 
     path('collections/<str:collection_id>/documents', views.CollectionDocuments.as_view()),
     path('collections/<str:collection_id>/documents/<str:list_type>', views.CollectionDocuments.as_view()),

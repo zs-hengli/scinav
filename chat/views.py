@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 from django.conf import settings
 
 from chat.serializers import ConversationCreateSerializer, ConversationUpdateSerializer, ChatQuerySerializer, \
-    QuestionAnswerSerializer
+    QuestionAnswerSerializer, ConversationsMenuQuerySerializer
 from chat.service import chat_query, conversation_create, conversation_detail, conversation_list, conversation_update, \
     conversation_menu_list
 from core.utils.views import extract_json, my_json_response, streaming_response, ServerSentEventRenderer
@@ -78,6 +78,20 @@ class Conversations(APIView):
         validated_data = {'user_id': request.user.id, 'del_flag': True}
         data = conversation_update(conversation_id, validated_data)
         return my_json_response({'id': data['id']})
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+class ConversationsMenu(APIView):
+    @staticmethod
+    def get(request, *args, **kwargs):
+        query = request.query_params
+        serial = ConversationsMenuQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        vd = serial.validated_data
+        data = conversation_menu_list(request.user.id, vd['list_type'])
+        return my_json_response(data)
 
 
 @method_decorator([extract_json], name='dispatch')

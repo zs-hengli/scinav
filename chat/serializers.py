@@ -1,6 +1,8 @@
 import logging
 
+from django.db import models
 from rest_framework import serializers
+from django.utils.translation import gettext_lazy as _
 
 from chat.models import Conversation, Question
 from collection.models import Collection, CollectionDocument
@@ -107,7 +109,7 @@ class ConversationListSerializer(BaseModelSerializer):
 
     class Meta:
         model = Conversation
-        fields = ['id', 'title', 'last_used_at']
+        fields = ['id', 'title', 'last_used_at', 'bot_id']
 
 
 class ChatQuerySerializer(serializers.Serializer):
@@ -177,3 +179,11 @@ class QuestionAnswerSerializer(serializers.Serializer):
     def save(self, validated_data):
         effect_count = Question.objects.filter(id=validated_data['question_id']).update(is_like=validated_data['is_like'])
         return effect_count
+
+
+class ConversationsMenuQuerySerializer(serializers.Serializer):
+    class ListTypeChoices(models.TextChoices):
+        ALL = 'all', _('all')
+        NO_BOT = 'no_bot', _('not include bot conversation')
+
+    list_type = serializers.ChoiceField(required=False, choices=ListTypeChoices, default=ListTypeChoices.ALL)

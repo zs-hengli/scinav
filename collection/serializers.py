@@ -32,7 +32,7 @@ class CollectionCreateByDocsSerializer(serializers.Serializer):
         return attrs
 
 
-class CollectionCreateSerializer(BaseModelSerializer):
+class CollectionCreateSerializer(serializers.ModelSerializer):
     name = serializers.CharField(required=False, source='title')
     document_ids = serializers.ListField(required=False, child=serializers.CharField(min_length=32, max_length=36))
     search_content = serializers.CharField(required=False)

@@ -212,13 +212,23 @@ def collections_docs(validated_data):
     page_size = vd['page_size']
     page_num = vd['page_num']
     res_data = []
+    public_count, need_public_count = 0, 0
+    public_collections = Collection.objects.filter(id__in=collection_ids, type=Collection.TypeChoices.PUBLIC).all()
+    public_count = len(public_collections)
+    if page_num == 1 and vd['list_type'] == 'all':
+        need_public_count = public_count
+        for c in public_collections:
+            res_data.append({
+                'id': None,
+                'doc_apa': f"{_('公共库')}: {c.title}"
+            })
     query_set = CollectionDocumentListSerializer.get_collection_documents(
         vd['user_id'], collection_ids, vd['list_type'])
 
-    total = query_set.count()
+    total = query_set.count() + public_count
     start_num = page_size * (page_num - 1)
     logger.info(f"limit: [{start_num}: {page_size * page_num}]")
-    c_docs = query_set[start_num:(page_size * page_num)]
+    c_docs = query_set[start_num:(page_size * page_num - need_public_count)]
     docs = Document.objects.filter(id__in=[cd['document_id'] for cd in c_docs]).all()
 
     if vd['list_type'] == 'all':
@@ -233,7 +243,7 @@ def collections_docs(validated_data):
                 vd['user_id'], collection_ids, 'personal')
             document_ids = [cd['document_id'] for cd in query_set.all()]
             for index, d_id in enumerate(res_data):
-                if d_id in document_ids:
+                if d_id['id'] in document_ids:
                     res_data[index]['type'] = 'personal'
         else:
             for index, d_id in enumerate(res_data):
@@ -290,3 +300,20 @@ def collection_delete_operation_check(user_id, validated_data):
         }
     else:
         return 0, ''
+
+
+def collections_create_bot_check(user_id, collection_ids):
+    query_set = CollectionDocumentListSerializer.get_collection_documents(user_id, collection_ids, 'all')
+    document_ids = [cd['document_id'] for cd in query_set.all()]
+    filter_query = Q(document_id__in=document_ids, del_flag=False, error__error_code='full_text_missing')
+    no_full_text = DocumentLibrary.objects.filter(filter_query).exists()
+    if no_full_text:
+        return 110005, '您当前专题中包含未关联到公共库或公共库中无法获取全文的个人上传文件，订阅该专题的其他用户将无法针对该文献进行智能对话或智能对话中部分功能无法使用。'
+    else:
+        return 0, ''
+
+
+
+def collections_published_bot_titles(collection_ids):
+    is_in_published_bot, bot_titles = _is_collection_in_published_bot(collection_ids)
+    return is_in_published_bot, bot_titles

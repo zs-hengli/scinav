@@ -138,3 +138,14 @@ class BotListChatMenuSerializer(BaseModelSerializer):
     class Meta:
         model = Bot
         fields = ['id', 'title', 'description', 'updated_at']
+
+
+class BotDocumentsQuerySerializer(serializers.Serializer):
+    list_type = serializers.ChoiceField(
+        required=False,
+        choices=['all', 'all_documents', 'arxiv', 's2', 'personal', 'document_library', 'public'],
+        default='all'
+    )
+    page_num = serializers.IntegerField(required=False, default=1)
+    page_size = serializers.IntegerField(required=False, default=10)
+
