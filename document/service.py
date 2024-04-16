@@ -197,7 +197,7 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
                         'id': None,
                         'collection_id': public_colle.id,
                         'filename': f"{_('公共库')}: {public_colle.title}",
-                        'document_title': '-',
+                        'document_title': None,
                         'document_id': None,
                         'pages': None,
                         'status': '-',
@@ -276,7 +276,7 @@ def _bot_subscribe_document_library_list(user_id):
         list_data.append({
             'id': None,
             'filename': f"{_('专题名称')}: {bot.title}",
-            'document_title': '-',
+            'document_title': None,
             'document_id': None,
             'pages': None,
             'status': '-',
@@ -389,9 +389,10 @@ def document_personal_upload(validated_data):
             'filename': file['filename'],
             'object_path': file['object_path'],
         }
-        # todo for test
-        # logger.debug(f'dddddddd doc_lib_data: {doc_lib_data}')
-        # continue
+        filename_count = DocumentLibrary.objects.filter(
+            filename=file['filename'], user_id=vd['user_id'], del_flag=False).count()
+        if filename_count:
+            doc_lib_data['filename'] = f"{file['filename']}({filename_count})"
         instance, _ = DocumentLibrary.objects.update_or_create(
             doc_lib_data, user_id=vd['user_id'], filename=file['filename'], object_path=file['object_path'])
         if not instance.task_id:
@@ -509,6 +510,15 @@ def update_document_lib(user_id, document_ids):
 
 
 def get_reference_formats(document):
+    """
+        APA 格式 （参考 https://wordvice.cn/citation-guide/apa）
+        MLA 格式 （参考 https://wordvice.cn/citation-guide/mla）
+            作者. "来源标题." 出版物名称, 其他贡献者, 版本, 编号, 出版社, 出版日期, 地点.
+        GB/T 7714 （文案有 GB/T 修改为 GB/T 7714）格式 （参考 GB/T 7714-2015 国标要求）
+            作者. 会议文集名：会议文集其他信息[C]. 出版地：出版者，出版年. 获取和访问路径.
+        BibTeX（中间无空格）
+
+    """
     authors = ','.join(document['authors'])
     title = document['title']
     year = document['year']
@@ -520,15 +530,7 @@ def get_reference_formats(document):
     pub_data = document['pub_date'] if document['pub_date'] else ''
     # apa
     apa = f'{authors};{title}.{source} {year}'  # noqa
-    '''
-    * 引用中 APA 格式 （参考 https://wordvice.cn/citation-guide/apa）
-    * 引用中 MLA 格式 （参考 https://wordvice.cn/citation-guide/mla）
-    * 引用中 GB/T 7714 （文案有 GB/T 修改为 GB/T 7714）格式 （参考 GB/T 7714-2015 国标要求）
-    * 引用中 BibTeX（中间无空格）
-'''
-    # mla 作者. "来源标题." 出版物名称, 其他贡献者, 版本, 编号, 出版社, 出版日期, 地点.
     mla = f'{authors}. "{title}." {venue}, {pub_data}.'
-    # gbt 作者. 会议文集名：会议文集其他信息[C]. 出版地：出版者，出版年. 获取和访问路径.
     pub_type_tag = '[C]' if pub_type == 'conference' else '[J]' if pub_type == 'journal' else ''
     gbt = f'{authors}. {title}: {venue}{pub_type_tag}, {year}.'
     # bibtex

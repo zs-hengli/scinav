@@ -51,3 +51,5 @@ tmp
 
 celery-*.log
 celery-*.pid
+celerybeat-schedule*
+beat-schedule*

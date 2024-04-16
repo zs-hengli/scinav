@@ -24,6 +24,17 @@ def collection_list(user_id, list_type, page_size, page_num):
     # 1 public collections
     public_total, subscribe_total, sub_add_list, my_total = 0, 0, [], 0
     if 'public' in list_type:
+        # todo /api/v1/public-collections 接口超时暂时跳过
+        # saved_colls = Collection.objects.filter(type=Collection.TypeChoices.PUBLIC, del_flag=False)
+        # public_total = saved_colls.count()
+        # for coll in saved_colls:
+        #     coll_list.append({
+        #         'id': coll.id,
+        #         'name': coll.title,
+        #         'updated_at': coll.updated_at,
+        #         'total': coll.total_public,
+        #         'type': coll.type,
+        #     })
         public_collections = RagCollection.list()
         public_collections = [pc | {'updated_at': pc['update_time']} for pc in public_collections]
         pub_serial = CollectionRagPublicListSerializer(data=public_collections, many=True)
