@@ -173,12 +173,17 @@ class DocumentsPersonal(APIView):
 class DocumentsUrl(APIView):
     @staticmethod
     def get(request, document_id, *args, **kwargs):
-        document = Document.objects.filter(id=document_id).values_list('id', 'object_path', named=True).first()
+        user_id = request.user.id
+        document = Document.objects.filter(id=document_id).values(
+            'id', 'object_path', 'collection_id', 'collection_type').first()
         if not document:
             return my_json_response(code=1, msg=f'document not found by document_id={document_id}')
-        url = get_url_by_object_path(request.user.id, document.object_path)
+        if document['collection_type'] == Document.TypeChoices.PERSONAL and document['collection_id'] != user_id:
+            url = None
+        else:
+            url = get_url_by_object_path(request.user.id, document['object_path'])
         return my_json_response({
-            'id': document.id,
+            'id': document['id'],
             'url': url
         })
 

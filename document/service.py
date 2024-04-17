@@ -17,7 +17,7 @@ from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionDocumentListSerializer
 from core.utils.common import str_hash
 from core.utils.exceptions import ValidationError
-from document.base_service import document_update_from_rag_ret
+from document.base_service import document_update_from_rag_ret, update_document_lib
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentRagUpdateSerializer, \
     DocumentLibrarySubscribeSerializer, DocumentLibraryPersonalSerializer, DocLibAddQuerySerializer, \
@@ -212,6 +212,8 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
         sub_serial.is_valid()
         subscribe_total = len(sub_serial.data)
         sub_add_list = list(sub_serial.data)[start_num:start_num + page_size - public_total]
+        if sub_add_list:
+            sub_add_list = sorted(sub_add_list, key=lambda x: x['record_time'], reverse=True)
         list_data += sub_add_list
 
     # personal
@@ -222,6 +224,7 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
             user_id=user_id, del_flag=False,
             task_status__in=[DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
                              DocumentLibrary.TaskStatusChoices.PENDING,
+                             DocumentLibrary.TaskStatusChoices.QUEUEING,
                              ]
         ).order_by('-updated_at')
     else:
@@ -250,13 +253,16 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
                     if ref_document:
                         ref_type = 'reference&full_text_accessible'
             stat_comp = DocumentLibrary.TaskStatusChoices.COMPLETED
+            stat_queue = DocumentLibrary.TaskStatusChoices.QUEUEING
+            stat_in = DocumentLibrary.TaskStatusChoices.IN_PROGRESS
+            stat_pend = DocumentLibrary.TaskStatusChoices.PENDING
             my_list_data.append({
                 'id': str(doc_lib.id),
                 'filename': filename,
                 'document_title': document_title,
                 'document_id': str(doc_lib.document_id) if doc_lib.document_id else None,
-                'pages': None if not document else document.pages,
-                'status': doc_lib.task_status,
+                'pages': None if not document or doc_lib.task_status != stat_comp else document.pages,
+                'status': doc_lib.task_status if doc_lib.task_status not in [stat_queue, stat_pend] else stat_in,
                 'reference_type': ref_type,
                 'record_time': doc_lib.created_at if doc_lib.task_status == stat_comp else None,
                 'type': 'personal',
@@ -268,6 +274,7 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
     return {
         'list': list_data,
         'total': my_total + subscribe_total + public_total,
+        'show_total': my_total + public_total,
     }
 
 
@@ -391,9 +398,13 @@ def document_personal_upload(validated_data):
             'user_id': vd['user_id'],
             'filename': file['filename'],
             'object_path': file['object_path'],
+            'del_flag': False,
+            'task_status': DocumentLibrary.TaskStatusChoices.PENDING,
+            'task_id': None,
+            'error': None,
         }
         filename_count = DocumentLibrary.objects.filter(
-            filename=file['filename'], user_id=vd['user_id'], del_flag=False).count()
+            filename__startswith=file['filename'], user_id=vd['user_id'], del_flag=False).count()
         if filename_count:
             doc_lib_data['filename'] = f"{file['filename']}({filename_count})"
         instance, _ = DocumentLibrary.objects.update_or_create(
@@ -432,8 +443,12 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
         coll_documents = CollectionDocumentListSerializer.get_collection_documents(user_id, [collection_id], 's2')
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_DOCUMENT_LIBRARY:
+        collection_ids = [collection_id]
+        if bot_id:
+            collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False).values('collection_id').all()
+            collection_ids += [c['collection_id'] for c in collections]
         coll_documents = CollectionDocumentListSerializer.get_collection_documents(
-            user_id, [collection_id], 'document_library')
+            user_id, collection_ids, 'document_library')
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_ALL:
         coll_documents = CollectionDocumentListSerializer.get_collection_documents(user_id, [collection_id], 'all')
@@ -441,19 +456,19 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
     else:
         # get document_ids
         is_all = False
-        collection_ids = []
-        if bot_id:
+        collection_ids = [collection_id] if collection_id else []
+        if bot_id and not document_ids:
             if Bot.objects.filter(id=bot_id, user_id=user_id, del_flag=False).exists():
                 bot_coll = BotCollection.objects.filter(bot_id=bot_id, del_flag=False).values('collection_id').all()
-                collection_ids = [c['collection_id'] for c in bot_coll]
-        if collection_id:
-            collection_ids.append(collection_id)
-        collections = Collection.objects.filter(
-            id__in=collection_ids, del_flag=False, type=Collection.TypeChoices.PERSONAL).values('id').all()
-        collection_ids = [c['id'] for c in collections]
-        coll_document = CollectionDocument.objects.filter(
-            collection__id__in=collection_ids, del_flag=False).values('document_id').all()
-        all_document_ids = [d['document_id'] for d in coll_document]
+                collection_ids += [c['collection_id'] for c in bot_coll]
+        all_document_ids = []
+        if collection_ids and not document_ids:
+            collections = Collection.objects.filter(
+                id__in=collection_ids, del_flag=False, type=Collection.TypeChoices.PERSONAL).values('id').all()
+            collection_ids = [c['id'] for c in collections]
+            coll_document = CollectionDocument.objects.filter(
+                collection__id__in=collection_ids, del_flag=False).values('document_id').all()
+            all_document_ids = [d['document_id'] for d in coll_document]
     if not document_ids:
         document_ids = all_document_ids
     else:
@@ -511,16 +526,6 @@ def document_library_delete(user_id, ids, is_all):
     return effected_num
 
 
-def update_document_lib(user_id, document_ids):
-    for doc_id in document_ids:
-        data = {
-            'user_id': user_id,
-            'document_id': doc_id,
-        }
-        DocumentLibrary.objects.update_or_create(data, user_id=user_id, document_id=doc_id)
-    return True
-
-
 def get_reference_formats(document):
     """
         APA 格式 （参考 https://wordvice.cn/citation-guide/apa）
@@ -538,7 +543,12 @@ def get_reference_formats(document):
         if document['conference'] else document['venue']
     pages = document['pages'] if document['pages'] else ''
     venue = document['venue'] if document['venue'] else ''
-    pub_type = document['pub_type'] if document['pub_type'] else ''
+    pub_type = (
+        document['pub_type']
+        if document['pub_type'] else 'conference'
+        if document['conference'] else 'journal'
+        if document['journal'] else ''
+    )
     pub_data = document['pub_date'] if document['pub_date'] else ''
     # apa
     apa = f'{authors};{title}.{source} {year}'  # noqa
@@ -563,16 +573,15 @@ def get_reference_formats(document):
         'title': title,
         'venue': venue,
         'year': year,
-        'pages': pages,
+        'pages': f'number={pages}' if pages else '',
     }
     if pub_type == 'conference':
-        template = '''@conference{RN04,
+        template = '''@conference{{RN04,
     author={authors},
     title={title},
     booktitle={venue},
     year={year}
-}
-'''
+}}'''
         bibtex = template.format(**info)
     # journal
     # @article{RN01,
@@ -584,20 +593,20 @@ def get_reference_formats(document):
     #   number   = "6",
     #   pages    = "1143--1148",
     # }
-    elif pub_type == 'journal':
-        template = '''@article{RN01,
+    else:  # pub_type == 'journal':
+        template = '''@article{{RN01,
     author={authors},
     title={title},
     journal={venue},
-    year={year}
-    number={pages}
-'''
+    year={year},
+    {pages}
+}}'''
         bibtex = template.format(**info)
 
     return {
-        'apa': apa,
-        'mla': mla,
-        'gbt': gbt,
-        'bibtex': bibtex,
+        'GB/T': gbt,
+        'MLA': mla,
+        'APA': apa,
+        'BibTex': bibtex,
     }
 

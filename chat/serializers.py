@@ -81,10 +81,13 @@ class ConversationCreateSerializer(serializers.Serializer):
 
 
 class ConversationUpdateSerializer(serializers.Serializer):
-    user_id = serializers.CharField(required=True, max_length=36)
-    title = serializers.CharField(required=True, min_length=1, max_length=128)
+    title = serializers.CharField(required=False, min_length=1, max_length=128)
+    collections = serializers.ListField(
+        required=False, child=serializers.CharField(min_length=1), allow_null=True)
 
     def validate(self, attrs):
+        if not attrs.get('collections') and not attrs.get('title'):
+            raise serializers.ValidationError('title and collections are all empty')
         if attrs.get('title') and len(attrs['title']) > 128:
             attrs['title'] = attrs['title'][:128]
         return attrs

@@ -243,12 +243,18 @@ class DocLibAddQuerySerializer(serializers.Serializer):
     search_content = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
 
     def validate(self, attrs):
-        if not attrs.get('document_ids') and not attrs.get('collection_id') and not attrs.get('bot_id'):
+        if (
+            not attrs.get('add_type') and not attrs.get('document_ids')
+            and not attrs.get('collection_id') and not attrs.get('bot_id')
+        ):
             raise serializers.ValidationError('document_ids or collection_id or bot_id is required')
         if attrs.get('collection_id') and attrs.get('bot_id'):
             raise serializers.ValidationError('collection_id and bot_id cannot be set at the same time')
-        if attrs.get('add_type') and not attrs.get('collection_id'):
-            raise serializers.ValidationError('collection_id is required')
+        if (
+            attrs.get('add_type') and not attrs.get('collection_id')
+            and not attrs.get('bot_id') and not attrs.get('search_content')
+        ):
+            raise serializers.ValidationError('collection_id or bot_id or search_content is required')
         return attrs
 
 

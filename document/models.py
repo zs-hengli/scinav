@@ -80,6 +80,7 @@ class IngestDocument(models.Model):
 class DocumentLibrary(models.Model):
     class TaskStatusChoices(models.TextChoices):
         PENDING = 'pending', _('pending')
+        QUEUEING = 'queueing', _('queueing')
         IN_PROGRESS = 'in_progress', _('in_progress')
         COMPLETED = 'completed', _('completed')
         ERROR = 'error', _('error')

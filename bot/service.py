@@ -297,9 +297,19 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
     #     collection_id__in=collection_ids).distinct().values('document_id').order_by('document_id')
     public_count, need_public_count, personal_count, public_collections = 0, 0, 0, []
     public_collections = Collection.objects.filter(id__in=collection_ids, type=Collection.TypeChoices.PUBLIC).all()
-    public_count = len(public_collections)
+    public_collection_ids = [c.id for c in public_collections]
     if page_num == 1 and list_type in ['all', 'all_documents']:
-        need_public_count = public_count
+        need_public_count = len(public_collections)
+    elif page_num == 1 and list_type == 's2':
+        if 's2' in public_collection_ids:
+            need_public_count = 1
+            public_collections = [pc for pc in public_collections if pc.id == 's2']
+    elif page_num == 1 and list_type == 'arxiv':
+        if 'arxiv' in public_collection_ids:
+            need_public_count = 1
+            public_collections = [pc for pc in public_collections if pc.id == 'arxiv']
+    public_count = len(public_collections)
+
     query_set = CollectionDocumentListSerializer.get_collection_documents(user_id, collection_ids, list_type)
     personal_count = query_set.count()
     total = public_count + personal_count
@@ -309,29 +319,22 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
     docs = Document.objects.filter(id__in=[cd['document_id'] for cd in c_docs]).all()
     # docs = [cd.document for cd in c_docs]
     res_data = []
+    if list_type in ['all', 'all_documents', 's2', 'arxiv'] and public_collections and need_public_count:
+        for p_c in public_collections:
+            res_data.append({
+                'id': None,
+                'collection_id': p_c.id,
+                'doc_apa': f"{_('公共库')}: {p_c.title}",
+                'title': f"{_('公共库')}: {p_c.title}",
+                'type': p_c.id,
+            })
     if list_type == 'all':
-        if public_collections and need_public_count:
-            for p_c in public_collections:
-                res_data.append({
-                    'id': None,
-                    'collection_id': p_c.id,
-                    'doc_apa': f"{_('公共库')}: {p_c.title}"
-                })
         docs_data = DocumentApaListSerializer(docs, many=True).data
         for i, d in enumerate(docs_data):
             d['doc_apa'] = f"[{start_num + i + 1}] {d['doc_apa']}"
             res_data.append(d)
     else:
         if list_type == 'all_documents':
-            if public_collections and need_public_count:
-                for p_c in public_collections:
-                    res_data.append({
-                        'id': None,
-                        'collection_id': p_c.id,
-                        'doc_apa': f"{_('公共库')}: {p_c.title}",
-                        'title': f"{_('公共库')}: {p_c.title}",
-                        'type': 'public_collection'
-                    })
             res_data += CollectionDocumentListCollectionSerializer(docs, many=True).data
             query_set = CollectionDocumentListSerializer.get_collection_documents(user_id, collection_ids, 'personal')
             document_ids = [cd['document_id'] for cd in query_set.all()]
@@ -345,6 +348,8 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
 
     return {
         'list': res_data,
+        # 个人库库文献 不能在添加到个人库
+        'is_all_in_document_library': True if list_type == 'personal' else False,
         'total': total
     }
 

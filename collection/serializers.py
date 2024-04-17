@@ -177,12 +177,12 @@ class CollectionListSerializer(serializers.ModelSerializer):
 class CollectionDeleteQuerySerializer(serializers.Serializer):
     user_id = serializers.CharField(required=True, max_length=36)
     ids = serializers.ListField(
-        required=False, child=serializers.CharField(required=True, max_length=36, min_length=36)
+        required=False, child=serializers.CharField(required=True, max_length=36, min_length=1)
     )
     is_all = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs):
-        if not attrs.get('ids'):
+        if attrs.get('ids'):
             attrs['ids'] = [cid for cid in attrs['ids'] if cid]
         if not attrs.get('ids') and not attrs.get('is_all'):
             raise serializers.ValidationError(f"ids and is_all {_('cannot be empty at the same time')}")
@@ -308,7 +308,12 @@ class CollectionDocumentListSerializer(serializers.Serializer):
                 collection_id__in=collection_ids, del_flag=False, document__collection_type=Document.TypeChoices.PUBLIC
             ).values('document_id').order_by('document_id').distinct()
         elif list_type == 'arxiv':
-            doc_libs = DocumentLibrary.objects.filter(user_id=user_id, del_flag=False,).values('document_id')
+            doc_libs = DocumentLibrary.objects.filter(
+                user_id=user_id, del_flag=False,task_status__in=[
+                    DocumentLibrary.TaskStatusChoices.COMPLETED,
+                    DocumentLibrary.TaskStatusChoices.PENDING,
+                    DocumentLibrary.TaskStatusChoices.QUEUEING, ]
+            ).values('document_id')
             document_ids = [d['document_id'] for d in doc_libs]
             filter_query = \
                 ~Q(document_id__in=document_ids) \
@@ -316,7 +321,12 @@ class CollectionDocumentListSerializer(serializers.Serializer):
             query_set = CollectionDocument.objects.filter(
                 filter_query).values('document_id').order_by('document_id').distinct()
         elif list_type == 's2':
-            doc_libs = DocumentLibrary.objects.filter(user_id=user_id, del_flag=False,).values('document_id')
+            doc_libs = DocumentLibrary.objects.filter(
+                user_id=user_id, del_flag=False, task_status__in=[
+                    DocumentLibrary.TaskStatusChoices.COMPLETED,
+                    DocumentLibrary.TaskStatusChoices.PENDING,
+                    DocumentLibrary.TaskStatusChoices.QUEUEING, ]
+            ) .values('document_id')
             document_ids = [d['document_id'] for d in doc_libs]
             filter_query = ~Q(document_id__in=document_ids) \
                            & Q(collection_id__in=collection_ids, del_flag=False, document__collection_id='s2')
@@ -324,7 +334,11 @@ class CollectionDocumentListSerializer(serializers.Serializer):
                 filter_query).values('document_id').order_by('document_id').distinct()
         else:  # document_library personal
             # todo 订阅个人文件库处理
-            doc_libs = DocumentLibrary.objects.filter(user_id=user_id, del_flag=False,).values('document_id')
+            doc_libs = DocumentLibrary.objects.filter(user_id=user_id, del_flag=False, task_status__in=[
+                DocumentLibrary.TaskStatusChoices.COMPLETED,
+                DocumentLibrary.TaskStatusChoices.PENDING,
+                DocumentLibrary.TaskStatusChoices.QUEUEING,
+            ]).values('document_id')
             document_ids = [d['document_id'] for d in doc_libs]
             filter_query = Q(document_id__in=document_ids) & Q(collection_id__in=collection_ids, del_flag=False)
             query_set = CollectionDocument.objects.filter(
@@ -339,4 +353,14 @@ class CollectionCheckQuerySerializer(serializers.Serializer):
     def validate(self, attrs):
         if not attrs.get('is_all') and not attrs.get('ids'):
             raise serializers.ValidationError(_('ids or is_all must be set'))
+        return attrs
+
+
+class CollectionCreateBotCheckQuerySerializer(serializers.Serializer):
+    ids = serializers.ListField(required=False, child=serializers.CharField(max_length=36, min_length=1), default=[])
+    bot_id = serializers.CharField(required=False, max_length=36, min_length=1, default=None)
+
+    def validate(self, attrs):
+        if not attrs.get('bot_id') and not attrs.get('ids'):
+            raise serializers.ValidationError(_('bot_id or ids must be set'))
         return attrs

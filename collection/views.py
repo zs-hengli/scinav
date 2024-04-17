@@ -13,10 +13,12 @@ from collection.serializers import (CollectionCreateSerializer,
                                     CollectionDetailSerializer,
                                     CollectionDocUpdateSerializer,
                                     CollectionUpdateSerializer, CollectionDeleteQuerySerializer,
-                                    CollectionDocumentListQuerySerializer, CollectionCheckQuerySerializer)
+                                    CollectionDocumentListQuerySerializer, CollectionCheckQuerySerializer,
+                                    CollectionCreateBotCheckQuerySerializer)
 from collection.service import (collection_list, collections_docs, generate_collection_title, collection_delete,
                                 collections_delete, collection_chat_operation_check, collection_delete_operation_check,
-                                collections_published_bot_titles, collections_create_bot_check)
+                                collections_published_bot_titles, collections_create_bot_check,
+                                collections_reference_bot_titles)
 from core.utils.views import check_keys, extract_json, my_json_response
 
 logger = logging.getLogger(__name__)
@@ -223,9 +225,11 @@ class CollectionsCreateBotCheck(APIView):
     @staticmethod
     def post(request, *args, **kwargs):
         query = request.data
-        query['user_id'] = request.user.id
-        check_keys(query, ['ids'])
-        code, msg = collections_create_bot_check(request.user.id, query['ids'])
+        serial = CollectionCreateBotCheckQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        vd = serial.validated_data
+        code, msg = collections_create_bot_check(request.user.id, vd['ids'], vd['bot_id'])
         if code == 0:
             return my_json_response({})
         else:
@@ -238,13 +242,29 @@ class PublishedBotTitles(APIView):
     @staticmethod
     def get(request, *args, **kwargs):
         query = request.query_params.dict()
-        query['user_id'] = request.user.id
         check_keys(query, ['collection_ids'])
         if isinstance(query['collection_ids'], str):
             query['collection_ids'] = query['collection_ids'].split(',')
         is_in_published_bot, bot_titles = collections_published_bot_titles(query['collection_ids'])
         data = {
             'is_in_published_bot': is_in_published_bot,
+            'bot_titles': bot_titles,
+        }
+        return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+class ReferenceBotTitles(APIView):
+    @staticmethod
+    def get(request, *args, **kwargs):
+        query = request.query_params.dict()
+        check_keys(query, ['collection_ids'])
+        if isinstance(query['collection_ids'], str):
+            query['collection_ids'] = query['collection_ids'].split(',')
+        has_reference_bots, bot_titles = collections_reference_bot_titles(request.user.id, query['collection_ids'])
+        data = {
+            'has_reference_bots': has_reference_bots,
             'bot_titles': bot_titles,
         }
         return my_json_response(data)

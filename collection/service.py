@@ -68,11 +68,26 @@ def collection_list(user_id, list_type, page_size, page_num):
                 coll['is_all_in_document_library'] = True
             else:
                 coll['is_all_in_document_library'] = _is_collection_docs_all_in_document_library(coll['id'], user_id)
-            coll['is_in_published_bot'], coll['bot_titles'] = _is_collection_in_published_bot([coll['id']])
+            coll['has_ref_bots'], coll['bot_titles'] = _collection_ref_bots(user_id, [coll['id']])
+            coll['is_in_published_bot'] = coll['has_ref_bots']
     return {
         'list': coll_list,
         'total': my_total + subscribe_total + public_total,
+        'show_total': my_total + public_total,
     }
+
+
+def _collection_ref_bots(user_id, collection_ids):
+    filter_query = (
+        Q(collection_id__in=collection_ids, del_flag=False, bot__type=Bot.TypeChoices.PUBLIC)
+        | Q(collection_id__in=collection_ids, del_flag=False, collection__user_id=user_id)
+    )
+    bot_colls = BotCollection.objects.filter(filter_query).values('bot__title').distinct('bot__title').all()
+    has_ref_bots, bot_titles = False, None
+    if bot_colls:
+        has_ref_bots = True
+        bot_titles = [b['bot__title'] for b in bot_colls]
+    return has_ref_bots, bot_titles
 
 
 def _is_collection_in_published_bot(collection_ids):
@@ -90,8 +105,14 @@ def _is_collection_docs_all_in_document_library(collection_id, user_id):
     doc_libs = CollectionDocument.objects.filter(collection_id=collection_id, del_flag=False).values(
         'document_id').distinct('document_id').all()
     doc_ids = [d['document_id'] for d in doc_libs]
-    coll_doc_num = DocumentLibrary.objects.filter(del_flag=False, user_id=user_id, document_id__in=doc_ids).values(
-        'document_id').distinct('document_id').count()
+    coll_doc_num = DocumentLibrary.objects.filter(
+        del_flag=False, user_id=user_id, document_id__in=doc_ids,
+        task_status__in=[
+            DocumentLibrary.TaskStatusChoices.COMPLETED,
+            DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
+            DocumentLibrary.TaskStatusChoices.PENDING,
+        ]
+    ).values('document_id').distinct('document_id').count()
     return len(doc_ids) == coll_doc_num
 
 
@@ -110,13 +131,17 @@ def _bot_subscribe_collection_list(user_id):
                 'bot_id': bc.bot_id,
                 'name': bots_dict[bc.bot_id].title,
                 'type': Collection.TypeChoices.SUBSCRIBE,
+                'collection_ids': [],
                 'updated_at': bc.updated_at,
                 'total': 0,
             }
         bot_sub_collect[bc.bot_id]['total'] += bc.collection.total_public + bc.collection.total_personal
         bot_sub_collect[bc.bot_id]['updated_at'] = max(
             bot_sub_collect[bc.bot_id]['updated_at'], bc.collection.updated_at)
-    return list(bot_sub_collect.values())
+        bot_sub_collect[bc.bot_id]['collection_ids'].append(bc.collection_id)
+    # 排序 updated_at 倒序
+    list_data = sorted(bot_sub_collect.values(), key=lambda x: x['updated_at'], reverse=True)
+    return list_data
 
 
 def generate_collection_title(content=None, document_titles=None):
@@ -168,6 +193,7 @@ def _save_public_collection(saved_collections, public_collections):
             'type': Collection.TypeChoices.PUBLIC,
             'total_public': pc['total'],
             'del_flag': False,
+            'task_id': None,
             'updated_at': datetime.datetime.strptime(pc['update_time'][:19], '%Y-%m-%dT%H:%M:%S'),
         }
         serial = CollectionPublicSerializer(data=coll_data)
@@ -250,6 +276,8 @@ def collections_docs(validated_data):
                 res_data[index]['type'] = vd['list_type']
     return {
         'list': res_data,
+        # 个人库库文献 不能在添加到个人库
+        'is_all_in_document_library': True if vd['list_type'] == 'personal' else False,
         'total': total
     }
 
@@ -258,29 +286,19 @@ def collection_chat_operation_check(user_id, validated_data):
     subscribe_collection_id_prefix = 'bot_'  # 订阅收藏夹id拼装：'bot_<bot_id>'
     vd = validated_data
     ids = vd['ids'] if vd.get('ids') else []
+    # 过滤订阅收藏夹
+    ids = [cid for cid in ids if not cid.startswith(subscribe_collection_id_prefix)]
     # 过滤无效collection_id
-    sub_collection_ids = [cid for cid in ids if cid.startswith(subscribe_collection_id_prefix)]
     collections = Collection.objects.filter(id__in=ids, del_flag=False).all()
-    ids = [c.id for c in collections] + sub_collection_ids
+    ids = [c.id for c in collections]
 
     public_collections = RagCollection.list()
     public_collection_ids = [pc['id'] for pc in public_collections]
-    subscribe_collections = BotSubscribe.objects.filter(user_id=user_id, del_flag=False).all()
-    all_sub_collection_bot_ids = [f"{subscribe_collection_id_prefix}{sc.bot_id}" for sc in subscribe_collections]
     if vd.get('is_all'):
         personal_collections = Collection.objects.filter(user_id=user_id, del_flag=False).all()
         real_collection_ids = [c.id for c in personal_collections] + public_collection_ids
-        ids = list(set(real_collection_ids + all_sub_collection_bot_ids) - set(ids))
-    if (set(all_sub_collection_bot_ids) & set(ids)) and (set(ids) - set(all_sub_collection_bot_ids)):
-        return 140002, '订阅收藏夹无法与其他收藏夹共同生成对话，请重新选择'
-    # 全是 订阅收藏夹
-    if set(all_sub_collection_bot_ids) & set(ids):
-        if len(ids) > 1:  # 订阅收藏夹不能有多个
-            return 140002, '订阅收藏夹无法与其他收藏夹共同生成对话，请重新选择'
-        else:
-            return 0, {'bot_id': ids[0][len(subscribe_collection_id_prefix):]}
-    else:  # 全是公共收藏夹或者个人收藏夹
-        return 0, {'collection_ids': ids}
+        ids = list(set(real_collection_ids) - set(ids))
+    return 0, {'collection_ids': ids}
 
 
 def collection_delete_operation_check(user_id, validated_data):
@@ -292,28 +310,38 @@ def collection_delete_operation_check(user_id, validated_data):
             filter_query &= ~Q(id__in=vd['ids'])
         all_colls = Collection.objects.filter(filter_query).all()
         ids = [c.id for c in all_colls]
-    is_in_published_bot, bot_titles = _is_collection_in_published_bot(ids)
-    if is_in_published_bot:
+    has_reference_bots, bot_titles = _collection_ref_bots(user_id, ids)
+    if has_reference_bots:
         return 140003, {
-            'msg': f'您当前删除收藏夹，涉及 {len(bot_titles)}条 已发布专题，如删除收藏夹后，将自动更新该专题中对应文献列表。',
+            'msg': f'您当前删除收藏夹，涉及 {len(bot_titles)}条 已生成专题，如删除收藏夹后，将自动更新该专题中对应文献列表。',
             'bot_titles': bot_titles,
         }
     else:
         return 0, ''
 
 
-def collections_create_bot_check(user_id, collection_ids):
+def collections_create_bot_check(user_id, collection_ids=None, bot_id=None):
+    if not collection_ids:
+        collection_ids = []
+    if bot_id:
+        collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False).all()
+        collection_ids += [c.collection_id for c in collections]
     query_set = CollectionDocumentListSerializer.get_collection_documents(user_id, collection_ids, 'all')
     document_ids = [cd['document_id'] for cd in query_set.all()]
     filter_query = Q(document_id__in=document_ids, del_flag=False, error__error_code='full_text_missing')
     no_full_text = DocumentLibrary.objects.filter(filter_query).exists()
+
     if no_full_text:
         return 110005, '您当前专题中包含未关联到公共库或公共库中无法获取全文的个人上传文件，订阅该专题的其他用户将无法针对该文献进行智能对话或智能对话中部分功能无法使用。'
     else:
         return 0, ''
 
 
-
 def collections_published_bot_titles(collection_ids):
     is_in_published_bot, bot_titles = _is_collection_in_published_bot(collection_ids)
     return is_in_published_bot, bot_titles
+
+
+def collections_reference_bot_titles(user_id, collection_ids):
+    has_reference_bots, bot_titles = _collection_ref_bots(user_id, collection_ids)
+    return has_reference_bots, bot_titles

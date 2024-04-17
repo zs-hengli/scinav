@@ -4,7 +4,7 @@ from celery import shared_task
 from django.db.models import Q
 
 from bot.rag_service import Document as RagDocument
-from document.base_service import document_update_from_rag_ret
+from document.base_service import document_update_from_rag_ret, reference_doc_to_document
 from document.models import DocumentLibrary
 
 logger = logging.getLogger('celery')
@@ -31,7 +31,9 @@ def async_document_library_task(self, task_id=None):
                 i.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_code']}
             i.save()
     # in progress
-    if instances := DocumentLibrary.objects.filter(task_status=DocumentLibrary.TaskStatusChoices.IN_PROGRESS).all():
+    if instances := DocumentLibrary.objects.filter(task_status__in=[
+        DocumentLibrary.TaskStatusChoices.IN_PROGRESS, DocumentLibrary.TaskStatusChoices.QUEUEING
+    ]).all():
         for i in instances:
             try:
                 rag_ret = RagDocument.get_ingest_task(i.task_id)
@@ -43,14 +45,21 @@ def async_document_library_task(self, task_id=None):
                 continue
             task_status = rag_ret['task_status']
             logger.info(f'async_document_library_task {i.task_id}, {task_status}')
-            if task_status == DocumentLibrary.TaskStatusChoices.IN_PROGRESS:
-                continue
+            if task_status in [
+                DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
+                DocumentLibrary.TaskStatusChoices.QUEUEING,
+            ]:
+                if i.task_status == task_status:
+                    continue
+                else:
+                    i.task_status = task_status
             elif task_status == DocumentLibrary.TaskStatusChoices.ERROR:
                 i.task_status = task_status
                 i.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message']}
             else:  # COMPLETED
                 i.task_status = task_status
                 document = document_update_from_rag_ret(rag_ret['paper'])
+                reference_doc_to_document(document)
                 i.document = document
             i.save()
     return True

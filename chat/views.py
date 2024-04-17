@@ -7,6 +7,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 from django.conf import settings
 
+from chat.models import Conversation
 from chat.serializers import ConversationCreateSerializer, ConversationUpdateSerializer, ChatQuerySerializer, \
     QuestionAnswerSerializer, ConversationsMenuQuerySerializer
 from chat.service import chat_query, conversation_create, conversation_detail, conversation_list, conversation_update, \
@@ -47,20 +48,19 @@ class Conversations(APIView):
                 'page_size': int(query.get('page_size', 10)),
                 'page_num': int(query.get('page_num', 1)),
             }
-            if conversation_id == 'menu':
-                data = conversation_menu_list(validated_data=query_data)
-            else:
-                data = conversation_list(validated_data=query_data)
+            data = conversation_list(validated_data=query_data)
         return my_json_response(data)
 
     @staticmethod
     def put(request, conversation_id, *args, **kwargs):
         query_data = request.data
-        query_data['user_id'] = request.user.id
+        conversation = Conversation.objects.filter(id=conversation_id, user_id=request.user.id).first()
+        if not conversation:
+            return my_json_response({}, code=100002, msg='conversation not found')
         serial = ConversationUpdateSerializer(data=query_data)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
-        data = conversation_update(conversation_id, serial.validated_data)
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        data = conversation_update(request.user.id, conversation_id, serial.validated_data)
         return my_json_response(data)
 
     @staticmethod
@@ -75,8 +75,8 @@ class Conversations(APIView):
 
     @staticmethod
     def delete(request, conversation_id, *args, **kwargs):
-        validated_data = {'user_id': request.user.id, 'del_flag': True}
-        data = conversation_update(conversation_id, validated_data)
+        validated_data = {'del_flag': True}
+        data = conversation_update(request.user.id, conversation_id, validated_data)
         return my_json_response({'id': data['id']})
 
 
