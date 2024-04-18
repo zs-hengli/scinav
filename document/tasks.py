@@ -54,10 +54,13 @@ def async_document_library_task(self, task_id=None):
                 else:
                     i.task_status = task_status
             elif task_status == DocumentLibrary.TaskStatusChoices.ERROR:
+                rag_ret['paper']['status'] = 'completed'
+                document_update_from_rag_ret(rag_ret['paper'])
                 i.task_status = task_status
                 i.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message']}
             else:  # COMPLETED
                 i.task_status = task_status
+                rag_ret['paper']['status'] = 'completed'
                 document = document_update_from_rag_ret(rag_ret['paper'])
                 reference_doc_to_document(document)
                 i.document = document

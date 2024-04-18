@@ -208,13 +208,13 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
                     })
 
         # subscribe
-        sub_serial = DocumentLibrarySubscribeSerializer(data=_bot_subscribe_document_library_list(user_id), many=True)
-        sub_serial.is_valid()
-        subscribe_total = len(sub_serial.data)
-        sub_add_list = list(sub_serial.data)[start_num:start_num + page_size - public_total]
-        if sub_add_list:
-            sub_add_list = sorted(sub_add_list, key=lambda x: x['record_time'], reverse=True)
-        list_data += sub_add_list
+        # sub_serial = DocumentLibrarySubscribeSerializer(data=_bot_subscribe_document_library_list(user_id), many=True)
+        # sub_serial.is_valid()
+        # subscribe_total = len(sub_serial.data)
+        # sub_add_list = list(sub_serial.data)[start_num:start_num + page_size - public_total]
+        # if sub_add_list:
+        #     sub_add_list = sorted(sub_add_list, key=lambda x: x['record_time'], reverse=True)
+        # list_data += sub_add_list
 
     # personal
     if list_type == DocumentLibraryListQuerySerializer.ListTypeChoices.ALL:
@@ -226,6 +226,14 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
                              DocumentLibrary.TaskStatusChoices.PENDING,
                              DocumentLibrary.TaskStatusChoices.QUEUEING,
                              ]
+        ).order_by('-updated_at')
+    elif list_type in [
+        DocumentLibraryListQuerySerializer.ListTypeChoices.ERROR,
+        DocumentLibraryListQuerySerializer.ListTypeChoices.FAILED
+    ]:
+        query_set = DocumentLibrary.objects.filter(
+            user_id=user_id, del_flag=False,
+            task_status=DocumentLibrary.TaskStatusChoices.ERROR
         ).order_by('-updated_at')
     else:
         query_set = DocumentLibrary.objects.filter(
@@ -437,21 +445,23 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
         if search_result:
             all_document_ids = [d['id'] for d in search_result['list']]
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_ARXIV:
-        coll_documents = CollectionDocumentListSerializer.get_collection_documents(user_id, [collection_id], 'arxiv')
+        coll_documents, _, _ = CollectionDocumentListSerializer.get_collection_documents(
+            user_id, [collection_id], 'arxiv')
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_S2:
-        coll_documents = CollectionDocumentListSerializer.get_collection_documents(user_id, [collection_id], 's2')
+        coll_documents, _, _ = CollectionDocumentListSerializer.get_collection_documents(user_id, [collection_id], 's2')
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_DOCUMENT_LIBRARY:
         collection_ids = [collection_id]
         if bot_id:
             collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False).values('collection_id').all()
             collection_ids += [c['collection_id'] for c in collections]
-        coll_documents = CollectionDocumentListSerializer.get_collection_documents(
+        coll_documents, _, _ = CollectionDocumentListSerializer.get_collection_documents(
             user_id, collection_ids, 'document_library')
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_ALL:
-        coll_documents = CollectionDocumentListSerializer.get_collection_documents(user_id, [collection_id], 'all')
+        coll_documents, _, _ = CollectionDocumentListSerializer.get_collection_documents(
+            user_id, [collection_id], 'all')
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     else:
         # get document_ids

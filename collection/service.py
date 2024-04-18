@@ -1,16 +1,15 @@
 import datetime
 import logging
 
-from django.utils.translation import gettext_lazy as _
 from django.db.models import Q
+from django.utils.translation import gettext_lazy as _
 
 from bot.models import BotCollection, BotSubscribe, Bot
 from bot.rag_service import Collection as RagCollection, Conversations as RagConversations
 from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionPublicSerializer, CollectionListSerializer, \
     CollectionRagPublicListSerializer, \
-    CollectionSubscribeSerializer, CollectionDocumentListSerializer
-from core.utils.exceptions import ValidationError
+    CollectionSubscribeSerializer, CollectionDocumentListSerializer, bot_subscribe_personal_document_num
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentApaListSerializer, CollectionDocumentListCollectionSerializer
 from document.service import search_result_from_cache
@@ -125,20 +124,27 @@ def _bot_subscribe_collection_list(user_id):
         bot_id__in=bot_ids, del_flag=False).order_by('bot_id', '-updated_at').all()
     bot_sub_collect = {}
     for bc in bot_collections:
+        bot = bots_dict[bc.bot_id]
         if bc.bot_id not in bot_sub_collect:
             bot_sub_collect[bc.bot_id] = {
                 'id': None,
                 'bot_id': bc.bot_id,
-                'name': bots_dict[bc.bot_id].title,
+                'name': bot.title,
+                'bot_user_id': bot.user_id,
                 'type': Collection.TypeChoices.SUBSCRIBE,
                 'collection_ids': [],
                 'updated_at': bc.updated_at,
                 'total': 0,
             }
+        # 本人专题
         bot_sub_collect[bc.bot_id]['total'] += bc.collection.total_public + bc.collection.total_personal
         bot_sub_collect[bc.bot_id]['updated_at'] = max(
             bot_sub_collect[bc.bot_id]['updated_at'], bc.collection.updated_at)
         bot_sub_collect[bc.bot_id]['collection_ids'].append(bc.collection_id)
+    for bot_id, coll in bot_sub_collect.items():
+        if user_id != coll['bot_user_id']:
+            personal_document_num, _ = bot_subscribe_personal_document_num(coll['bot_user_id'], bot_collections)
+            bot_sub_collect[bot_id]['total'] -= personal_document_num
     # 排序 updated_at 倒序
     list_data = sorted(bot_sub_collect.values(), key=lambda x: x['updated_at'], reverse=True)
     return list_data
@@ -171,14 +177,20 @@ def collection_delete(collection):
 
 def collections_delete(validated_data):
     vd = validated_data
+    # todo  删除关联的专题收藏夹 BotCollection对应的记录
     if vd.get('is_all'):
         query_filter = Q(user_id=vd['user_id'], del_flag=False)
         if vd.get('ids'):
             query_filter &= ~Q(id__in=vd['ids'])
-        effect_num = Collection.objects.filter(query_filter).update(del_flag=True)
+        collections = Collection.objects.filter(query_filter)
+
     else:
-        effect_num = Collection.objects.filter(
-            id__in=vd['ids'], del_flag=False, type=Collection.TypeChoices.PERSONAL).update(del_flag=True)
+        collections = Collection.objects.filter(
+            id__in=vd['ids'], del_flag=False, type=Collection.TypeChoices.PERSONAL)
+    collections_dict = collections.values('id', 'total_public', 'total_personal').all()
+    BotCollection.objects.filter(
+        collection_id__in=[c['id'] for c in collections_dict], del_flag=False).update(del_flag=True)
+    effect_num = collections.update(del_flag=True)
     logger.debug(f"collections_delete effect_num: {effect_num}")
     return effect_num
 
@@ -248,14 +260,20 @@ def collections_docs(validated_data):
                 'id': None,
                 'doc_apa': f"{_('公共库')}: {c.title}"
             })
-    query_set = CollectionDocumentListSerializer.get_collection_documents(
+    query_set, ids1, ids2 = CollectionDocumentListSerializer.get_collection_documents(
         vd['user_id'], collection_ids, vd['list_type'])
 
     total = query_set.count() + public_count
     start_num = page_size * (page_num - 1)
     logger.info(f"limit: [{start_num}: {page_size * page_num}]")
-    c_docs = query_set[start_num:(page_size * page_num - need_public_count)]
-    docs = Document.objects.filter(id__in=[cd['document_id'] for cd in c_docs]).all()
+    # 没有按照titles名称升序排序
+    # c_docs = query_set[start_num:(page_size * page_num - need_public_count)]
+    # docs = Document.objects.filter(id__in=[cd['document_id'] for cd in c_docs]).all()
+    # 按照名称升序排序
+    all_c_docs = query_set.all()
+    docs = Document.objects.filter(id__in=[cd['document_id'] for cd in all_c_docs]).order_by('title')[
+           start_num:(page_size * page_num - need_public_count)
+    ]
 
     if vd['list_type'] == 'all':
         docs_data = DocumentApaListSerializer(docs, many=True).data
@@ -265,8 +283,8 @@ def collections_docs(validated_data):
     else:
         res_data = CollectionDocumentListCollectionSerializer(docs, many=True).data
         if vd['list_type'] == 'all_documents':
-            query_set = CollectionDocumentListSerializer.get_collection_documents(
-                vd['user_id'], collection_ids, 'personal')
+            query_set, doc_lib_document_ids, sub_bot_document_ids = \
+                CollectionDocumentListSerializer.get_collection_documents(vd['user_id'], collection_ids, 'personal')
             document_ids = [cd['document_id'] for cd in query_set.all()]
             for index, d_id in enumerate(res_data):
                 if d_id['id'] in document_ids:
@@ -326,7 +344,7 @@ def collections_create_bot_check(user_id, collection_ids=None, bot_id=None):
     if bot_id:
         collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False).all()
         collection_ids += [c.collection_id for c in collections]
-    query_set = CollectionDocumentListSerializer.get_collection_documents(user_id, collection_ids, 'all')
+    query_set, _, _ = CollectionDocumentListSerializer.get_collection_documents(user_id, collection_ids, 'all')
     document_ids = [cd['document_id'] for cd in query_set.all()]
     filter_query = Q(document_id__in=document_ids, del_flag=False, error__error_code='full_text_missing')
     no_full_text = DocumentLibrary.objects.filter(filter_query).exists()

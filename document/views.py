@@ -73,7 +73,7 @@ class Documents(APIView):
     def get(request, document_id, *args, **kwargs):
         document = Document.objects.filter(id=document_id).first()
         if not document:
-            return my_json_response(code=1, msg=f'document not found by document_id={document_id}')
+            return my_json_response(code=100002, msg=f'document not found by document_id={document_id}')
         document_data = DocumentDetailSerializer(document).data
         document_data['citation_count'] = len(document_data['citations']) if document_data['citations'] else document_data['citation_count']
         document_data['reference_count'] = len(document_data['references']) if document_data['references'] else document_data['reference_count']
@@ -175,11 +175,19 @@ class DocumentsUrl(APIView):
     def get(request, document_id, *args, **kwargs):
         user_id = request.user.id
         document = Document.objects.filter(id=document_id).values(
-            'id', 'object_path', 'collection_id', 'collection_type').first()
+            'id', 'object_path', 'collection_id', 'collection_type', 'ref_doc_id', 'ref_collection_id').first()
         if not document:
             return my_json_response(code=1, msg=f'document not found by document_id={document_id}')
-        if document['collection_type'] == Document.TypeChoices.PERSONAL and document['collection_id'] != user_id:
+        if document['collection_type'] == Document.TypeChoices.PERSONAL:
             url = None
+            if document['ref_doc_id']:
+                if (
+                    document := Document.objects.filter(
+                        doc_id=document['ref_doc_id'], collection_id=document['ref_collection_id']).values(
+                        'id', 'object_path', 'collection_id', 'collection_type', 'ref_doc_id', 'ref_collection_id'
+                    ).first()
+                ):
+                    url = get_url_by_object_path(request.user.id, document['object_path'])
         else:
             url = get_url_by_object_path(request.user.id, document['object_path'])
         return my_json_response({

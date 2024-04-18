@@ -143,9 +143,17 @@ class BotListChatMenuSerializer(BaseModelSerializer):
 class BotDocumentsQuerySerializer(serializers.Serializer):
     list_type = serializers.ChoiceField(
         required=False,
-        choices=['all', 'all_documents', 'arxiv', 's2', 'personal', 'document_library', 'public'],
+        choices=[
+            'all', 'all_documents', 'subscribe_full_text', 'arxiv', 's2', 'personal', 'document_library', 'public'
+        ],
         default='all'
     )
+    bot_id = serializers.CharField(required=False, max_length=36)
     page_num = serializers.IntegerField(required=False, default=1)
     page_size = serializers.IntegerField(required=False, default=10)
+
+    def validate(self, attrs):
+        if attrs.get('list_type') in ['subscribe_full_text', 'all_documents'] and not attrs.get('bot_id'):
+            raise serializers.ValidationError(_('bot_id required'))
+        return attrs
 

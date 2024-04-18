@@ -10,7 +10,8 @@ from bot.serializers import (BotDetailSerializer, BotListAllSerializer, HotBotLi
 from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionDocumentListSerializer
 from core.utils.exceptions import InternalServerError, ValidationError
-from document.models import Document
+from document.base_service import update_document_lib
+from document.models import Document, DocumentLibrary
 from document.serializers import DocumentApaListSerializer, CollectionDocumentListCollectionSerializer
 
 logger = logging.getLogger(__name__)
@@ -142,8 +143,8 @@ def bot_delete(bot_id):
 
 
 # 专题详情
-def bot_detail(user_id, bot_id):
-    bot = Bot.objects.get(pk=bot_id)
+def bot_detail(user_id, bot):
+    # bot = Bot.objects.get(pk=bot_id)
     bot_data = BotDetailSerializer(bot).data
     if is_subscribed(user_id, bot):
         bot_data['subscribed'] = True
@@ -310,7 +311,8 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
             public_collections = [pc for pc in public_collections if pc.id == 'arxiv']
     public_count = len(public_collections)
 
-    query_set = CollectionDocumentListSerializer.get_collection_documents(user_id, collection_ids, list_type)
+    query_set, ids1, ids2 = CollectionDocumentListSerializer.get_collection_documents(
+        user_id, collection_ids, list_type, bot)
     personal_count = query_set.count()
     total = public_count + personal_count
     start_num = page_size * (page_num - 1)
@@ -336,11 +338,15 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
     else:
         if list_type == 'all_documents':
             res_data += CollectionDocumentListCollectionSerializer(docs, many=True).data
-            query_set = CollectionDocumentListSerializer.get_collection_documents(user_id, collection_ids, 'personal')
-            document_ids = [cd['document_id'] for cd in query_set.all()]
+            query_set, doc_lib_document_ids, sub_bot_document_ids = \
+                CollectionDocumentListSerializer.get_collection_documents(
+                    user_id, collection_ids, 'personal&subscribe_full_text', bot)
+            # document_ids = [cd['document_id'] for cd in query_set.all()]
             for index, d_id in enumerate(res_data):
-                if d_id['id'] in document_ids:
+                if d_id['id'] in doc_lib_document_ids:
                     res_data[index]['type'] = 'personal'
+                elif d_id['id'] in sub_bot_document_ids:
+                    res_data[index]['type'] = 'subscribe_full_text'
         else:
             res_data += CollectionDocumentListCollectionSerializer(docs, many=True).data
             for index, d_id in enumerate(res_data):
@@ -363,6 +369,23 @@ def bot_publish(bot_id, action=Bot.TypeChoices.PUBLIC):
         bot.pub_date = datetime.datetime.now()
     else:
         bot.type = Bot.TypeChoices.PERSONAL
+    # 个人文献 下载关联公共库文献
+    bot_collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False)
+    collections = [bc.collection for bc in bot_collections]
+    collection_ids = [c.id for c in collections]
+    query_set, ids1, ids2 = CollectionDocumentListSerializer.get_collection_documents(
+        bot.user_id, collection_ids, 'personal', bot)
+    document_ids = [cd['document_id'] for cd in query_set.all()]
+    documents = Document.objects.filter(id__in=document_ids).all()
+    ref_documents = []
+    for d in documents:
+        ref_document = Document.objects.filter(
+            collection_id=d.ref_collection_id, doc=d.ref_doc_id).values('id').first()
+        if ref_document:
+            ref_documents.append(ref_document['id'])
+    if ref_documents:
+        update_document_lib('0000', ref_documents)
+
     # 本人专题自动订阅
     BotSubscribe.objects.update_or_create(
         user_id=bot.user_id, bot_id=bot_id, defaults={'del_flag': False})

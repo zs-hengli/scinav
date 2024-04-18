@@ -1,6 +1,6 @@
 import logging
 
-from collection.models import Collection
+from collection.models import Collection, CollectionDocument
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentRagCreateSerializer
 from bot.rag_service import Document as RagDocument

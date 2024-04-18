@@ -53,7 +53,9 @@ class Collections(APIView):
 
         user_id = request.user.id
         if collection_id:
-            collection = Collection.objects.get(pk=collection_id, user_id=user_id)
+            collection = Collection.objects.filter(pk=collection_id, user_id=user_id).first()
+            if not collection:
+                return my_json_response(code=100002, msg='collection not found')
 
             data = CollectionDetailSerializer(collection).data
         else:
@@ -125,17 +127,20 @@ class Collections(APIView):
                 return my_json_response({}, code=-1, msg='收藏夹不存在')
             if collection.type == Collection.TypeChoices.PUBLIC:
                 return my_json_response({}, code=-2, msg=_('您无法删除公共库或订阅专题收藏夹，请重新选择。'))
-            collection_delete(collection)
+            # collection_delete(collection)
+            query = {
+                'ids': [collection_id]
+            }
         else:
             query = request.data
-            query['user_id'] = user_id
-            serial = CollectionDeleteQuerySerializer(data=query)
-            if not serial.is_valid():
-                return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
-            query_data = serial.validated_data
-            if not query_data['is_all'] and query_data.get('ids') and has_public_collection(query_data['ids']):
-                return my_json_response({}, code=-2, msg=_('您无法删除公共库或订阅专题收藏夹，请重新选择。'))
-            collections_delete(query_data)
+        query['user_id'] = user_id
+        serial = CollectionDeleteQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
+        query_data = serial.validated_data
+        if not query_data['is_all'] and query_data.get('ids') and has_public_collection(query_data['ids']):
+            return my_json_response({}, code=-2, msg=_('您无法删除公共库或订阅专题收藏夹，请重新选择。'))
+        collections_delete(query_data)
         return my_json_response({})
 
 

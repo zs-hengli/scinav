@@ -47,7 +47,7 @@ class Document(models.Model):
     citations = models.JSONField(null=True)
     references = models.JSONField(null=True)
     state = models.CharField(
-        null=True, blank=True, max_length=32, default=StateChoices.COMPLETED, db_default=StateChoices.COMPLETED)
+        null=True, blank=True, max_length=32, default=StateChoices.UNDONE, db_default=StateChoices.UNDONE)
     object_path = models.CharField(null=True, blank=True, max_length=256)
     source_url = models.CharField(null=True, blank=True, max_length=256)
     checksum = models.CharField(null=True, blank=True, db_index=True, max_length=64)
@@ -60,21 +60,6 @@ class Document(models.Model):
     class Meta:
         db_table = 'document'
         verbose_name = 'document'
-
-
-class IngestDocument(models.Model):
-    id = models.CharField(max_length=36, primary_key=True, default=uuid.uuid4)
-    user = models.ForeignKey(
-        'user.MyUser', db_constraint=False, on_delete=models.DO_NOTHING, null=True, db_column='user_id')
-    url = models.CharField(null=True, blank=True, max_length=256)
-    task_id = models.CharField(null=True, blank=True, max_length=36)
-    task_status = models.CharField(null=True, blank=True, max_length=32, db_index=True)
-    doc_id = models.BigIntegerField(null=True, default=None, db_default=None)
-    collection_type = models.CharField(null=True, blank=True, max_length=32)
-    collection_id = models.CharField(null=True, blank=True, max_length=36)
-    del_flag = models.BooleanField(default=False, db_default=False)
-    updated_at = models.DateTimeField(null=True, auto_now=True)
-    created_at = models.DateTimeField(null=True, auto_now_add=True)
 
 
 class DocumentLibrary(models.Model):
@@ -117,6 +102,10 @@ class DocumentLibraryFolder(models.Model):
     name = models.CharField(null=False, blank=False, max_length=200)
     user = models.ForeignKey(
         'user.MyUser', db_constraint=False, on_delete=models.DO_NOTHING, null=True, db_column='user_id')
+    bot = models.ForeignKey(
+        'bot.Bot', db_constraint=False, on_delete=models.DO_NOTHING, null=True, db_column='bot_id')
+    collection = models.ForeignKey(
+        'collection.Collection', db_constraint=False, on_delete=models.DO_NOTHING, null=True, db_column='collection_id')
     del_flag = models.BooleanField(default=False, db_default=False)
     updated_at = models.DateTimeField(null=True, auto_now=True)
     created_at = models.DateTimeField(null=True, auto_now_add=True)

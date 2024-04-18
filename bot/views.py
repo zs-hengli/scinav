@@ -46,12 +46,16 @@ class Bots(APIView):
     def get(request, bot_id=None, *args, **kwargs):
         user_id = request.user.id
         if bot_id:
-            data = bot_detail(user_id, bot_id)
+            bot = Bot.objects.filter(pk=bot_id).first()
+            if not bot:
+                return my_json_response(code=100002, msg= _('bot not found'))
+            data = bot_detail(user_id, bot)
         else:
             query_data = kwargs['request_data']['GET']
             query_data['user_id'] = user_id
             serial = BotListQuerySerializer(data=query_data)
-            serial.is_valid(raise_exception=True)
+            if not serial.is_valid():
+                return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
             data = get_bot_list(serial.validated_data)
         return my_json_response(data)
 
@@ -116,7 +120,8 @@ class BotDocuments(APIView):
 
     @staticmethod
     def get(request, bot_id, *args, **kwargs):
-        query = request.query_params
+        query = request.query_params.dict()
+        query['bot_id'] = bot_id
         bot = Bot.objects.filter(pk=bot_id).first()
         if not bot:
             return my_json_response({}, code=100002, msg=_('bot_id is illegal'))
