@@ -40,7 +40,7 @@ def reference_doc_to_document(document: Document):
     """
     需注意个人上传文件情况，关联&全文获取标签的文献，自动帮助订阅者下载公共库该文献全文，仅关联标签或无标签个人上传文献，则订阅者无法获取该文献
     """
-    if document.full_text_accessible and document.ref_doc_id and document.ref_collection_id:
+    if document.ref_doc_id and document.ref_collection_id:
         coll = Collection.objects.filter(pk=document.ref_collection_id).first()
         if not coll:
             logger.error(f'reference_to_document_library failed, ref_collection_id: {document.ref_collection_id} not exist')
@@ -50,6 +50,8 @@ def reference_doc_to_document(document: Document):
             'collection_id': document.ref_collection_id,
             'collection_type': coll.type,
         })
+        if not rag_ret.get('full_text_accessible'):
+            rag_ret['full_text_accessible'] = document.full_text_accessible
         document_update_from_rag_ret(rag_ret)
         return True
     else:

@@ -4,6 +4,7 @@ from django.db import models
 from rest_framework import serializers
 from django.utils.translation import gettext_lazy as _
 
+from bot.models import BotCollection
 from chat.models import Conversation, Question
 from collection.models import Collection, CollectionDocument
 from document.models import Document
@@ -39,6 +40,11 @@ class ConversationCreateSerializer(serializers.Serializer):
             attrs['content'] = attrs['question']
         if attrs.get('documents'):
             document_ids = attrs['documents']
+        is_bot = False
+        if attrs.get('bot_id'):
+            is_bot = True
+            collections = BotCollection.objects.filter(bot_id=attrs['bot_id']).values('collection_id').all()
+            attrs['collections'] = [c['collection_id'] for c in collections]
         if attrs.get('collections'):
             collections = Collection.objects.filter(id__in=attrs['collections']).all()
             public_colls = [c.id for c in collections if c.type == Collection.TypeChoices.PUBLIC]
@@ -47,17 +53,17 @@ class ConversationCreateSerializer(serializers.Serializer):
             collection_docs = CollectionDocument.objects.filter(collection_id__in=personal_colls, del_flag=False).all()
             document_ids += [doc.document_id for doc in collection_docs]
             document_ids = list(set(document_ids))
+        attrs['papers_info'] = []
         if document_ids:
-            documents = Document.objects.filter(id__in=document_ids)\
-                .values('id', 'title', 'collection_type', 'collection_id', 'doc_id').all()
-            attrs['document_titles'] = [d['title'] for d in documents if d['id'] in attrs.get('documents', [])]
-            attrs['paper_ids'] = []
-            for d in documents:
-                attrs['paper_ids'].append({
-                    'collection_type': d['collection_type'],
-                    'collection_id': d['collection_id'],
-                    'doc_id': d['doc_id'],
-                })
+            documents = Document.objects.filter(id__in=document_ids).values(
+                'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
+                'ref_collection_id', 'ref_doc_id',
+            ).all()
+            if not is_bot:
+                attrs['document_titles'] = [d['title'] for d in documents if d['id'] in attrs.get('documents', [])]
+            else:
+                attrs['document_titles'] = []
+            attrs['papers_info'] = chat_paper_ids(attrs['user_id'], documents)
         return attrs
 
     @staticmethod
@@ -139,6 +145,11 @@ class ChatQuerySerializer(serializers.Serializer):
         document_ids = []
         if attrs.get('documents'):
             document_ids = attrs['documents']
+        is_bot = False
+        if attrs.get('bot_id'):
+            is_bot = True
+            collections = BotCollection.objects.filter(bot_id=attrs['bot_id']).values('collection_id').all()
+            attrs['collections'] = [c['collection_id'] for c in collections]
         if attrs.get('collections'):
             collections = Collection.objects.filter(id__in=attrs['collections']).all()
             public_colls = [c.id for c in collections if c.type == Collection.TypeChoices.PUBLIC]
@@ -148,16 +159,15 @@ class ChatQuerySerializer(serializers.Serializer):
             document_ids += [doc.document_id for doc in collection_docs]
             document_ids = list(set(document_ids))
         if document_ids:
-            documents = Document.objects.filter(id__in=document_ids)\
-                .values('id', 'title', 'collection_type', 'collection_id', 'doc_id').all()
-            attrs['document_titles'] = [d['title'] for d in documents if d['id'] in attrs.get('documents', [])]
-            attrs['paper_ids'] = []
-            for d in documents:
-                attrs['paper_ids'].append({
-                    'collection_type': d['collection_type'],
-                    'collection_id': d['collection_id'],
-                    'doc_id': d['doc_id'],
-                })
+            documents = Document.objects.filter(id__in=document_ids).values(
+                'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
+                'ref_collection_id', 'ref_doc_id',
+            ).all()
+            if not is_bot:
+                attrs['document_titles'] = [d['title'] for d in documents if d['id'] in attrs.get('documents', [])]
+            else:
+                attrs['document_titles'] = []
+            attrs['papers_info'] = chat_paper_ids(attrs['user_id'], documents)
         return attrs
 
 
@@ -190,3 +200,26 @@ class ConversationsMenuQuerySerializer(serializers.Serializer):
         NO_BOT = 'no_bot', _('not include bot conversation')
 
     list_type = serializers.ChoiceField(required=False, choices=ListTypeChoices, default=ListTypeChoices.ALL)
+
+
+def chat_paper_ids(user_id, documents):
+    ret_data = {}
+    for d in documents:
+        ret_data[d['id']] = {
+            'collection_type': d['collection_type'],
+            'collection_id': d['collection_id'],
+            'doc_id': d['doc_id'],
+            'document_id': d['id'],
+            'full_text_accessible': False
+        }
+        if user_id == d['user_id'] and d['full_text_accessible']:
+            ret_data[d['id']]['full_text_accessible'] = True
+        elif user_id == d['user_id'] and not d['full_text_accessible']:
+            ret_data[d['id']]['full_text_accessible'] = False
+        else:
+            if d['ref_doc_id']:
+                ref_doc = Document.objects.filter(
+                    doc_id=d['ref_doc_id'], collection_id=d['ref_collection_id'], del_flag=False).first()
+                if ref_doc and ref_doc.object_path:
+                    ret_data[d['id']]['full_text_accessible'] = True
+    return list(ret_data.values())

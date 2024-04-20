@@ -75,7 +75,9 @@ class Bots(APIView):
     def put(request, bot_id, *args, **kwargs):
         bot = Bot.objects.filter(pk=bot_id).first()
         if not bot:
-            return my_json_response({}, code=-1, msg='validate bot_id error')
+            return my_json_response({}, code=100002, msg='validate bot_id error')
+        if bot.user_id != request.user.id:
+            return my_json_response({}, code=100003, msg='no permission')
         request_data = request.data
         request_data['user_id'] = request.user.id
         serial = BotCreateSerializer(data=request_data)

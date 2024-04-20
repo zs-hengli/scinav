@@ -37,7 +37,11 @@ def bot_create(body):
             "system_prompt": data['prompt'],
         }
     }
-    collections = Collection.objects.filter(id__in=body['collections']).all()
+    filter_query = (
+        Q(id__in=body['collections'], del_flag=False) &
+        (Q(user_id=body['user_id']) | Q(type=Collection.TypeChoices.PUBLIC))
+    )
+    collections = Collection.objects.filter(filter_query).all()
     bot_subscribe_collections = [c for c in collections if c.bot_id]
     if bot_subscribe_collections:
         raise ValidationError(_('订阅专题收藏夹不能用于创建专题'))
@@ -72,7 +76,7 @@ def _collections_doc_ids(collections: list[Collection]):
     c_docs = CollectionDocument.objects.filter(collection_id__in=_cids).all()
     return [{
         'collection_id': c_doc.document.collection_id,
-        'collection_type': Collection.TypeChoices.PERSONAL,
+        'collection_type': c_doc.document.collection_type,
         'doc_id': c_doc.document.doc_id} for c_doc in c_docs
     ]
 
@@ -328,11 +332,69 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
                 'collection_id': p_c.id,
                 'doc_apa': f"{_('公共库')}: {p_c.title}",
                 'title': f"{_('公共库')}: {p_c.title}",
+                'has_full_text': False,
                 'type': p_c.id,
             })
     if list_type == 'all':
         docs_data = DocumentApaListSerializer(docs, many=True).data
-        for i, d in enumerate(docs_data):
+        data_dict = {d['id']: d for d in docs_data}
+        # todo has_full_text
+        temp_res_data = []
+        for d in docs:
+            temp = None
+            # 本人个人文件库
+            if user_id == bot.user_id and d.object_path:
+                if DocumentLibrary.objects.filter(
+                    document_id=d.id, del_flag=False, user_id=user_id,
+                    task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
+                ).exists() or d.collection_id == user_id:
+                    temp = {
+                        'id': d.id,
+                        'doc_apa': data_dict[d.id]['doc_apa'],
+                        'has_full_text': True,
+                    }
+            elif user_id != bot.user_id:
+                # 公共文献 创建者个人库
+                if d.collection_type == Collection.TypeChoices.PUBLIC and d.object_path:
+                    if DocumentLibrary.objects.filter(
+                        document_id=d.id, filename__isnull=True, del_flag=False, user_id=bot.user_id,
+                        task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
+                    ).exists():
+                        temp = {
+                            'id': d.id,
+                            'doc_apa': data_dict[d.id]['doc_apa'],
+                            'has_full_text': True,
+                        }
+                # 个人文献 关联文献情况
+                elif d.collection_type == Document.TypeChoices.PERSONAL:
+                    if d.ref_doc_id:
+                        ref_document = Document.objects.filter(
+                            doc_id=d.ref_doc_id, collection_id=d.ref_collection_id, del_flag=False).first()
+                        if ref_document:
+                            ref_doc_data = DocumentApaListSerializer(ref_document).data
+                            temp = {
+                                'id': ref_document.id,
+                                'doc_apa': ref_doc_data['doc_apa'],
+                                'has_full_text': True if ref_document.object_path else False,
+                            }
+                # 本人个人库列表
+                if DocumentLibrary.objects.filter(
+                    document_id=d.id, del_flag=False, user_id=user_id,
+                    task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
+                ).exists() and d.object_path:
+                    temp = {
+                        'id': d.id,
+                        'doc_apa': data_dict[d.id]['doc_apa'],
+                        'has_full_text': True,
+                    }
+            if not temp:
+                temp = {
+                    'id': d.id,
+                    'doc_apa': data_dict[d.id]['doc_apa'],
+                    'has_full_text': False,
+                }
+            temp_res_data.append(temp)
+        for i, d in enumerate(temp_res_data):
             d['doc_apa'] = f"[{start_num + i + 1}] {d['doc_apa']}"
             res_data.append(d)
     else:
@@ -343,6 +405,8 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
                     user_id, collection_ids, 'personal&subscribe_full_text', bot)
             # document_ids = [cd['document_id'] for cd in query_set.all()]
             for index, d_id in enumerate(res_data):
+                if not d_id['id']:
+                    continue
                 if d_id['id'] in doc_lib_document_ids:
                     res_data[index]['type'] = 'personal'
                 elif d_id['id'] in sub_bot_document_ids:
@@ -356,7 +420,8 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
         'list': res_data,
         # 个人库库文献 不能在添加到个人库
         'is_all_in_document_library': True if list_type == 'personal' else False,
-        'total': total
+        'total': total,
+        'show_total': personal_count,
     }
 
 

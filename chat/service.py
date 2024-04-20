@@ -6,7 +6,8 @@ from dateutil.relativedelta import relativedelta
 from bot.models import Bot
 from bot.rag_service import Conversations as RagConversation
 from chat.models import Conversation
-from chat.serializers import ConversationCreateSerializer, ConversationDetailSerializer, ConversationListSerializer
+from chat.serializers import ConversationCreateSerializer, ConversationDetailSerializer, ConversationListSerializer, \
+    chat_paper_ids
 from collection.models import Collection, CollectionDocument
 from document.models import DocumentLibrary, Document
 
@@ -18,11 +19,12 @@ def conversation_create(validated_data):
     title = vd['content'][:128] if vd.get('content') else None
     # 判断 chat类型
     chat_type = ConversationCreateSerializer.get_chat_type(validated_data)
+    papers_info = vd['papers_info']
     if chat_type == Conversation.TypeChoices.BOT_COV:
         bot_id = validated_data.get('bot_id')
         bot = Bot.objects.get(pk=bot_id, del_flag=False)
         agent_id = bot.agent_id
-        paper_ids = bot.extension['paper_ids']
+        # paper_ids = bot.extension['paper_ids']
         public_collection_ids = bot.extension['public_collection_ids']
         documents = None
         collections = vd.get('collections')
@@ -51,18 +53,26 @@ def conversation_create(validated_data):
             ))
         CollectionDocument.objects.bulk_create(c_doc_objs)
         agent_id = None
-        paper_ids = vd.get('paper_ids')
+        # paper_ids = vd.get('paper_ids')
         public_collection_ids = vd.get('public_collection_ids')
         documents = vd.get('documents')
         collections = vd.get('collections', []) + [str(collection.id)]
     else:
         agent_id = None
-        paper_ids = vd.get('paper_ids')
+        # paper_ids = vd.get('paper_ids')
         public_collection_ids = vd.get('public_collection_ids')
         documents = vd.get('documents')
         collections = vd.get('collections')
 
     # 创建 Conversation
+    paper_ids = []
+    for p in papers_info:
+        paper_ids.append({
+            'collection_id': p['collection_id'],
+            'collection_type': p['collection_type'],
+            'doc_id': p['doc_id'],
+            'full_text_accessible': p['full_text_accessible']
+        })
     conv = RagConversation.create(
         user_id=vd['user_id'],
         agent_id=agent_id,
@@ -77,7 +87,7 @@ def conversation_create(validated_data):
         documents=documents,
         collections=collections,
         public_collection_ids=conv['public_collection_ids'],
-        paper_ids=conv['paper_ids'],
+        paper_ids=papers_info,
         type=chat_type,
         is_named=title is not None,
         bot_id=vd.get('bot_id'),
@@ -105,21 +115,26 @@ def conversation_update(user_id, conversation_id, validated_data):
             collection_id__in=personal_collection_ids, del_flag=False).all()
         document_ids += [doc.document_id for doc in collection_docs]
         document_ids = list(set(document_ids))
+        papers_info = []
         if document_ids:
             documents = Document.objects.filter(id__in=document_ids).values(
-                'id', 'title', 'collection_type', 'collection_id', 'doc_id').all()
-            for d in documents:
-                paper_ids.append({
-                    'collection_type': d['collection_type'],
-                    'collection_id': d['collection_id'],
-                    'doc_id': d['doc_id'],
-                })
+                'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
+                'ref_collection_id', 'ref_doc_id',
+            ).all()
+            papers_info = chat_paper_ids(user_id, documents)
+        for p in papers_info:
+            paper_ids.append({
+                'collection_id': p['collection_id'],
+                'collection_type': p['collection_type'],
+                'doc_id': p['doc_id'],
+            })
         RagConversation.update(
             conversation_id,
             agent_id=conversation.agent_id,
             paper_ids=paper_ids,
             public_collection_ids=public_collection_ids
         )
+        conversation.paper_ids = papers_info
         conversation.collections = vd['collections']
         conversation.bot_id = None
 

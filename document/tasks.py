@@ -5,7 +5,7 @@ from django.db.models import Q
 
 from bot.rag_service import Document as RagDocument
 from document.base_service import document_update_from_rag_ret, reference_doc_to_document
-from document.models import DocumentLibrary
+from document.models import DocumentLibrary, Document
 
 logger = logging.getLogger('celery')
 
@@ -54,8 +54,8 @@ def async_document_library_task(self, task_id=None):
                 else:
                     i.task_status = task_status
             elif task_status == DocumentLibrary.TaskStatusChoices.ERROR:
-                rag_ret['paper']['status'] = 'completed'
-                document_update_from_rag_ret(rag_ret['paper'])
+                if i.document_id:
+                    Document.objects.filter(pk=i.document_id).update(state='error')
                 i.task_status = task_status
                 i.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message']}
             else:  # COMPLETED
@@ -66,3 +66,22 @@ def async_document_library_task(self, task_id=None):
                 i.document = document
             i.save()
     return True
+
+
+# @shared_task(bind=True)
+# def async_update_document(self, documents, rag_data):
+#     documents = Document.objects.filter(pk__in=documents).all()
+#     logger.info(f'xxxx async_update_document, {len(rag_data)}')
+#     for i, d in enumerate(documents):
+#         data = rag_data.get(f"{d.doc_id}_{d.collection_id}_{d.collection_type}")
+#         if not data: continue
+#         fileds = [
+#             'doc_id', 'collection_type', 'collection_id', 'title', 'abstract', 'authors', 'doi', 'categories',
+#             'year', 'pub_date', 'pub_type', 'venue', 'journal', 'conference', 'keywords', 'full_text_accessible',
+#             'pages', 'citation_count', 'reference_count', 'object_path', 'source_url', 'checksum',
+#             'ref_collection_id', 'ref_doc_id',
+#         ]
+#         for f in fileds:
+#             setattr(documents[i], f, data[f])
+#         Document.objects.bulk_update(documents, fileds)
+#     return True

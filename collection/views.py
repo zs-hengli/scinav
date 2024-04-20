@@ -161,7 +161,7 @@ class CollectionDocuments(APIView):
         serial = CollectionDocumentListQuerySerializer(data=query)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
-        data = collections_docs(serial.validated_data)
+        data = collections_docs(request.user.id, serial.validated_data)
         return my_json_response(data)
 
     @staticmethod

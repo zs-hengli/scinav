@@ -36,6 +36,24 @@ class DocumentApaListSerializer(serializers.ModelSerializer):
         fields = ['id', 'doc_apa']
 
 
+class DocumentApcReadListSerializer(serializers.ModelSerializer):
+    doc_apa = serializers.SerializerMethodField()
+
+    @staticmethod
+    def get_doc_apa(obj: Document):
+        # 作者1,作者2;标题.期刊 时间
+        authors = ','.join(obj.authors)
+        title = obj.title
+        year = obj.year
+        source = obj.journal if obj.journal else obj.conference if obj.conference else ''
+        return f'{authors};{title}.{source} {year}'  # noqa
+
+    class Meta:
+        model = Document
+        fields = ['id', 'doc_apa', 'full_text_accessible', 'object_path', 'ref_collection_id', 'ref_doc_id']
+
+
+
 class CollectionDocumentListCollectionSerializer(serializers.ModelSerializer):
     doc_apa = serializers.SerializerMethodField()
     type = serializers.SerializerMethodField()
@@ -99,7 +117,7 @@ class DocumentRagCreateSerializer(BaseModelSerializer):
     collection_id = serializers.CharField(required=True, allow_null=False)
     title = serializers.CharField(required=True, allow_null=True, allow_blank=True)
     abstract = serializers.CharField(required=True, allow_null=True, allow_blank=True)
-    authors = serializers.ListField(required=True, child=serializers.CharField(allow_blank=False), allow_null=True)
+    authors = serializers.ListField(required=True, child=serializers.CharField(allow_blank=True), allow_null=True)
     doi = serializers.CharField(required=True, allow_null=True)
     categories = serializers.JSONField(required=True, allow_null=True)
     pages = serializers.IntegerField(required=False, allow_null=True, default=None)
@@ -146,7 +164,13 @@ class DocumentDetailSerializer(BaseModelSerializer):
 
     @staticmethod
     def get_citations(obj: Document):
-        citations = RagDocument.citations(obj.collection_type, obj.collection_id, obj.doc_id)
+        if obj.collection_type == Document.TypeChoices.PERSONAL:
+            if obj.ref_doc_id:
+                citations = RagDocument.citations('public', obj.ref_collection_id, obj.ref_doc_id)
+            else:
+                citations = []
+        else:
+            citations = RagDocument.citations(obj.collection_type, obj.collection_id, obj.doc_id)
         if citations:
             ret_data = []
             for i, c in enumerate(citations):
@@ -164,7 +188,13 @@ class DocumentDetailSerializer(BaseModelSerializer):
 
     @staticmethod
     def get_references(obj: Document):
-        references = RagDocument.references(obj.collection_type, obj.collection_id, obj.doc_id)
+        if obj.collection_type == Document.TypeChoices.PERSONAL:
+            if obj.ref_doc_id:
+                references = RagDocument.references('public', obj.ref_collection_id, obj.ref_doc_id)
+            else:
+                references = []
+        else:
+            references = RagDocument.references(obj.collection_type, obj.collection_id, obj.doc_id)
         if references:
             ret_data = []
             for i, r in enumerate(references):
@@ -232,6 +262,7 @@ class DocLibAddQuerySerializer(serializers.Serializer):
     class AddTypeChoices(models.TextChoices):
         COLLECTION_ARXIV = 'collection_arxiv'
         COLLECTION_S2 = 'collection_s2'
+        COLLECTION_SUBSCRIBE_FULL_TEXT = 'collection_subscribe_full_text'
         COLLECTION_DOCUMENT_LIBRARY = 'collection_document_library'
         COLLECTION_ALL = 'collection_all'
         DOCUMENT_SEARCH = 'document_search'
@@ -256,6 +287,13 @@ class DocLibAddQuerySerializer(serializers.Serializer):
             and not attrs.get('bot_id') and not attrs.get('search_content')
         ):
             raise serializers.ValidationError('collection_id or bot_id or search_content is required')
+
+        if (
+            attrs.get('add_type') == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_SUBSCRIBE_FULL_TEXT
+            and not attrs.get('bot_id')
+        ):
+            raise serializers.ValidationError('bot_id is required')
+
         return attrs
 
 

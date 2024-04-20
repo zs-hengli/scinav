@@ -335,11 +335,10 @@ class CollectionDocumentListSerializer(serializers.Serializer):
             if bot_user == user_id:
                 bot_document_ids = document_ids
             else:
-                bot_document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(bot_user)
+                bot_document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(bot_user, is_self=False)
             filter_query = (
                 ~Q(document_id__in=document_ids)
-                & Q(document_id__in=bot_document_ids)
-                & Q(collection_id__in=collection_ids, del_flag=False)
+                & Q(document_id__in=bot_document_ids, collection_id__in=collection_ids, del_flag=False)
             )
             query_set = CollectionDocument.objects.filter(
                 filter_query).values('document_id').order_by('document_id').distinct()
@@ -349,7 +348,7 @@ class CollectionDocumentListSerializer(serializers.Serializer):
             if bot_user == user_id:
                 sub_bot_document_ids = doc_lib_document_ids
             else:
-                sub_bot_document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(bot_user)
+                sub_bot_document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(bot_user, False)
             all_document_ids = doc_lib_document_ids + sub_bot_document_ids
             filter_query = (
                 Q(document_id__in=all_document_ids)
@@ -369,7 +368,7 @@ class CollectionDocumentListSerializer(serializers.Serializer):
         return query_set, doc_lib_document_ids, sub_bot_document_ids
 
     @staticmethod
-    def _my_doc_lib_document_ids(user_id):
+    def _my_doc_lib_document_ids(user_id, is_self=True):
         """
         个人文件库 排队中 入库中 入库完成
         """
@@ -378,8 +377,13 @@ class CollectionDocumentListSerializer(serializers.Serializer):
             DocumentLibrary.TaskStatusChoices.PENDING,
             DocumentLibrary.TaskStatusChoices.QUEUEING,
         ]).values('document_id').all()
-        my_documents = Document.objects.filter(collection_id=user_id).values('id').all()
-        return [d['document_id'] for d in doc_libs] + [d['id'] for d in my_documents]
+        # 个人上传文献在Document里面
+        if not is_self:
+            filter_query = Q(collection_id=user_id, del_flag=False) & ~Q(ref_doc_id=0)
+        else:
+            filter_query = Q(collection_id=user_id, del_flag=False)
+        my_documents = Document.objects.filter(filter_query).values('id').all()
+        return [d['document_id'] for d in doc_libs if d['document_id']] + [d['id'] for d in my_documents]
 
 
 class CollectionCheckQuerySerializer(serializers.Serializer):
@@ -424,3 +428,68 @@ def bot_subscribe_personal_document_num(bot_user_id, bot_collections=None, bot_i
         & set([pd['document_id'] for pd in personal_not_ref_doc_lib] + [pd['id'] for pd in personal_documents])
     )
     return len(document_set), list(document_set)
+
+
+def bot_subscribe_personal_documents(bot_user_id, bot_collections=None, bot_ids=None):
+    """
+    订阅专题 包括的文献列表 个人上传文献没有关联id的记录个数
+    """
+    if bot_ids:
+        bot_collections = BotCollection.objects.filter(
+            bot_id__in=bot_ids, del_flag=False).order_by('bot_id', '-updated_at').all()
+    collection_ids = [bc.collection_id for bc in bot_collections]
+    coll_documents = CollectionDocument.objects.filter(
+        collection_id__in=collection_ids, del_flag=False).values('document_id').all()
+
+    # no full_text_accessible
+    dl_personal_no_full_text = DocumentLibrary.objects.filter(
+        user_id=bot_user_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.COMPLETED,
+        document__full_text_accessible=None, filename__isnull=False
+    ).values('document_id').distinct('document_id')
+    dl_personal_no_full_text = Document.objects.filter(
+        collection_id=bot_user_id, collection_type=Document.TypeChoices.PERSONAL,
+        full_text_accessible=None).values('id').all()
+    no_full_text_set = (
+        set([cd['document_id'] for cd in coll_documents])
+        & set([pd['id'] for pd in dl_personal_no_full_text] + [pd['id'] for pd in dl_personal_no_full_text])
+    )
+
+    # no ref_doc_id
+    dl_personal_not_ref_doc = DocumentLibrary.objects.filter(
+        user_id=bot_user_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.COMPLETED,
+        document__ref_doc_id=0, filename__isnull=False
+    ).values('document_id').distinct('document_id')
+    d_personal_not_ref_doc = Document.objects.filter(
+        collection_id=bot_user_id, collection_type=Document.TypeChoices.PERSONAL,
+        ref_doc_id=0).values('id').all()
+    not_ref_doc_set = (
+        set([cd['document_id'] for cd in coll_documents])
+        & set([pd['document_id'] for pd in dl_personal_not_ref_doc] + [pd['id'] for pd in d_personal_not_ref_doc])
+    )
+
+    # ref_doc_id
+    dl_ref_docs = DocumentLibrary.objects.filter(
+        user_id=bot_user_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.COMPLETED,
+        document__ref_doc_id=0, filename__isnull=False
+    ).values('document__ref_doc_id', 'document__ref_collection_id').all()
+    d_ref_docs = Document.objects.filter(
+        collection_id=bot_user_id, collection_type=Document.TypeChoices.PERSONAL,
+        ref_doc_id__gt=0).values('ref_doc_id', 'ref_collection_id').all()
+    filter_query = None
+    for dl_r in dl_ref_docs:
+        if not filter_query:
+            filter_query = Q(
+                ref_doc_id=dl_r['document__ref_doc_id'], ref_collection_id=dl_r['document__ref_collection_id'])
+        else:
+            filter_query |= Q(
+                ref_doc_id=dl_r['document__ref_doc_id'], ref_collection_id=dl_r['document__ref_collection_id'])
+    for d_r in d_ref_docs:
+        if not filter_query:
+            filter_query = Q(ref_doc_id=d_r['ref_doc_id'], ref_collection_id=d_r['ref_collection_id'])
+        else:
+            filter_query |= Q(ref_doc_id=d_r['ref_doc_id'], ref_collection_id=d_r['ref_collection_id'])
+    if filter_query:
+        ref_doc = Document.objects.filter(filter_query).values('id').all()
+        ref_doc_set = set([r['id'] for r in ref_doc])
+
+    return len(not_ref_doc_set), list(not_ref_doc_set)

@@ -1,4 +1,5 @@
 import copy
+import uuid
 import json
 import logging
 
@@ -92,6 +93,12 @@ def search(user_id, content, page_size=10, page_num=1, topn=100):
 
     rag_ret = Rag_Document.search(user_id, content, limit=topn)
     ret_data = []
+    rag_collections = list(set([r['collection_id'] for r in rag_ret]))
+    rag_data_dict = {f"{r['doc_id']}_{r['collection_id']}_{r['collection_type']}": r for r in rag_ret}
+    create_data = []
+    update_data = []
+    collections = Collection.objects.filter(id__in=rag_collections).values('id', 'title').all()
+    collections_dict = {c['id']: c for c in collections}
     for doc in rag_ret:
         data = {
             'doc_id': doc['doc_id'],
@@ -122,32 +129,43 @@ def search(user_id, content, page_size=10, page_num=1, topn=100):
             'state': (Document.StateChoices.COMPLETED
                       if doc['collection_id'] == 'arxiv' else Document.StateChoices.UNDONE)
         }
+        # doc = Document.objects.filter(
+        #     doc_id=data['doc_id'], collection_id=data['collection_id'], collection_type=data['collection_type']
+        # ).first()
+        # if doc:
+        #     data['id'] = str(doc.id)
+        #     update_data.append(doc)
+        # else:
+        #     data['id'] = str(uuid.uuid4())
+        #     create_data.append(data)
+
         create_data = copy.deepcopy(data)
-        del_empty_fields = ['object_path', 'source_url', 'checksum', 'full_text_accessible']
-        for df in del_empty_fields:
-            if not data[df]: del create_data[df]
         models_query.MAX_GET_RESULTS = 1
         doc, _ = Document.objects.update_or_create(
             defaults=create_data,
-            create_defaults=data,
             doc_id=data['doc_id'], collection_id=data['collection_id'], collection_type=data['collection_type'])
         logger.debug(f'update_ret: {doc}')
-        if not Collection.objects.filter(id=doc.collection_id).exists():
-            collection_title = doc.collection_id
+        data['id'] = str(doc.id)
+
+        if collections_dict.get(data['collection_id']):
+            collection_title = collections_dict[data['collection_id']]['title']
         else:
-            collection_title = doc.collection.title
+            collection_title = '个人库'
+        type_pub = Collection.TypeChoices.PUBLIC
+        collection_tag = data['collection_id'] if data['collection_type'] == type_pub else data['collection_type']
         ret_data.append({
-            'id': str(doc.id),
-            'title': doc.title,
-            'abstract': doc.abstract,
-            'authors': doc.authors,
-            'pub_date': doc.pub_date,
-            'citation_count': doc.citation_count,
-            'reference_count': doc.reference_count,
-            'collection_id': str(doc.collection_id),
+            'id': data['id'],
+            'title': data['title'],
+            'abstract': data['abstract'],
+            'authors': data['authors'],
+            'pub_date': data['pub_date'],
+            'citation_count': data['citation_count'],
+            'reference_count': data['reference_count'],
+            'collection_id': str(data['collection_id']),
+            'type': collection_tag,
             'collection_title': collection_title,
-            'source': doc.journal if doc.journal else doc.conference if doc.conference else '',
-            'reference_formats': get_reference_formats(DocumentRagGetSerializer(doc).data),
+            'source': data['journal'] if data['journal'] else data['conference'] if data['conference'] else '',
+            'reference_formats': get_reference_formats(DocumentRagGetSerializer(data).data),
         })
     search_result_save_cache(content, ret_data)
     total = len(ret_data)
@@ -378,7 +396,7 @@ def import_one_document(collection_id, collection_type, doc_id):
 
 def update_exist_documents():
     page_size = 200
-    page_num = 9
+    page_num = 15
     documents = Document.objects.filter(del_flag=False).values(
         'collection_type', 'doc_id', 'collection_id').order_by(
         'updated_at')[page_size*(page_num-1):page_size*page_num]
@@ -450,6 +468,11 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_S2:
         coll_documents, _, _ = CollectionDocumentListSerializer.get_collection_documents(user_id, [collection_id], 's2')
+        all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
+    elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_SUBSCRIBE_FULL_TEXT:
+        bot = Bot.objects.filter(id=bot_id).first()
+        coll_documents, _, _ = CollectionDocumentListSerializer.get_collection_documents(
+            user_id, [collection_id], 'subscribe_full_text', bot)
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_DOCUMENT_LIBRARY:
         collection_ids = [collection_id]

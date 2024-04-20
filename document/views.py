@@ -16,7 +16,7 @@ from document.serializers import DocumentDetailSerializer, GenPresignedUrlQueryS
     DocLibAddQuerySerializer, DocLibDeleteQuerySerializer, DocLibCheckQuerySerializer, DocumentRagCreateSerializer
 from document.service import search, documents_update_from_rag, presigned_url, document_personal_upload, \
     get_document_library_list, document_library_add, document_library_delete, doc_lib_batch_operation_check, \
-    get_url_by_object_path, get_reference_formats
+    get_url_by_object_path, get_reference_formats, update_exist_documents
 
 logger = logging.getLogger(__name__)
 
@@ -178,18 +178,17 @@ class DocumentsUrl(APIView):
             'id', 'object_path', 'collection_id', 'collection_type', 'ref_doc_id', 'ref_collection_id').first()
         if not document:
             return my_json_response(code=1, msg=f'document not found by document_id={document_id}')
-        if document['collection_type'] == Document.TypeChoices.PERSONAL:
+        if document['collection_type'] == Document.TypeChoices.PERSONAL and user_id != document['collection_id']:
             url = None
             if document['ref_doc_id']:
                 if (
-                    document := Document.objects.filter(
-                        doc_id=document['ref_doc_id'], collection_id=document['ref_collection_id']).values(
-                        'id', 'object_path', 'collection_id', 'collection_type', 'ref_doc_id', 'ref_collection_id'
-                    ).first()
+                    ref_document := Document.objects.filter(
+                        doc_id=document['ref_doc_id'], collection_id=document['ref_collection_id']
+                    ).values('id', 'object_path').first()
                 ):
-                    url = get_url_by_object_path(request.user.id, document['object_path'])
+                    url = get_url_by_object_path(user_id, ref_document['object_path'])
         else:
-            url = get_url_by_object_path(request.user.id, document['object_path'])
+            url = get_url_by_object_path(user_id, document['object_path'])
         return my_json_response({
             'id': document['id'],
             'url': url
@@ -203,7 +202,7 @@ class DocumentsRagUpdate(APIView):
     def get(request, *args, **kwargs):
         data = {}
         # data = import_documents_from_json()
-        # update_exist_documents()
+        update_exist_documents()
         return my_json_response(data)
 
     @staticmethod

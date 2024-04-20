@@ -104,15 +104,21 @@ def _is_collection_docs_all_in_document_library(collection_id, user_id):
     doc_libs = CollectionDocument.objects.filter(collection_id=collection_id, del_flag=False).values(
         'document_id').distinct('document_id').all()
     doc_ids = [d['document_id'] for d in doc_libs]
-    coll_doc_num = DocumentLibrary.objects.filter(
+    coll_document_libs = DocumentLibrary.objects.filter(
         del_flag=False, user_id=user_id, document_id__in=doc_ids,
         task_status__in=[
             DocumentLibrary.TaskStatusChoices.COMPLETED,
             DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
             DocumentLibrary.TaskStatusChoices.PENDING,
         ]
-    ).values('document_id').distinct('document_id').count()
-    return len(doc_ids) == coll_doc_num
+    ).values('document_id').distinct('document_id')
+    coll_documents = [d['document_id'] for d in coll_document_libs]
+    dif_docs = set(doc_ids) - set(coll_documents)
+    if dif_docs:
+        d_dif_count = Document.objects.filter(id__in=dif_docs, collection_id=user_id).count()
+        return len(dif_docs) == d_dif_count
+    else:
+        return True
 
 
 def _bot_subscribe_collection_list(user_id):
@@ -244,7 +250,7 @@ def collection_docs(collection_id, page_size=10, page_num=1):
     return {}
 
 
-def collections_docs(validated_data):
+def collections_docs(user_id, validated_data):
     vd = validated_data
     collection_ids = vd['collection_ids']
     page_size = vd['page_size']
@@ -258,12 +264,13 @@ def collections_docs(validated_data):
         for c in public_collections:
             res_data.append({
                 'id': None,
-                'doc_apa': f"{_('公共库')}: {c.title}"
+                'doc_apa': f"{_('公共库')}: {c.title}",
+                'has_full_text': False,
             })
     query_set, ids1, ids2 = CollectionDocumentListSerializer.get_collection_documents(
         vd['user_id'], collection_ids, vd['list_type'])
-
-    total = query_set.count() + public_count
+    query_total = query_set.count()
+    total = query_total + public_count
     start_num = page_size * (page_num - 1)
     logger.info(f"limit: [{start_num}: {page_size * page_num}]")
     # 没有按照titles名称升序排序
@@ -277,7 +284,34 @@ def collections_docs(validated_data):
 
     if vd['list_type'] == 'all':
         docs_data = DocumentApaListSerializer(docs, many=True).data
-        for i, d in enumerate(docs_data):
+        data_dict = {d['id']: d for d in docs_data}
+        temp_res_data = []
+        for d in docs:
+            temp = None
+            # 本人个人库列表
+            if (
+                (
+                    DocumentLibrary.objects.filter(
+                        document_id=d.id, del_flag=False, user_id=user_id,
+                        task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
+                    ).exists()
+                    or d.collection_id == user_id)
+                and d.object_path
+            ):
+                temp = {
+                    'id': d.id,
+                    'doc_apa': data_dict[d.id]['doc_apa'],
+                    'has_full_text': True,
+                }
+
+            if not temp:
+                temp = {
+                    'id': d.id,
+                    'doc_apa': data_dict[d.id]['doc_apa'],
+                    'has_full_text': False,
+                }
+            temp_res_data.append(temp)
+        for i, d in enumerate(temp_res_data):
             d['doc_apa'] = f"[{start_num + i + 1}] {d['doc_apa']}"
             res_data.append(d)
     else:
@@ -296,7 +330,8 @@ def collections_docs(validated_data):
         'list': res_data,
         # 个人库库文献 不能在添加到个人库
         'is_all_in_document_library': True if vd['list_type'] == 'personal' else False,
-        'total': total
+        'total': total,
+        'show_total': query_total,
     }
 
 
@@ -346,13 +381,34 @@ def collections_create_bot_check(user_id, collection_ids=None, bot_id=None):
         collection_ids += [c.collection_id for c in collections]
     query_set, _, _ = CollectionDocumentListSerializer.get_collection_documents(user_id, collection_ids, 'all')
     document_ids = [cd['document_id'] for cd in query_set.all()]
-    filter_query = Q(document_id__in=document_ids, del_flag=False, error__error_code='full_text_missing')
-    no_full_text = DocumentLibrary.objects.filter(filter_query).exists()
-
-    if no_full_text:
+    # 是否有关联文献
+    filter_query = Q(document_id__in=document_ids, del_flag=False, user_id=user_id,
+                     task_status=DocumentLibrary.TaskStatusChoices.COMPLETED,
+                     filename__isnull=False)
+    person_doc_lib = DocumentLibrary.objects.filter(filter_query).all()
+    personal_doc = Document.objects.filter(
+        collection_id=user_id, del_flag=False, id__in=document_ids,
+        collection_type=Document.TypeChoices.PERSONAL
+    ).values('id').all()
+    all_person_doc_ids = [pd['id'] for pd in personal_doc] + [pd.document_id for pd in person_doc_lib]
+    personal_docs = Document.objects.filter(id__in=all_person_doc_ids)
+    if not personal_docs:
+        return 0, ''
+    ref_docs = [[pd.ref_doc_id, pd.ref_collection_id] for pd in personal_docs.all() if pd.ref_doc_id]
+    # 包含未关联到公共库或公共库中无法获取全文的个人上传文件
+    if personal_docs.count() != len(ref_docs):
         return 110005, '您当前专题中包含未关联到公共库或公共库中无法获取全文的个人上传文件，订阅该专题的其他用户将无法针对该文献进行智能对话或智能对话中部分功能无法使用。'
     else:
-        return 0, ''
+        # 关联文献是否有全文
+        filter_query = None
+        for rd in ref_docs:
+            if not filter_query:
+                filter_query = Q(doc_id=rd[0], collection_id=rd[1], full_text_accessible=None)
+            else:
+                filter_query |= Q(doc_id=rd[0], collection_id=rd[1], full_text_accessible=None)
+        if Document.objects.filter(filter_query).exists():
+            return 110005, '您当前专题中包含未关联到公共库或公共库中无法获取全文的个人上传文件，订阅该专题的其他用户将无法针对该文献进行智能对话或智能对话中部分功能无法使用。'
+    return 0, ''
 
 
 def collections_published_bot_titles(collection_ids):
