@@ -149,8 +149,8 @@ def _bot_subscribe_collection_list(user_id):
         bot_sub_collect[bc.bot_id]['collection_ids'].append(bc.collection_id)
     for bot_id, coll in bot_sub_collect.items():
         if user_id != coll['bot_user_id']:
-            personal_document_num, _ = bot_subscribe_personal_document_num(coll['bot_user_id'], bot_collections)
-            bot_sub_collect[bot_id]['total'] -= personal_document_num
+            personal_documents, ref_documents = bot_subscribe_personal_document_num(coll['bot_user_id'], bot_id=bot_id)
+            bot_sub_collect[bot_id]['total'] -= len(personal_documents) - len(ref_documents)
     # 排序 updated_at 倒序
     list_data = sorted(bot_sub_collect.values(), key=lambda x: x['updated_at'], reverse=True)
     return list_data
@@ -267,7 +267,7 @@ def collections_docs(user_id, validated_data):
                 'doc_apa': f"{_('公共库')}: {c.title}",
                 'has_full_text': False,
             })
-    query_set, ids1, ids2 = CollectionDocumentListSerializer.get_collection_documents(
+    query_set, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
         vd['user_id'], collection_ids, vd['list_type'])
     query_total = query_set.count()
     total = query_total + public_count
@@ -317,7 +317,7 @@ def collections_docs(user_id, validated_data):
     else:
         res_data = CollectionDocumentListCollectionSerializer(docs, many=True).data
         if vd['list_type'] == 'all_documents':
-            query_set, doc_lib_document_ids, sub_bot_document_ids = \
+            query_set, doc_lib_document_ids, sub_bot_document_ids, ref_documents = \
                 CollectionDocumentListSerializer.get_collection_documents(vd['user_id'], collection_ids, 'personal')
             document_ids = [cd['document_id'] for cd in query_set.all()]
             for index, d_id in enumerate(res_data):
@@ -379,7 +379,7 @@ def collections_create_bot_check(user_id, collection_ids=None, bot_id=None):
     if bot_id:
         collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False).all()
         collection_ids += [c.collection_id for c in collections]
-    query_set, _, _ = CollectionDocumentListSerializer.get_collection_documents(user_id, collection_ids, 'all')
+    query_set, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(user_id, collection_ids, 'all')
     document_ids = [cd['document_id'] for cd in query_set.all()]
     # 是否有关联文献
     filter_query = Q(document_id__in=document_ids, del_flag=False, user_id=user_id,

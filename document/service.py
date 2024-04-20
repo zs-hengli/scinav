@@ -463,15 +463,15 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
         if search_result:
             all_document_ids = [d['id'] for d in search_result['list']]
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_ARXIV:
-        coll_documents, _, _ = CollectionDocumentListSerializer.get_collection_documents(
+        coll_documents, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
             user_id, [collection_id], 'arxiv')
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_S2:
-        coll_documents, _, _ = CollectionDocumentListSerializer.get_collection_documents(user_id, [collection_id], 's2')
+        coll_documents, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(user_id, [collection_id], 's2')
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_SUBSCRIBE_FULL_TEXT:
         bot = Bot.objects.filter(id=bot_id).first()
-        coll_documents, _, _ = CollectionDocumentListSerializer.get_collection_documents(
+        coll_documents, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
             user_id, [collection_id], 'subscribe_full_text', bot)
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_DOCUMENT_LIBRARY:
@@ -479,11 +479,11 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
         if bot_id:
             collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False).values('collection_id').all()
             collection_ids += [c['collection_id'] for c in collections]
-        coll_documents, _, _ = CollectionDocumentListSerializer.get_collection_documents(
+        coll_documents, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
             user_id, collection_ids, 'document_library')
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_ALL:
-        coll_documents, _, _ = CollectionDocumentListSerializer.get_collection_documents(
+        coll_documents, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
             user_id, [collection_id], 'all')
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     else:

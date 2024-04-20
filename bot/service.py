@@ -300,7 +300,7 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
     collection_ids = [c.id for c in collections]
     # query_set = CollectionDocument.objects.filter(
     #     collection_id__in=collection_ids).distinct().values('document_id').order_by('document_id')
-    public_count, need_public_count, personal_count, public_collections = 0, 0, 0, []
+    public_count, need_public, need_public_count, personal_count, public_collections = 0, False, 0, 0, []
     public_collections = Collection.objects.filter(id__in=collection_ids, type=Collection.TypeChoices.PUBLIC).all()
     public_collection_ids = [c.id for c in public_collections]
     if page_num == 1 and list_type in ['all', 'all_documents']:
@@ -313,19 +313,29 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
         if 'arxiv' in public_collection_ids:
             need_public_count = 1
             public_collections = [pc for pc in public_collections if pc.id == 'arxiv']
+    if page_num == 1 and list_type in ['all', 'all_documents', 's2', 'arxiv']:
+        need_public = True
     public_count = len(public_collections)
 
-    query_set, ids1, ids2 = CollectionDocumentListSerializer.get_collection_documents(
+    query_set, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
         user_id, collection_ids, list_type, bot)
+    start_num = page_size * (page_num - 1)
+    doc_ids = []
+
+    if d3 and list_type in ['all', 'all_documents', 'subscribe_full_text']:
+        doc_ids = d3[start_num:(page_size * page_num - need_public_count)]
+        need_public_count += len(doc_ids)
+        public_count += len(d3)
     personal_count = query_set.count()
     total = public_count + personal_count
-    start_num = page_size * (page_num - 1)
     logger.info(f"limit: [{start_num}: {page_size * page_num}]")
-    c_docs = query_set[start_num:(page_size * page_num - need_public_count)] if total > start_num else []
-    docs = Document.objects.filter(id__in=[cd['document_id'] for cd in c_docs]).all()
+    if page_size * page_num > public_count:
+        c_docs = query_set[start_num:(page_size * page_num - need_public_count)] if total > start_num else []
+        doc_ids += [cd['document_id'] for cd in c_docs]
+    docs = Document.objects.filter(id__in=doc_ids).all()
     # docs = [cd.document for cd in c_docs]
     res_data = []
-    if list_type in ['all', 'all_documents', 's2', 'arxiv'] and public_collections and need_public_count:
+    if list_type in ['all', 'all_documents', 's2', 'arxiv'] and public_collections and need_public:
         for p_c in public_collections:
             res_data.append({
                 'id': None,
@@ -339,68 +349,20 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
         docs_data = DocumentApaListSerializer(docs, many=True).data
         data_dict = {d['id']: d for d in docs_data}
         # todo has_full_text
-        temp_res_data = []
-        for d in docs:
-            temp = None
-            # 本人个人文件库
-            if user_id == bot.user_id and d.object_path:
-                if DocumentLibrary.objects.filter(
-                    document_id=d.id, del_flag=False, user_id=user_id,
-                    task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
-                ).exists() or d.collection_id == user_id:
-                    temp = {
-                        'id': d.id,
-                        'doc_apa': data_dict[d.id]['doc_apa'],
-                        'has_full_text': True,
-                    }
-            elif user_id != bot.user_id:
-                # 公共文献 创建者个人库
-                if d.collection_type == Collection.TypeChoices.PUBLIC and d.object_path:
-                    if DocumentLibrary.objects.filter(
-                        document_id=d.id, filename__isnull=True, del_flag=False, user_id=bot.user_id,
-                        task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
-                    ).exists():
-                        temp = {
-                            'id': d.id,
-                            'doc_apa': data_dict[d.id]['doc_apa'],
-                            'has_full_text': True,
-                        }
-                # 个人文献 关联文献情况
-                elif d.collection_type == Document.TypeChoices.PERSONAL:
-                    if d.ref_doc_id:
-                        ref_document = Document.objects.filter(
-                            doc_id=d.ref_doc_id, collection_id=d.ref_collection_id, del_flag=False).first()
-                        if ref_document:
-                            ref_doc_data = DocumentApaListSerializer(ref_document).data
-                            temp = {
-                                'id': ref_document.id,
-                                'doc_apa': ref_doc_data['doc_apa'],
-                                'has_full_text': True if ref_document.object_path else False,
-                            }
-                # 本人个人库列表
-                if DocumentLibrary.objects.filter(
-                    document_id=d.id, del_flag=False, user_id=user_id,
-                    task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
-                ).exists() and d.object_path:
-                    temp = {
-                        'id': d.id,
-                        'doc_apa': data_dict[d.id]['doc_apa'],
-                        'has_full_text': True,
-                    }
-            if not temp:
-                temp = {
-                    'id': d.id,
-                    'doc_apa': data_dict[d.id]['doc_apa'],
-                    'has_full_text': False,
-                }
-            temp_res_data.append(temp)
-        for i, d in enumerate(temp_res_data):
-            d['doc_apa'] = f"[{start_num + i + 1}] {d['doc_apa']}"
-            res_data.append(d)
+        query_set, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
+            user_id, collection_ids, 'personal&subscribe_full_text', bot)
+        all_full_text_docs = [d['document_id'] for d in query_set.all()]
+
+        for doc in docs:
+            res_data.append({
+                'id': doc.id,
+                'doc_apa': data_dict[doc.id]['doc_apa'],
+                'has_full_text': True if doc.id in all_full_text_docs or (doc.id in d3 and doc.object_path) else False,
+            })
     else:
         if list_type == 'all_documents':
             res_data += CollectionDocumentListCollectionSerializer(docs, many=True).data
-            query_set, doc_lib_document_ids, sub_bot_document_ids = \
+            query_set, doc_lib_document_ids, sub_bot_document_ids, ref_documents = \
                 CollectionDocumentListSerializer.get_collection_documents(
                     user_id, collection_ids, 'personal&subscribe_full_text', bot)
             # document_ids = [cd['document_id'] for cd in query_set.all()]
@@ -409,7 +371,7 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
                     continue
                 if d_id['id'] in doc_lib_document_ids:
                     res_data[index]['type'] = 'personal'
-                elif d_id['id'] in sub_bot_document_ids:
+                elif d_id['id'] in sub_bot_document_ids + ref_documents:
                     res_data[index]['type'] = 'subscribe_full_text'
         else:
             res_data += CollectionDocumentListCollectionSerializer(docs, many=True).data
@@ -438,14 +400,14 @@ def bot_publish(bot_id, action=Bot.TypeChoices.PUBLIC):
     bot_collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False)
     collections = [bc.collection for bc in bot_collections]
     collection_ids = [c.id for c in collections]
-    query_set, ids1, ids2 = CollectionDocumentListSerializer.get_collection_documents(
+    query_set, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
         bot.user_id, collection_ids, 'personal', bot)
     document_ids = [cd['document_id'] for cd in query_set.all()]
     documents = Document.objects.filter(id__in=document_ids).all()
     ref_documents = []
     for d in documents:
         ref_document = Document.objects.filter(
-            collection_id=d.ref_collection_id, doc=d.ref_doc_id).values('id').first()
+            collection_id=d.ref_collection_id, doc_id=d.ref_doc_id).values('id').first()
         if ref_document:
             ref_documents.append(ref_document['id'])
     if ref_documents:

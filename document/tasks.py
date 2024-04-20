@@ -61,9 +61,12 @@ def async_document_library_task(self, task_id=None):
             else:  # COMPLETED
                 i.task_status = task_status
                 rag_ret['paper']['status'] = 'completed'
-                document = document_update_from_rag_ret(rag_ret['paper'])
-                reference_doc_to_document(document)
-                i.document = document
+                try:
+                    document = document_update_from_rag_ret(rag_ret['paper'])
+                    reference_doc_to_document(document)
+                    i.document = document
+                except Exception as e:
+                    logger.error(f'async_document_library_task {i.task_id}, {e}')
             i.save()
     return True
 

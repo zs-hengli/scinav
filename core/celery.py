@@ -1,6 +1,6 @@
 import os
 
-from celery import Celery
+from celery import Celery, shared_task
 from celery.schedules import crontab
 from celery.utils.log import get_task_logger
 
@@ -28,7 +28,11 @@ app.autodiscover_tasks()
 
 
 # 一个测试任务
-@app.task(bind=True)
-def debug_task(self):
+@shared_task(bind=True)
+def debug_task(self, a, b):
+    logger.info(f'debug_task a: {a}, b: {b}')
+    """
+    def debug_task.apply_async(args=(2, 3), countdown=5)
+    """
     logger.info(f'debug_task Request: {self.request!r}')
 

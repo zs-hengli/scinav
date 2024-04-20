@@ -7,7 +7,7 @@ from django.utils.translation import gettext_lazy as _
 from django.db.models import Q
 from rest_framework import serializers
 
-from bot.models import BotCollection
+from bot.models import BotCollection, Bot
 from collection.models import Collection, CollectionDocument
 from core.utils.common import str_hash
 from document.models import Document, DocumentLibrary
@@ -302,12 +302,13 @@ class CollectionDocumentListQuerySerializer(serializers.Serializer):
 class CollectionDocumentListSerializer(serializers.Serializer):
     @staticmethod
     def get_collection_documents(user_id, collection_ids, list_type, bot=None):
-        p_documents, p_document_num = [], 0
+        p_documents, ref_documents = [], []
         if bot and user_id != bot.user_id:
-            p_document_num, p_documents = bot_subscribe_personal_document_num(bot.user_id, bot_ids=[bot.id])
+            p_documents, ref_documents = bot_subscribe_personal_document_num(bot.user_id, bot_id=bot.id)
         doc_lib_document_ids, sub_bot_document_ids = None, None
         if list_type in ['all', 'all_documents']:
             filter_query = Q(collection_id__in=collection_ids, del_flag=False)
+            # 非本人专题，过滤个人没有关联文献的文件
             if p_documents:
                 filter_query &= ~Q(document_id__in=p_documents)
             query_set = CollectionDocument.objects.filter(filter_query).values('document_id') \
@@ -318,37 +319,46 @@ class CollectionDocumentListSerializer(serializers.Serializer):
             ).values('document_id').order_by('document_id').distinct()
         elif list_type == 'arxiv':
             document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(user_id)
-            filter_query = \
-                ~Q(document_id__in=document_ids) \
-                & Q(collection_id__in=collection_ids, del_flag=False, document__collection_id='arxiv')
+            sub_bot_document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(bot.user_id, is_self=False)
+            document_ids = list(set(document_ids) | set(sub_bot_document_ids))
+            if bot and user_id != bot.user_id and p_documents:
+                document_ids = list(set(document_ids) | set(p_documents))
+            filter_query = ~Q(document_id__in=document_ids) \
+                           & Q(collection_id__in=collection_ids, del_flag=False, document__collection_id='arxiv')
             query_set = CollectionDocument.objects.filter(
                 filter_query).values('document_id').order_by('document_id').distinct()
         elif list_type == 's2':
             document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(user_id)
+            sub_bot_document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(bot.user_id, is_self=False)
+            document_ids = list(set(document_ids) | set(sub_bot_document_ids))
+            if bot and user_id != bot.user_id and p_documents:
+                document_ids = list(set(document_ids) | set(p_documents))
             filter_query = ~Q(document_id__in=document_ids) \
                            & Q(collection_id__in=collection_ids, del_flag=False, document__collection_id='s2')
             query_set = CollectionDocument.objects.filter(
                 filter_query).values('document_id').order_by('document_id').distinct()
         elif list_type == 'subscribe_full_text':
             document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(user_id)
-            bot_user = bot.user_id
-            if bot_user == user_id:
+            if bot.user_id == user_id or (bot.user_id != user_id and bot and bot.type == Bot.TypeChoices.PERSONAL):
                 bot_document_ids = document_ids
             else:
-                bot_document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(bot_user, is_self=False)
+                bot_document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(bot.user_id, is_self=False)
+                if p_documents:
+                    bot_document_ids = list(set(bot_document_ids) - set(p_documents))
             filter_query = (
-                ~Q(document_id__in=document_ids)
-                & Q(document_id__in=bot_document_ids, collection_id__in=collection_ids, del_flag=False)
+                (~Q(document_id__in=document_ids) & Q(document_id__in=bot_document_ids))
+                & Q(collection_id__in=collection_ids, del_flag=False)
             )
             query_set = CollectionDocument.objects.filter(
                 filter_query).values('document_id').order_by('document_id').distinct()
         elif list_type == 'personal&subscribe_full_text':
             doc_lib_document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(user_id)
-            bot_user = bot.user_id
-            if bot_user == user_id:
+            if bot.user_id == user_id or (bot.user_id != user_id and bot and bot.type == Bot.TypeChoices.PERSONAL):
                 sub_bot_document_ids = doc_lib_document_ids
             else:
-                sub_bot_document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(bot_user, False)
+                sub_bot_document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(bot.user_id, False)
+                if p_documents:
+                    sub_bot_document_ids = list(set(sub_bot_document_ids) - set(p_documents))
             all_document_ids = doc_lib_document_ids + sub_bot_document_ids
             filter_query = (
                 Q(document_id__in=all_document_ids)
@@ -365,23 +375,27 @@ class CollectionDocumentListSerializer(serializers.Serializer):
                 filter_query &= ~Q(document_id__in=p_documents)
             query_set = CollectionDocument.objects.filter(
                 filter_query).values('document_id').order_by('document_id').distinct()
-        return query_set, doc_lib_document_ids, sub_bot_document_ids
+        return query_set, doc_lib_document_ids, sub_bot_document_ids, ref_documents
 
     @staticmethod
     def _my_doc_lib_document_ids(user_id, is_self=True):
         """
-        个人文件库 排队中 入库中 入库完成
+        个人文件库  本人：排队中 入库中 入库完成
+            非本人： 入库完成
         """
-        doc_libs = DocumentLibrary.objects.filter(user_id=user_id, del_flag=False, task_status__in=[
-            DocumentLibrary.TaskStatusChoices.COMPLETED,
-            DocumentLibrary.TaskStatusChoices.PENDING,
-            DocumentLibrary.TaskStatusChoices.QUEUEING,
-        ]).values('document_id').all()
-        # 个人上传文献在Document里面
         if not is_self:
-            filter_query = Q(collection_id=user_id, del_flag=False) & ~Q(ref_doc_id=0)
+            doc_libs = DocumentLibrary.objects.filter(
+                user_id=user_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
+            ).values('document_id').all()
+            filter_query = Q(collection_id=user_id) & ~Q(ref_doc_id=0)
         else:
-            filter_query = Q(collection_id=user_id, del_flag=False)
+            doc_libs = DocumentLibrary.objects.filter(user_id=user_id, del_flag=False, task_status__in=[
+                DocumentLibrary.TaskStatusChoices.COMPLETED,
+                DocumentLibrary.TaskStatusChoices.PENDING,
+                DocumentLibrary.TaskStatusChoices.QUEUEING,
+            ]).values('document_id').all()
+            filter_query = Q(collection_id=user_id)
+        # 个人上传文献可能只在Document里面
         my_documents = Document.objects.filter(filter_query).values('id').all()
         return [d['document_id'] for d in doc_libs if d['document_id']] + [d['id'] for d in my_documents]
 
@@ -406,28 +420,57 @@ class CollectionCreateBotCheckQuerySerializer(serializers.Serializer):
         return attrs
 
 
-def bot_subscribe_personal_document_num(bot_user_id, bot_collections=None, bot_ids=None):
+def bot_subscribe_personal_document_num(bot_user_id, bot_collections=None, bot_id=None):
     """
-    订阅专题 包括的文献列表 个人上传文献没有关联id的记录个数
+    订阅专题 个人文献id列表 个人上传文献关联的公共文献列表
+    :return (个人文献id列表, 个人上传文献关联的公共文献列表)
     """
-    if bot_ids:
-        bot_collections = BotCollection.objects.filter(
-            bot_id__in=bot_ids, del_flag=False).order_by('bot_id', '-updated_at').all()
+    if bot_id:
+        bot_collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False).all()
     collection_ids = [bc.collection_id for bc in bot_collections]
     coll_documents = CollectionDocument.objects.filter(
         collection_id__in=collection_ids, del_flag=False).values('document_id').all()
-    personal_not_ref_doc_lib = DocumentLibrary.objects.filter(
+    personal_doc_libs = DocumentLibrary.objects.filter(
         user_id=bot_user_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.COMPLETED,
-        document__ref_doc_id__isnull=True, filename__isnull=False
+        filename__isnull=False
     ).values('document_id').distinct('document_id')
     personal_documents = Document.objects.filter(
-        collection_id=bot_user_id, collection_type=Document.TypeChoices.PERSONAL,
-        full_text_accessible__in=[False, None]).values('id').all()
+        collection_id=bot_user_id, collection_type=Document.TypeChoices.PERSONAL
+    ).values('id').all()
+
+    personal_ref_doc_lib = DocumentLibrary.objects.filter(
+        user_id=bot_user_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.COMPLETED,
+        document__ref_doc_id__gt=0, filename__isnull=False, document__full_text_accessible=True
+    ).values('document_id', 'document__ref_doc_id', 'document__ref_collection_id').distinct('document_id')
+    personal_ref_documents = Document.objects.filter(
+        collection_id=bot_user_id, collection_type=Document.TypeChoices.PERSONAL, ref_doc_id__gt=0,
+        object_path__isnull=False
+    ).values('id', 'ref_doc_id', 'ref_collection_id').all()
+
+    # 个人上传文献关联的公共文献列表
+    ref_document_ids = set()
+    filter_query = None
+    for dl_r in personal_ref_doc_lib:
+        if not filter_query:
+            filter_query = Q(
+                doc_id=dl_r['document__ref_doc_id'], collection_id=dl_r['document__ref_collection_id'])
+        else:
+            filter_query |= Q(
+                doc_id=dl_r['document__ref_doc_id'], collection_id=dl_r['document__ref_collection_id'])
+    for d_r in personal_ref_documents:
+        if not filter_query:
+            filter_query = Q(doc_id=d_r['ref_doc_id'], collection_id=d_r['ref_collection_id'])
+        else:
+            filter_query |= Q(doc_id=d_r['ref_doc_id'], collection_id=d_r['ref_collection_id'])
+    if filter_query:
+        ref_doc = Document.objects.filter(filter_query).values('id').all()
+        ref_document_ids = set([r['id'] for r in ref_doc])
+    # 个人文献列表
     document_set = (
         set([cd['document_id'] for cd in coll_documents])
-        & set([pd['document_id'] for pd in personal_not_ref_doc_lib] + [pd['id'] for pd in personal_documents])
+        & set([pd['document_id'] for pd in personal_doc_libs] + [pd['id'] for pd in personal_documents])
     )
-    return len(document_set), list(document_set)
+    return list(document_set), list(ref_document_ids)
 
 
 def bot_subscribe_personal_documents(bot_user_id, bot_collections=None, bot_ids=None):
