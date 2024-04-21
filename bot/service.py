@@ -321,13 +321,21 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
         user_id, collection_ids, list_type, bot)
     start_num = page_size * (page_num - 1)
     doc_ids = []
-
-    if d3 and list_type in ['all', 'all_documents', 'subscribe_full_text']:
+    show_total = 0
+    # 个人上传文件库 关联的文献
+    # 未发布专题 显示未公共库， 专题广场专题显示为订阅全文
+    if d3 and (
+        list_type in ['all', 'all_documents']
+        or (list_type in ['s2', 'arxiv'] and bot.type == Collection.TypeChoices.PERSONAL)
+        or (list_type in ['subscribe_full_text'] and bot.type == Collection.TypeChoices.PUBLIC)
+    ):
         doc_ids = d3[start_num:(page_size * page_num - need_public_count)]
         need_public_count += len(doc_ids)
         public_count += len(d3)
+        show_total += len(d3)
     personal_count = query_set.count()
     total = public_count + personal_count
+    show_total += personal_count
     logger.info(f"limit: [{start_num}: {page_size * page_num}]")
     if page_size * page_num > public_count:
         c_docs = query_set[start_num:(page_size * page_num - need_public_count)] if total > start_num else []
@@ -354,10 +362,16 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
         all_full_text_docs = [d['document_id'] for d in query_set.all()]
 
         for doc in docs:
+            has_full_text = (
+                True
+                if doc.id in all_full_text_docs or (
+                    doc.id in d3 and doc.object_path and bot.type == Bot.TypeChoices.PUBLIC)
+                else False
+            )
             res_data.append({
                 'id': doc.id,
                 'doc_apa': data_dict[doc.id]['doc_apa'],
-                'has_full_text': True if doc.id in all_full_text_docs or (doc.id in d3 and doc.object_path) else False,
+                'has_full_text': has_full_text,
             })
     else:
         if list_type == 'all_documents':
@@ -371,7 +385,9 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
                     continue
                 if d_id['id'] in doc_lib_document_ids:
                     res_data[index]['type'] = 'personal'
-                elif d_id['id'] in sub_bot_document_ids + ref_documents:
+                elif d_id['id'] in sub_bot_document_ids:
+                    res_data[index]['type'] = 'subscribe_full_text'
+                elif bot.type == Bot.TypeChoices.PUBLIC and d_id['id'] in ref_documents:
                     res_data[index]['type'] = 'subscribe_full_text'
         else:
             res_data += CollectionDocumentListCollectionSerializer(docs, many=True).data
@@ -383,7 +399,7 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
         # 个人库库文献 不能在添加到个人库
         'is_all_in_document_library': True if list_type == 'personal' else False,
         'total': total,
-        'show_total': personal_count,
+        'show_total': show_total,
     }
 
 

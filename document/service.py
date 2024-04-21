@@ -467,7 +467,8 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
             user_id, [collection_id], 'arxiv')
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_S2:
-        coll_documents, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(user_id, [collection_id], 's2')
+        coll_documents, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
+            user_id, [collection_id], 's2')
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_SUBSCRIBE_FULL_TEXT:
         bot = Bot.objects.filter(id=bot_id).first()

@@ -44,8 +44,10 @@ def collection_list(user_id, list_type, page_size, page_num):
             ids = [c['id'] for c in public_collections]
             _save_public_collection(Collection.objects.filter(id__in=ids).all(), public_collections)
     # 2 submit bot collections
+    bots_dict, sub_bot_infos = {}, {}
     if 'subscribe' in list_type:
-        sub_serial = CollectionSubscribeSerializer(data=_bot_subscribe_collection_list(user_id), many=True)
+        sub_list_data, bots_dict, sub_bot_infos = _bot_subscribe_collection_list(user_id)
+        sub_serial = CollectionSubscribeSerializer(data=sub_list_data, many=True)
         sub_serial.is_valid()
         subscribe_total = len(sub_serial.data)
         # coll_list += sub_serial.data
@@ -63,8 +65,17 @@ def collection_list(user_id, list_type, page_size, page_num):
             coll_list += list(CollectionListSerializer(query_set, many=True).data)
     if set(list_type) == {'public', 'subscribe', 'my'}:
         for coll in coll_list:
-            if coll['type'] in [Collection.TypeChoices.SUBSCRIBE, Collection.TypeChoices.PUBLIC]:
+            if coll['type'] == Collection.TypeChoices.PUBLIC:
                 coll['is_all_in_document_library'] = True
+            elif coll['type'] == Collection.TypeChoices.SUBSCRIBE:
+                bot = bots_dict.get(coll['bot_id'])
+                coll['is_all_in_document_library'] = True
+                if bot and bot.type == Bot.TypeChoices.PUBLIC:
+                    coll['is_all_in_document_library'] = True
+                # todo 未发布专题 分享出去 没有全文
+                elif bot and bot.type == Bot.TypeChoices.PERSONAL:
+                    sub_bot_info = sub_bot_infos.get(coll['id'], {})
+                    coll['is_all_in_document_library'] = sub_bot_info.get('is_all_in_document_library', False)
             else:
                 coll['is_all_in_document_library'] = _is_collection_docs_all_in_document_library(coll['id'], user_id)
             coll['has_ref_bots'], coll['bot_titles'] = _collection_ref_bots(user_id, [coll['id']])
@@ -147,13 +158,27 @@ def _bot_subscribe_collection_list(user_id):
         bot_sub_collect[bc.bot_id]['updated_at'] = max(
             bot_sub_collect[bc.bot_id]['updated_at'], bc.collection.updated_at)
         bot_sub_collect[bc.bot_id]['collection_ids'].append(bc.collection_id)
+    sub_bot_infos = {}
     for bot_id, coll in bot_sub_collect.items():
+        bot = bots_dict[bot_id]
         if user_id != coll['bot_user_id']:
-            personal_documents, ref_documents = bot_subscribe_personal_document_num(coll['bot_user_id'], bot_id=bot_id)
-            bot_sub_collect[bot_id]['total'] -= len(personal_documents) - len(ref_documents)
+            personal_documents, ref_documents = bot_subscribe_personal_document_num(coll['bot_user_id'], bot=bot)
+            bot_sub_collect[bot_id]['total'] -= len(personal_documents)
+            # if bot.type == Bot.TypeChoices.PUBLIC:
+            bot_sub_collect[bot_id]['total'] += len(ref_documents)
+            if bot.type == Bot.TypeChoices.PERSONAL:
+                query_set1, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
+                    user_id, bot_sub_collect[bot_id]['collection_ids'], 'personal', bot)
+                query_set2, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
+                    bot.user_id, bot_sub_collect[bot_id]['collection_ids'], 'personal', bot)
+                diff_set = (
+                    set([d['document_id'] for d in query_set2.all()])
+                    - set([d['document_id'] for d in query_set1.all()])
+                )
+                sub_bot_infos[bot_id] = {'is_all_in_document_library': False if diff_set else True}
     # 排序 updated_at 倒序
     list_data = sorted(bot_sub_collect.values(), key=lambda x: x['updated_at'], reverse=True)
-    return list_data
+    return list_data, bots_dict, sub_bot_infos
 
 
 def generate_collection_title(content=None, document_titles=None):
