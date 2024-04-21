@@ -17,7 +17,7 @@ def async_document_library_task(self, task_id=None):
     query_filter = Q(task_id__isnull=True) | Q(task_id='')
     if instances := DocumentLibrary.objects.filter(query_filter).all():
         for i in instances:
-            if not i.object_path:
+            if not i.filename:
                 rag_ret = RagDocument.ingest_public_paper(i.user_id, i.document.collection_id, i.document.doc_id)
             else:
                 rag_ret = RagDocument.ingest_personal_paper(i.user_id, i.object_path)
