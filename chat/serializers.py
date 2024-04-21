@@ -57,7 +57,7 @@ class ConversationCreateSerializer(serializers.Serializer):
         if document_ids:
             documents = Document.objects.filter(id__in=document_ids).values(
                 'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
-                'ref_collection_id', 'ref_doc_id',
+                'ref_collection_id', 'ref_doc_id', 'object_path',
             ).all()
             if not is_bot:
                 attrs['document_titles'] = [d['title'] for d in documents if d['id'] in attrs.get('documents', [])]
@@ -161,7 +161,7 @@ class ChatQuerySerializer(serializers.Serializer):
         if document_ids:
             documents = Document.objects.filter(id__in=document_ids).values(
                 'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
-                'ref_collection_id', 'ref_doc_id',
+                'ref_collection_id', 'ref_doc_id', 'object_path',
             ).all()
             if not is_bot:
                 attrs['document_titles'] = [d['title'] for d in documents if d['id'] in attrs.get('documents', [])]
@@ -212,9 +212,9 @@ def chat_paper_ids(user_id, documents):
             'document_id': d['id'],
             'full_text_accessible': False
         }
-        if user_id == d['user_id'] and d['full_text_accessible']:
+        if user_id == d['user_id'] and d['object_path']:
             ret_data[d['id']]['full_text_accessible'] = True
-        elif user_id == d['user_id'] and not d['full_text_accessible']:
+        elif user_id == d['user_id'] and not d['object_path']:
             ret_data[d['id']]['full_text_accessible'] = False
         else:
             if d['ref_doc_id']:

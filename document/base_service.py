@@ -52,7 +52,7 @@ def reference_doc_to_document(document: Document):
         })
         if not rag_ret.get('full_text_accessible'):
             rag_ret['full_text_accessible'] = document.full_text_accessible
-        document_update_from_rag_ret(rag_ret)
-        return True
+        ref_document = document_update_from_rag_ret(rag_ret)
+        return ref_document
     else:
         return False

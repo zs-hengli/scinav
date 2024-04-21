@@ -4,7 +4,7 @@ from celery import shared_task
 from django.db.models import Q
 
 from bot.rag_service import Document as RagDocument
-from document.base_service import document_update_from_rag_ret, reference_doc_to_document
+from document.base_service import document_update_from_rag_ret, reference_doc_to_document, update_document_lib
 from document.models import DocumentLibrary, Document
 
 logger = logging.getLogger('celery')
@@ -58,13 +58,26 @@ def async_document_library_task(self, task_id=None):
                     Document.objects.filter(pk=i.document_id).update(state='error')
                 i.task_status = task_status
                 i.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message']}
+                if i.user_id == '0000' and i.document_id:
+                    document = Document.objects.filter(pk=i.document_id).first()
+                    if document:
+                        document.full_text_accessible = None
+                        document.save()
+                        Document.objects.filter(
+                            ref_doc_id=document.doc_id, ref_collection_id=document.collection_id
+                        ).update(full_text_accessible=None)
             else:  # COMPLETED
                 i.task_status = task_status
                 rag_ret['paper']['status'] = 'completed'
                 try:
                     document = document_update_from_rag_ret(rag_ret['paper'])
-                    reference_doc_to_document(document)
+                    if ref_document := reference_doc_to_document(document):
+                        update_document_lib('0000', [ref_document.id])
                     i.document = document
+                    if i.user_id == '0000':
+                        Document.objects.filter(
+                            ref_doc_id=document.doc_id, ref_collection_id=document.collection_id
+                        ).update(full_text_accessible=rag_ret['paper']['full_text_accessible'])
                 except Exception as e:
                     logger.error(f'async_document_library_task {i.task_id}, {e}')
             i.save()

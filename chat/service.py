@@ -119,7 +119,7 @@ def conversation_update(user_id, conversation_id, validated_data):
         if document_ids:
             documents = Document.objects.filter(id__in=document_ids).values(
                 'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
-                'ref_collection_id', 'ref_doc_id',
+                'ref_collection_id', 'ref_doc_id', 'object_path',
             ).all()
             papers_info = chat_paper_ids(user_id, documents)
         for p in papers_info:

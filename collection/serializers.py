@@ -454,7 +454,7 @@ def bot_subscribe_personal_document_num(bot_user_id, bot_collections=None, bot=N
 
     personal_ref_doc_lib = DocumentLibrary.objects.filter(
         user_id=bot_user_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.COMPLETED,
-        document__ref_doc_id__gt=0, filename__isnull=False, document__full_text_accessible=True,
+        document__ref_doc_id__gt=0, filename__isnull=False,
         document__id__in=[d['document_id'] for d in coll_documents]
     ).values('document_id', 'document__ref_doc_id', 'document__ref_collection_id').distinct('document_id')
     personal_ref_documents = Document.objects.filter(
@@ -478,8 +478,8 @@ def bot_subscribe_personal_document_num(bot_user_id, bot_collections=None, bot=N
         else:
             filter_query |= Q(doc_id=d_r['ref_doc_id'], collection_id=d_r['ref_collection_id'])
     if filter_query:
-        ref_doc = Document.objects.filter(filter_query).values('id').all()
-        ref_document_ids = set([r['id'] for r in ref_doc])
+        ref_doc = Document.objects.filter(filter_query).values('id', 'object_path').all()
+        ref_document_ids = set([r['id'] for r in ref_doc if r['object_path']])
     # 个人文献列表
     document_set = (
         set([cd['document_id'] for cd in coll_documents])
@@ -502,11 +502,11 @@ def bot_subscribe_personal_documents(bot_user_id, bot_collections=None, bot_ids=
     # no full_text_accessible
     dl_personal_no_full_text = DocumentLibrary.objects.filter(
         user_id=bot_user_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.COMPLETED,
-        document__full_text_accessible=None, filename__isnull=False
+        document__object_path=None, filename__isnull=False
     ).values('document_id').distinct('document_id')
     dl_personal_no_full_text = Document.objects.filter(
         collection_id=bot_user_id, collection_type=Document.TypeChoices.PERSONAL,
-        full_text_accessible=None).values('id').all()
+        object_path=None).values('id').all()
     no_full_text_set = (
         set([cd['document_id'] for cd in coll_documents])
         & set([pd['id'] for pd in dl_personal_no_full_text] + [pd['id'] for pd in dl_personal_no_full_text])

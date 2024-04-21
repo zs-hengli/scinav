@@ -274,7 +274,7 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
                     ref_type = 'reference'
                     ref_document = Document.objects.filter(
                         doc_id=document.ref_doc_id, collection_id=document.ref_collection_id,
-                        full_text_accessible=True, del_flag=False
+                        object_path__isnull=False, del_flag=False
                     ).first()
                     if ref_document:
                         ref_type = 'reference&full_text_accessible'
