@@ -301,6 +301,7 @@ class DocLibDeleteQuerySerializer(serializers.Serializer):
     ids = serializers.ListField(
         required=False, allow_null=True, child=serializers.CharField(allow_null=False, allow_blank=False))
     is_all = serializers.BooleanField(required=False, default=False)
+    # list_type = serializers.ChoiceField(required=True, choices=['all', 'in_progress', 'completed'], default='all')
 
     def validate(self, attrs):
         if attrs.get('ids'):

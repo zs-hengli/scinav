@@ -198,6 +198,7 @@ class DocumentsUrl(APIView):
 
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['GET', 'PUT', 'POST']), name='dispatch')
+# @permission_classes([AllowAny])
 class DocumentsRagUpdate(APIView):
     @staticmethod
     def get(request, *args, **kwargs):

@@ -354,6 +354,7 @@ def import_papers_to_collection(collection_papers):
     num = len(doc_ids)
     count = 0
     c_doc_objs = []
+    add_num = 0
     for doc_id in doc_ids:
         data = import_one_document(collection_id, collection_type, doc_id)
         count += 1
@@ -362,9 +363,22 @@ def import_papers_to_collection(collection_papers):
             document_id=data['id'],
             full_text_accessible=True,
         ))
-    CollectionDocument.objects.bulk_create(c_doc_objs)
+        coll_doc = {
+            'collection_id': personal_collection_id,
+            'document_id': data['id'],
+            'full_text_accessible': True,
+        }
+        collection, created = CollectionDocument.objects.update_or_create(
+            coll_doc, collection_id=personal_collection_id, document_id=data['id'])
+        if created:
+            add_num += 1
+    if add_num:
+        collection = Collection.objects.filter(id=personal_collection_id).first()
+        collection.total_personal += add_num
+        collection.save()
     return {
         'total': num,
+        'add_num': add_num,
         'id_list': doc_ids
     }
 
