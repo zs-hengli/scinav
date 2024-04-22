@@ -553,18 +553,25 @@ def doc_lib_batch_operation_check(user_id, validated_data):
     return 0, document_ids
 
 
-def document_library_delete(user_id, ids, is_all):
-    if is_all:
-        filter_query = Q(user_id=user_id, del_flag=False)
+def document_library_delete(user_id, ids, list_type):
+    if list_type:
+        if list_type == DocumentLibraryListQuerySerializer.ListTypeChoices.ALL:
+            filter_query = Q(user_id=user_id, del_flag=False)
+        elif list_type == DocumentLibraryListQuerySerializer.ListTypeChoices.IN_PROGRESS:
+            filter_query = Q(user_id=user_id, del_flag=False, task_status__in=[
+                DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
+                DocumentLibrary.TaskStatusChoices.QUEUEING,
+                DocumentLibrary.TaskStatusChoices.PENDING,
+            ])
+        elif list_type == DocumentLibraryListQuerySerializer.ListTypeChoices.COMPLETED:
+            filter_query = Q(user_id=user_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.COMPLETED)
+        else:
+            filter_query = Q(user_id=user_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.ERROR)
         if ids:
             filter_query &= ~Q(id__in=ids)
     else:
         filter_query = Q(user_id=user_id, del_flag=False, id__in=ids)
     doc_libs = DocumentLibrary.objects.filter(filter_query)
-    if doc_libs.count():
-        document_ids = [doclib.document_id for doclib in doc_libs.all() if doclib.document_id]
-        if document_ids:
-            Document.objects.filter(id__in=document_ids, user_id=user_id).update(del_flag=True)
     effected_num = doc_libs.update(del_flag=True)
     return effected_num
 
