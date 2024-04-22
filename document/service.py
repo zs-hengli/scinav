@@ -517,9 +517,33 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
     else:
         document_ids = list(set(all_document_ids) - set(document_ids)) \
             if is_all else list(set(document_ids + all_document_ids))
+    document_ids = _get_public_document_ids(user_id, document_ids)
     update_document_lib(user_id, document_ids)
     async_document_library_task.apply_async()
     return True
+
+
+def _get_public_document_ids(user_id, document_ids):
+    new_document_ids = []
+    pub_documents = Document.objects.filter(
+        id__in=document_ids, collection_type=Document.TypeChoices.PUBLIC).values('id').all()
+    if pub_documents:
+        new_document_ids = [d['id'] for d in pub_documents]
+    personal_documents = Document.objects.filter(
+        id__in=document_ids, collection_type=Document.TypeChoices.PERSONAL, ref_doc_id__gt=0).all()
+    if personal_documents:
+        filter_query = None
+        for d in personal_documents:
+            if d.collection_id == user_id:
+                new_document_ids.append(d.id)
+            elif not filter_query:
+                filter_query = Q(doc_id=d.ref_doc_id, collection_id=d.ref_collection_id)
+            else:
+                filter_query |= Q(doc_id=d.ref_doc_id, collection_id=d.ref_collection_id)
+        if filter_query:
+            per_documents = Document.objects.filter(filter_query).values('id').all()
+            new_document_ids += [d['id'] for d in per_documents] if per_documents else []
+    return new_document_ids
 
 
 def doc_lib_batch_operation_check(user_id, validated_data):
