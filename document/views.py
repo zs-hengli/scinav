@@ -13,10 +13,11 @@ from document.models import Document, DocumentLibrary
 from document.serializers import DocumentDetailSerializer, GenPresignedUrlQuerySerializer, \
     DocumentUploadQuerySerializer, \
     DocumentLibraryListQuerySerializer, DocumentRagUpdateSerializer, DocLibUpdateNameQuerySerializer, \
-    DocLibAddQuerySerializer, DocLibDeleteQuerySerializer, DocLibCheckQuerySerializer, DocumentRagCreateSerializer
+    DocLibAddQuerySerializer, DocLibDeleteQuerySerializer, DocLibCheckQuerySerializer, DocumentRagCreateSerializer, \
+    ImportPapersToCollectionSerializer
 from document.service import search, documents_update_from_rag, presigned_url, document_personal_upload, \
     get_document_library_list, document_library_add, document_library_delete, doc_lib_batch_operation_check, \
-    get_url_by_object_path, get_reference_formats, update_exist_documents
+    get_url_by_object_path, get_reference_formats, update_exist_documents, import_papers_to_collection
 
 logger = logging.getLogger(__name__)
 
@@ -201,13 +202,16 @@ class DocumentsRagUpdate(APIView):
     @staticmethod
     def get(request, *args, **kwargs):
         data = {}
-        # data = import_documents_from_json()
         update_exist_documents()
         return my_json_response(data)
 
     @staticmethod
-    def put(request, begin_id, end_id, *args, **kwargs):
-        data = documents_update_from_rag(begin_id, end_id)
+    def put(request, *args, **kwargs):
+        query = request.data
+        serial = ImportPapersToCollectionSerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg='invalid post data')
+        data = import_papers_to_collection(serial.validated_data)
         return my_json_response(data)
 
     @staticmethod

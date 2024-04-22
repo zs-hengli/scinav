@@ -345,37 +345,23 @@ def documents_update_from_rag(begin_id, end_id):
     return True
 
 
-def import_documents_from_json():
-    with open('doc/linfeng_zhang.json') as f:
-        info = json.load(f)
-    topic_name = info['topic_name']
+def import_papers_to_collection(collection_papers):
+    info = collection_papers
+    personal_collection_id = info['personal_collection_id']
     collection_type = info['collection_type']
     collection_id = info['collection_id']
     doc_ids = info['doc_ids']
     num = len(doc_ids)
     count = 0
     c_doc_objs = []
-    need_reload = False
     for doc_id in doc_ids:
-        if need_reload:
-            data = import_one_document(collection_id, collection_type, doc_id)
-        else:
-            document = Document.objects.filter(
-                doc_id=doc_id, collection_id=collection_id, collection_type=collection_type).first()
-            if not document:
-                raise Exception(f'not found doc_id: {doc_id}')
-            data = DocumentRagUpdateSerializer(document).data
+        data = import_one_document(collection_id, collection_type, doc_id)
         count += 1
-        # ewn_collection_id = '7ce9f633-696e-4dd7-84cb-4b58416a0de5'
-        zlf_collection_id = '253f05a7-c1e1-4f08-84d7-9c926f9e19ee'
-
         c_doc_objs.append(CollectionDocument(
-            collection_id=zlf_collection_id,
+            collection_id=personal_collection_id,
             document_id=data['id'],
             full_text_accessible=True,
         ))
-        logger.debug(f"ddddddddd total: {num}, count: {count}, doc_id: {doc_id}")
-
     CollectionDocument.objects.bulk_create(c_doc_objs)
     return {
         'total': num,
@@ -396,7 +382,7 @@ def import_one_document(collection_id, collection_type, doc_id):
 
 def update_exist_documents():
     page_size = 200
-    page_num = 15
+    page_num = 1
     documents = Document.objects.filter(del_flag=False).values(
         'collection_type', 'doc_id', 'collection_id').order_by(
         'updated_at')[page_size*(page_num-1):page_size*page_num]

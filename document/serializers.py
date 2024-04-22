@@ -323,3 +323,19 @@ class DocLibCheckQuerySerializer(serializers.Serializer):
         if not attrs.get('ids') and not attrs.get('is_all'):
             raise serializers.ValidationError('ids or is_all is required')
         return attrs
+
+
+class ImportPapersToCollectionSerializer(serializers.Serializer):
+    collection_id = serializers.CharField(required=True)
+    collection_type = serializers.ChoiceField(required=True, choices=['public', 'personal'])
+    personal_collection_id = serializers.CharField(required=True)
+    doc_ids = serializers.ListField(
+        required=True, child=serializers.IntegerField(required=True, allow_null=False)
+    )
+
+    def validate(self, attrs):
+        personal_collection_id = attrs.get('personal_collection_id')
+        if not Collection.objects.filter(id=personal_collection_id).exists():
+            raise serializers.ValidationError('personal_collection_id is not exist')
+
+        return attrs
