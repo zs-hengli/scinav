@@ -368,11 +368,13 @@ def import_papers_to_collection(collection_papers):
             collection_id=personal_collection_id,
             document_id=data['id'],
             full_text_accessible=True,
+            del_flag=False,
         ))
         coll_doc = {
             'collection_id': personal_collection_id,
             'document_id': data['id'],
             'full_text_accessible': True,
+            'del_flag': False,
         }
         collection, created = CollectionDocument.objects.update_or_create(
             coll_doc, collection_id=personal_collection_id, document_id=data['id'])

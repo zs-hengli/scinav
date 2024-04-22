@@ -29,13 +29,33 @@ class Index(APIView):
 
 
 @method_decorator([extract_json], name='dispatch')
-@method_decorator(require_http_methods(['GET']), name='dispatch')
+@method_decorator(require_http_methods(['GET', 'POST']), name='dispatch')
 class HotBots(APIView):
 
     @staticmethod
     def get(request, *args, **kwargs):
         data = hot_bots()
         return my_json_response(data)
+
+    @staticmethod
+    def post(request, bot_id, *args, **kwargs):
+        bot = Bot.objects.filter(pk=bot_id).first()
+        query = request.data
+        if not bot:
+            return my_json_response(code=100002, msg=_('bot not found'))
+        if bot.type != Bot.TypeChoices.PUBLIC:
+            return my_json_response(code=100001, msg=_('bot is not published'))
+        hot_bot_data = {
+            'bot_id': bot_id,
+            'order_num': 1,
+            'del_flag': False,
+        }
+        if query.get('action') and query['action'] == 'delete':
+            hot_bot_data['del_flag'] = True
+        if query.get('order_num'):
+            hot_bot_data['order_num'] = query['order_num']
+        HotBot.objects.update_or_create(hot_bot_data, bot_id=bot_id)
+        return my_json_response(hot_bot_data)
 
 
 @method_decorator([extract_json], name='dispatch')
