@@ -355,8 +355,14 @@ def import_papers_to_collection(collection_papers):
     count = 0
     c_doc_objs = []
     add_num = 0
+    skip_ids = []
     for doc_id in doc_ids:
-        data = import_one_document(collection_id, collection_type, doc_id)
+        try:
+            data = import_one_document(collection_id, collection_type, doc_id)
+        except Exception as e:
+            logger.error(f"import_papers_to_collection error: {doc_id}, {e}")
+            skip_ids.append(doc_id)
+            continue
         count += 1
         c_doc_objs.append(CollectionDocument(
             collection_id=personal_collection_id,
@@ -379,6 +385,7 @@ def import_papers_to_collection(collection_papers):
     return {
         'total': num,
         'add_num': add_num,
+        'skip_ids': skip_ids,
         'id_list': doc_ids
     }
 
