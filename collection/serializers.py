@@ -211,7 +211,7 @@ class CollectionDocUpdateSerializer(serializers.Serializer):
         instances = []
         if vd.get('is_all'):
             doc_search_redis_key_prefix = 'doc:search'
-            content_hash = str_hash(vd['search_content'])
+            content_hash = str_hash(f"{vd['user_id']}_{vd['search_content']}")
             redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
             search_cache = cache.get(redis_key)
             if search_cache:

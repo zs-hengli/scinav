@@ -84,20 +84,29 @@ def async_document_library_task(self, task_id=None):
     return True
 
 
-# @shared_task(bind=True)
-# def async_update_document(self, documents, rag_data):
-#     documents = Document.objects.filter(pk__in=documents).all()
-#     logger.info(f'xxxx async_update_document, {len(rag_data)}')
-#     for i, d in enumerate(documents):
-#         data = rag_data.get(f"{d.doc_id}_{d.collection_id}_{d.collection_type}")
-#         if not data: continue
-#         fileds = [
-#             'doc_id', 'collection_type', 'collection_id', 'title', 'abstract', 'authors', 'doi', 'categories',
-#             'year', 'pub_date', 'pub_type', 'venue', 'journal', 'conference', 'keywords', 'full_text_accessible',
-#             'pages', 'citation_count', 'reference_count', 'object_path', 'source_url', 'checksum',
-#             'ref_collection_id', 'ref_doc_id',
-#         ]
-#         for f in fileds:
-#             setattr(documents[i], f, data[f])
-#         Document.objects.bulk_update(documents, fileds)
-#     return True
+@shared_task(bind=True)
+def async_update_document(self, document_ids, rag_data):
+    documents = Document.objects.filter(pk__in=document_ids).all()
+    fileds = [
+        'doc_id', 'collection_type', 'collection_id', 'title', 'abstract', 'authors', 'doi', 'categories',
+        'year', 'pub_date', 'pub_type', 'venue', 'journal', 'conference', 'keywords', 'full_text_accessible',
+        'pages', 'citation_count', 'reference_count', 'object_path', 'source_url', 'checksum',
+        'ref_collection_id', 'ref_doc_id',
+    ]
+    logger.info(f'async_update_document, begin rag_data len: {len(rag_data)}')
+    for i, d in enumerate(documents):
+        get_rag_data = {
+            'collection_type': d.collection_type,
+            'collection_id': d.collection_id,
+            'doc_id': d.doc_id,
+        }
+        try:
+            data = RagDocument.get(get_rag_data)
+        except Exception as e:
+            logger.error(f'async_update_document, {d.doc_id}_{d.collection_id}_{d.collection_type}, {e}')
+            continue
+        for f in fileds:
+            setattr(documents[i], f, data[f])
+    Document.objects.bulk_update(documents, fileds)
+    logger.info(f'async_update_document end, documents len: {len(documents)}')
+    return True

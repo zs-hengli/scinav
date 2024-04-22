@@ -23,7 +23,7 @@ from document.models import Document, DocumentLibrary
 from document.serializers import DocumentRagUpdateSerializer, \
     DocumentLibrarySubscribeSerializer, DocumentLibraryPersonalSerializer, DocLibAddQuerySerializer, \
     DocumentLibraryListQuerySerializer, DocumentDetailSerializer, DocumentRagGetSerializer
-from document.tasks import async_document_library_task
+from document.tasks import async_document_library_task, async_update_document
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ def get_url_by_object_path(user_id, object_path):
 def search(user_id, content, page_size=10, page_num=1, topn=100):
     start_num = page_size * (page_num - 1)
     logger.info(f"limit: [{start_num}: {page_size * page_num}]")
-    if cache_data := search_result_from_cache(content, page_size, page_num):
+    if cache_data := search_result_from_cache(user_id, content, page_size, page_num):
         return cache_data
 
     rag_ret = Rag_Document.search(user_id, content, limit=topn)
@@ -99,6 +99,7 @@ def search(user_id, content, page_size=10, page_num=1, topn=100):
     update_data = []
     collections = Collection.objects.filter(id__in=rag_collections).values('id', 'title').all()
     collections_dict = {c['id']: c for c in collections}
+    document_ids = []
     for doc in rag_ret:
         data = {
             'doc_id': doc['doc_id'],
@@ -141,9 +142,11 @@ def search(user_id, content, page_size=10, page_num=1, topn=100):
 
         create_data = copy.deepcopy(data)
         models_query.MAX_GET_RESULTS = 1
-        doc, _ = Document.objects.update_or_create(
-            defaults=create_data,
-            doc_id=data['doc_id'], collection_id=data['collection_id'], collection_type=data['collection_type'])
+        if not (doc := Document.objects.filter(doc_id=data['doc_id'], collection_id=data['collection_id']).first()):
+            doc, _ = Document.objects.update_or_create(
+                defaults=create_data,
+                doc_id=data['doc_id'], collection_id=data['collection_id'], collection_type=data['collection_type'])
+        document_ids.append(doc.id)
         logger.debug(f'update_ret: {doc}')
         data['id'] = str(doc.id)
 
@@ -167,7 +170,8 @@ def search(user_id, content, page_size=10, page_num=1, topn=100):
             'source': data['journal'] if data['journal'] else data['conference'] if data['conference'] else '',
             'reference_formats': get_reference_formats(DocumentRagGetSerializer(data).data),
         })
-    search_result_save_cache(content, ret_data)
+    async_update_document.apply_async(args=(document_ids, rag_data_dict))
+    search_result_save_cache(user_id, content, ret_data)
     total = len(ret_data)
     return {
         'list': ret_data[start_num:(page_size * page_num)] if total > start_num else [],
@@ -175,9 +179,9 @@ def search(user_id, content, page_size=10, page_num=1, topn=100):
     }
 
 
-def search_result_from_cache(content, page_size=10, page_num=1):
+def search_result_from_cache(user_id, content, page_size=10, page_num=1):
     doc_search_redis_key_prefix = 'doc:search'
-    content_hash = str_hash(content)
+    content_hash = str_hash(f"{user_id}_{content}")
     redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
     search_cache = cache.get(redis_key)
 
@@ -193,9 +197,9 @@ def search_result_from_cache(content, page_size=10, page_num=1):
         }
 
 
-def search_result_save_cache(content, data, search_result_expires=86400 * 7):
+def search_result_save_cache(user_id, content, data, search_result_expires=86400 * 7):
     doc_search_redis_key_prefix = 'doc:search'
-    content_hash = str_hash(content)
+    content_hash = str_hash(f"{user_id}_{content}")
     redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
     res = cache.set(redis_key, json.dumps(data), search_result_expires)
     return res
