@@ -137,6 +137,12 @@ if os.environ.get('DEBUG', 'false').lower() == 'true':
 REQUEST_ID_HEADER = None
 REQUEST_ID = None
 
+LOG_FILE = os.environ.get('LOG_FILE', 'all.log')
+if not os.path.exists(LOG_FILE):
+    dirname = os.path.dirname(LOG_FILE)
+    if dirname:
+        os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -161,6 +167,12 @@ LOGGING = {
             "filters": ["request_id"],
             'formatter': 'verbose',
         },
+        'file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOG_FILE,
+            'formatter': 'verbose',
+            'maxBytes': 1024 * 1024 * 300,  # 300M
+        },
     },
     'root': {
         'handlers': ['console'],
@@ -168,7 +180,7 @@ LOGGING = {
     },
     'loggers': {
         'django': {
-            'handlers': ['console'],
+            'handlers': ['console', 'file'],
             'level': os.getenv('LOG_LEVEL', 'INFO'),
             'propagate': False,
         },
@@ -231,6 +243,7 @@ TIME_ZONE = "Asia/Shanghai"
 USE_I18N = True
 USE_TZ = True
 
+STATIC_ROOT = 'static'
 STATIC_URL = 'static/'
 
 # celery

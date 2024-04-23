@@ -56,9 +56,10 @@ deploy/nginx/certs/*
 .service.conf
 
 doc/*
+static/*
 run.sh
 
-celery-*.log
+*.log
 celery-*.pid
 celerybeat-schedule*
 beat-schedule*

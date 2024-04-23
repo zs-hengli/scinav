@@ -3,6 +3,7 @@
 
 export DEBUG='false'  # true false
 export LOG_LEVEL='INFO'  # INFO DEBUG WARNING ERROR
+export LOG_FILE='sci-nav.log'
 
 #export DJANGO_SETTINGS_MODULE='core.settings'
 export DJANGO_DB='postgresql'
