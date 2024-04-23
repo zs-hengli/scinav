@@ -121,6 +121,7 @@ def _is_collection_docs_all_in_document_library(collection_id, user_id):
             DocumentLibrary.TaskStatusChoices.COMPLETED,
             DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
             DocumentLibrary.TaskStatusChoices.PENDING,
+            DocumentLibrary.TaskStatusChoices.QUEUEING,
         ]
     ).values('document_id').distinct('document_id')
     coll_documents = [d['document_id'] for d in coll_document_libs]

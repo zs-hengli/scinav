@@ -159,8 +159,6 @@ class DocumentRagGetSerializer(serializers.ModelSerializer):
 
 
 class DocumentDetailSerializer(BaseModelSerializer):
-    citations = serializers.SerializerMethodField()
-    references = serializers.SerializerMethodField()
 
     @staticmethod
     def get_citations(obj: Document):
@@ -181,6 +179,8 @@ class DocumentDetailSerializer(BaseModelSerializer):
                 doc_apa = f'[{i + 1}] {authors};{title}.{source} {year}'  # noqa
                 ret_data.append({
                     'doc_id': c['doc_id'],
+                    'collection_id': c['collection_id'],
+                    'collection_type': c['collection_type'],
                     'doc_apa': doc_apa
                 })
             return ret_data
@@ -205,6 +205,8 @@ class DocumentDetailSerializer(BaseModelSerializer):
                 doc_apa = f'[{i + 1}] {authors};{title}.{source} {year}'  # noqa
                 ret_data.append({
                     'doc_id': r['doc_id'],
+                    'collection_id': r['collection_id'],
+                    'collection_type': r['collection_type'],
                     'doc_apa': doc_apa
                 })
             return ret_data

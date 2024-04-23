@@ -84,6 +84,40 @@ class Documents(APIView):
 
 
 @method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+class DocumentsCitations(APIView):
+
+    @staticmethod
+    def get(request, document_id, *args, **kwargs):
+        document = Document.objects.filter(id=document_id).first()
+        if not document:
+            return my_json_response(code=100002, msg=f'document not found by document_id={document_id}')
+        citations = DocumentDetailSerializer.get_citations(document)
+        data = {
+            'list': citations,
+            'total': len(citations)
+        }
+        return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+class DocumentsReferences(APIView):
+
+    @staticmethod
+    def get(request, document_id, *args, **kwargs):
+        document = Document.objects.filter(id=document_id).first()
+        if not document:
+            return my_json_response(code=100002, msg=f'document not found by document_id={document_id}')
+        references = DocumentDetailSerializer.get_references(document)
+        data = {
+            'list': references,
+            'total': len(references)
+        }
+        return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['GET', "POST", 'PUT', 'DELETE']), name='dispatch')
 class DocumentsLibrary(APIView):
     @staticmethod
