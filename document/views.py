@@ -54,15 +54,16 @@ class GenPresignedUrl(APIView):
 class Search(APIView):
 
     def post(self, request, *args, **kwargs):  # noqa
-        body = kwargs['request_data']['JSON']
+        body = request.data
         user_id = request.user.id
         check_keys(body, ['content'])
         post_data = {
             'content': body['content'],
             'page_size': int(body.get('page_size', 10)),
             'page_num': int(body.get('page_num', 1)),
+            'topn': int(body.get('topn', 100))
         }
-        data = search(user_id, body['content'], post_data['page_size'], post_data['page_num'])
+        data = search(user_id, body['content'], post_data['page_size'], post_data['page_num'], topn=post_data['topn'])
         return my_json_response(data)
 
 
@@ -93,7 +94,7 @@ class DocumentsLibrary(APIView):
         user_id = request.user.id
         serial = DocumentLibraryListQuerySerializer(data=request.query_params)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=100001, msg='invalid post data')
+            return my_json_response(serial.errors, code=100001, msg='invalid query data')
         vd = serial.validated_data
         data = get_document_library_list(user_id, vd['list_type'], vd['page_size'], vd['page_num'])
         return my_json_response(data)
@@ -115,7 +116,7 @@ class DocumentsLibrary(APIView):
         query = request.data
         serial = DocLibUpdateNameQuerySerializer(data=query)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=100001, msg='invalid post data')
+            return my_json_response(serial.errors, code=100001, msg='invalid query data')
         vd = serial.validated_data
         filter_query = Q(filename=vd['filename'], del_flag=False) & ~Q(id=document_library_id)
         if DocumentLibrary.objects.filter(filter_query).exists():
@@ -129,7 +130,7 @@ class DocumentsLibrary(APIView):
         user_id = request.user.id
         serial = DocLibDeleteQuerySerializer(data=request.data)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=100001, msg='invalid post data')
+            return my_json_response(serial.errors, code=100001, msg='invalid query data')
         vd = serial.validated_data
         document_library_delete(user_id, vd.get('ids'), vd.get('list_type'))
         return my_json_response({})
@@ -178,7 +179,7 @@ class DocumentsUrl(APIView):
         document = Document.objects.filter(id=document_id).values(
             'id', 'object_path', 'collection_id', 'collection_type', 'ref_doc_id', 'ref_collection_id').first()
         if not document:
-            return my_json_response(code=1, msg=f'document not found by document_id={document_id}')
+            return my_json_response(code=100002, msg=f'document not found by document_id={document_id}')
         if document['collection_type'] == Document.TypeChoices.PERSONAL and user_id != document['collection_id']:
             url = None
             if document['ref_doc_id']:
@@ -211,7 +212,7 @@ class DocumentsRagUpdate(APIView):
         query = request.data
         serial = ImportPapersToCollectionSerializer(data=query)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=100001, msg='invalid post data')
+            return my_json_response(serial.errors, code=100001, msg='invalid query data')
         data = import_papers_to_collection(serial.validated_data)
         return my_json_response(data)
 
@@ -224,7 +225,7 @@ class DocumentsRagUpdate(APIView):
         query = request.data
         serial = DocumentRagUpdateSerializer(data=query)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=1, msg='invalid put data')
+            return my_json_response(serial.errors, code=1, msg='invalid query data')
         doc_info = RagDocument.get(serial.validated_data)
         serial = DocumentRagCreateSerializer(data=doc_info)
         if not serial.is_valid():
