@@ -257,7 +257,7 @@ class DocumentLibrarySubscribeSerializer(DocumentLibraryPersonalSerializer):
 
 
 class DocLibUpdateNameQuerySerializer(serializers.Serializer):
-    filename = serializers.CharField(required=True, allow_null=False, allow_blank=False)
+    filename = serializers.CharField(required=True, allow_null=False, allow_blank=False, trim_whitespace=False)
 
 
 class DocLibAddQuerySerializer(serializers.Serializer):

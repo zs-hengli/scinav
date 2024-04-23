@@ -87,7 +87,7 @@ class ConversationCreateSerializer(serializers.Serializer):
 
 
 class ConversationUpdateSerializer(serializers.Serializer):
-    title = serializers.CharField(required=False, min_length=1, max_length=128)
+    title = serializers.CharField(required=False, min_length=1, max_length=128, allow_blank=True, trim_whitespace=False)
     collections = serializers.ListField(
         required=False, child=serializers.CharField(min_length=1), allow_null=True)
 
