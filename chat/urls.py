@@ -11,5 +11,6 @@ urlpatterns = [
 
     path('chat/conversations/<str:conversation_id>', views.Conversations.as_view()),
 
-    path('chat/questions/<str:question_id>/answer/<int:is_like>', views.QuestionAnswer.as_view()),
+    path('chat/questions/<str:question_id>/answer', views.QuestionUpdateAnswer.as_view()),
+    path('chat/questions/<str:question_id>/answer/<int:is_like>', views.QuestionLikeAnswer.as_view()),
 ]

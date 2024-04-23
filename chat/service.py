@@ -5,7 +5,7 @@ from dateutil.relativedelta import relativedelta
 
 from bot.models import Bot
 from bot.rag_service import Conversations as RagConversation
-from chat.models import Conversation
+from chat.models import Conversation, Question
 from chat.serializers import ConversationCreateSerializer, ConversationDetailSerializer, ConversationListSerializer, \
     chat_paper_ids
 from collection.models import Collection, CollectionDocument
@@ -219,6 +219,14 @@ def conversation_menu_list(user_id, list_type='all'):
         'data': data,
         'keys': list(data.keys()),
     }
+
+
+def question_update(validated_data):
+    vd = validated_data
+    answer = vd['answer']
+    question_id = vd['question_id']
+    Question.objects.filter(question_id=question_id).update(answer=answer)
+    return True
 
 
 def chat_query(validated_data):

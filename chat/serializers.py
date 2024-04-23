@@ -194,6 +194,22 @@ class QuestionAnswerSerializer(serializers.Serializer):
         return effect_count
 
 
+class QuestionUpdateAnswerQuerySerializer(serializers.Serializer):
+    user_id = serializers.CharField(required=True, max_length=36)
+    question_id = serializers.CharField(required=True, max_length=36)
+    answer = serializers.CharField(required=True, max_length=1024, trim_whitespace=False)
+
+    def validate(self, attrs):
+        if not Question.objects.filter(id=attrs['question_id'], conversation__user_id=attrs['user_id']).exists():
+            raise serializers.ValidationError(f"question not found, question_id: {attrs['question_id']}")
+        return attrs
+
+    @staticmethod
+    def update_answer(validated_data):
+        Question.objects.filter(id=validated_data['question_id']).update(answer=validated_data['answer'])
+        return True
+
+
 class ConversationsMenuQuerySerializer(serializers.Serializer):
     class ListTypeChoices(models.TextChoices):
         ALL = 'all', _('all')

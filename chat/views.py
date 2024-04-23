@@ -9,7 +9,7 @@ from django.conf import settings
 
 from chat.models import Conversation
 from chat.serializers import ConversationCreateSerializer, ConversationUpdateSerializer, ChatQuerySerializer, \
-    QuestionAnswerSerializer, ConversationsMenuQuerySerializer
+    QuestionAnswerSerializer, ConversationsMenuQuerySerializer, QuestionUpdateAnswerQuerySerializer
 from chat.service import chat_query, conversation_create, conversation_detail, conversation_list, conversation_update, \
     conversation_menu_list
 from core.utils.views import extract_json, my_json_response, streaming_response, ServerSentEventRenderer
@@ -111,7 +111,7 @@ class Chat(APIView):
 
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['PUT']), name='dispatch')
-class QuestionAnswer(APIView):
+class QuestionLikeAnswer(APIView):
 
     @staticmethod
     def put(request, question_id, is_like, *args, **kwargs):
@@ -125,3 +125,23 @@ class QuestionAnswer(APIView):
             return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
         serial.save(serial.validated_data)
         return my_json_response({'id': question_id, 'is_like': is_like})
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['PUT']), name='dispatch')
+class QuestionUpdateAnswer(APIView):
+
+    @staticmethod
+    def put(request, question_id, *args, **kwargs):
+        query = request.data
+        query['user_id'] = request.user.id
+        query['question_id'] = question_id
+        serial = QuestionUpdateAnswerQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
+        valid_data = serial.validated_data
+        serial.update_answer(valid_data)
+        return my_json_response({'id': question_id, 'answer': valid_data['answer']})
+
+
+
