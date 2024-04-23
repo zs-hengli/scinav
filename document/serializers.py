@@ -184,7 +184,7 @@ class DocumentDetailSerializer(BaseModelSerializer):
                     'doc_apa': doc_apa
                 })
             return ret_data
-        return None
+        return []
 
     @staticmethod
     def get_references(obj: Document):
@@ -210,7 +210,7 @@ class DocumentDetailSerializer(BaseModelSerializer):
                     'doc_apa': doc_apa
                 })
             return ret_data
-        return None
+        return []
 
     class Meta:
         model = Document
