@@ -308,7 +308,7 @@ class DocLibDeleteQuerySerializer(serializers.Serializer):
         if attrs.get('ids'):
             attrs['ids'] = [i for i in attrs['ids'] if i]
         if not attrs.get('ids') and not attrs.get('list_type'):
-            raise serializers.ValidationError('ids or is_all is required')
+            raise serializers.ValidationError('ids or list_type is required')
         return attrs
 
 

@@ -71,13 +71,13 @@ def async_document_library_task(self, task_id=None):
                 rag_ret['paper']['status'] = 'completed'
                 try:
                     document = document_update_from_rag_ret(rag_ret['paper'])
-                    if ref_document := reference_doc_to_document(document):
-                        update_document_lib('0000', [ref_document.id])
                     i.document = document
                     if i.user_id == '0000':
                         Document.objects.filter(
                             ref_doc_id=document.doc_id, ref_collection_id=document.collection_id
                         ).update(full_text_accessible=rag_ret['paper']['full_text_accessible'])
+                    if ref_document := reference_doc_to_document(document):
+                        update_document_lib('0000', [ref_document.id])
                 except Exception as e:
                     logger.error(f'async_document_library_task {i.task_id}, {e}')
             i.save()

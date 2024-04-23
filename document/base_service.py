@@ -25,6 +25,7 @@ def update_document_lib(user_id, document_ids):
 def document_update_from_rag_ret(rag_ret):
     serial = DocumentRagCreateSerializer(data=rag_ret)
     if not serial.is_valid():
+        logger.error(f'document_update_from_rag_ret failed, serial.errors: {serial.errors}')
         raise Exception(serial.errors)
     vd = serial.validated_data
     document, _ = Document.objects.update_or_create(
