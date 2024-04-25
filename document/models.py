@@ -57,7 +57,28 @@ class Document(models.Model):
     updated_at = models.DateTimeField(null=True, auto_now=True)
     created_at = models.DateTimeField(null=True, auto_now_add=True)
 
+    @staticmethod
+    def raw_by_docs(docs, fileds='*', where=None):
+        if fileds != '*' and isinstance(fileds, list):
+            fileds = ','.join(fileds)
+        doc_ids_str = ','.join([f"('{d['collection_id']}', {d['doc_id']})" for d in docs])
+        sql = f"SELECT {fileds} FROM document WHERE (collection_id, doc_id) IN ({doc_ids_str})"
+        if where:
+            sql += f"and {where}"
+        return Document.objects.raw(sql)
+
+    @staticmethod
+    def difference_docs(docs1, docs2):
+        docs1_dict = {f"{d['collection_id']}-{d['doc_id']}": d for d in docs1}
+        docs2_dict = {f"{d['collection_id']}-{d['doc_id']}": d for d in docs2}
+        diff_docs = []
+        for k, v in docs1_dict.items():
+            if k not in docs2_dict:
+                diff_docs.append(v)
+        return diff_docs
+
     class Meta:
+        unique_together = ['collection_id', 'doc_id']
         db_table = 'document'
         verbose_name = 'document'
 

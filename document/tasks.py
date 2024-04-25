@@ -85,15 +85,14 @@ def async_document_library_task(self, task_id=None):
 
 
 @shared_task(bind=True)
-def async_update_document(self, document_ids, rag_data):
+def async_update_document(self, document_ids):
     documents = Document.objects.filter(pk__in=document_ids).all()
     fileds = [
-        'doc_id', 'collection_type', 'collection_id', 'title', 'abstract', 'authors', 'doi', 'categories',
+        'title', 'abstract', 'authors', 'doi', 'categories',
         'year', 'pub_date', 'pub_type', 'venue', 'journal', 'conference', 'keywords', 'full_text_accessible',
         'pages', 'citation_count', 'reference_count', 'object_path', 'source_url', 'checksum',
         'ref_collection_id', 'ref_doc_id',
     ]
-    logger.info(f'async_update_document, begin rag_data len: {len(rag_data)}')
     for i, d in enumerate(documents):
         get_rag_data = {
             'collection_type': d.collection_type,

@@ -22,7 +22,7 @@ from document.base_service import document_update_from_rag_ret, update_document_
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentRagUpdateSerializer, \
     DocumentLibrarySubscribeSerializer, DocumentLibraryPersonalSerializer, DocLibAddQuerySerializer, \
-    DocumentLibraryListQuerySerializer, DocumentDetailSerializer, DocumentRagGetSerializer
+    DocumentLibraryListQuerySerializer, DocumentDetailSerializer, DocumentRagGetSerializer, DocumentRagCreateSerializer
 from document.tasks import async_document_library_task, async_update_document
 
 logger = logging.getLogger(__name__)
@@ -94,61 +94,13 @@ def search(user_id, content, page_size=10, page_num=1, topn=100):
     rag_ret = Rag_Document.search(user_id, content, limit=topn)
     ret_data = []
     rag_collections = list(set([r['collection_id'] for r in rag_ret]))
-    rag_data_dict = {f"{r['doc_id']}_{r['collection_id']}_{r['collection_type']}": r for r in rag_ret}
-    create_data = []
-    update_data = []
     collections = Collection.objects.filter(id__in=rag_collections).values('id', 'title').all()
     collections_dict = {c['id']: c for c in collections}
-    document_ids = []
+    documents_dict = get_documents_by_rag(rag_ret)
+    document_ids = [d.id for d in documents_dict.values()]
     for doc in rag_ret:
-        data = {
-            'doc_id': doc['doc_id'],
-            'collection_type': doc['collection_type'],
-            'collection_id': doc['collection_id'],
-            'title': doc['title'],
-            'abstract': doc['abstract'],
-            'authors': doc['authors'],
-            'doi': doc['doi'],
-            'categories': doc['categories'],
-            'year': doc['year'],
-            'pub_date': doc['pub_date'],
-            'pub_type': doc['pub_type'],
-            'venue': doc['venue'],
-            'journal': doc['journal'],
-            'conference': doc['conference'],
-            'keywords': doc['keywords'],
-            'full_text_accessible': doc['full_text_accessible'],
-            'pages': doc['pages'],
-            'citation_count': doc['citation_count'],
-            'reference_count': doc['reference_count'],
-            # 'citations': doc['citations'],
-            'object_path': doc['object_path'],
-            'source_url': doc['source_url'],
-            'checksum': doc['checksum'],
-            'ref_collection_id': doc['ref_collection_id'],  # todo 分享只返回公共文章列表，如果是个人取ref_doc_id
-            'ref_doc_id': doc['ref_doc_id'],
-            'state': (Document.StateChoices.COMPLETED
-                      if doc['collection_id'] == 'arxiv' else Document.StateChoices.UNDONE)
-        }
-        # doc = Document.objects.filter(
-        #     doc_id=data['doc_id'], collection_id=data['collection_id'], collection_type=data['collection_type']
-        # ).first()
-        # if doc:
-        #     data['id'] = str(doc.id)
-        #     update_data.append(doc)
-        # else:
-        #     data['id'] = str(uuid.uuid4())
-        #     create_data.append(data)
-
-        create_data = copy.deepcopy(data)
-        models_query.MAX_GET_RESULTS = 1
-        if not (doc := Document.objects.filter(doc_id=data['doc_id'], collection_id=data['collection_id']).first()):
-            doc, _ = Document.objects.update_or_create(
-                defaults=create_data,
-                doc_id=data['doc_id'], collection_id=data['collection_id'], collection_type=data['collection_type'])
-        document_ids.append(doc.id)
-        logger.debug(f'update_ret: {doc}')
-        data['id'] = str(doc.id)
+        data = DocumentRagCreateSerializer(doc).data
+        data['id'] = documents_dict[f"{doc['collection_id']}-{doc['doc_id']}"].id
 
         if collections_dict.get(data['collection_id']):
             collection_title = collections_dict[data['collection_id']]['title']
@@ -156,6 +108,11 @@ def search(user_id, content, page_size=10, page_num=1, topn=100):
             collection_title = '个人库'
         type_pub = Collection.TypeChoices.PUBLIC
         collection_tag = data['collection_id'] if data['collection_type'] == type_pub else data['collection_type']
+        source = (
+            data['journal'] if data['journal'] else
+            data['conference'] if data['conference'] else
+            data['venue'] if data['venue'] else ''
+        )
         ret_data.append({
             'id': data['id'],
             'title': data['title'],
@@ -164,19 +121,36 @@ def search(user_id, content, page_size=10, page_num=1, topn=100):
             'pub_date': data['pub_date'],
             'citation_count': data['citation_count'],
             'reference_count': data['reference_count'],
+            'doc_id': data['doc_id'],
             'collection_id': str(data['collection_id']),
             'type': collection_tag,
             'collection_title': collection_title,
-            'source': data['journal'] if data['journal'] else data['conference'] if data['conference'] else '',
-            'reference_formats': get_reference_formats(DocumentRagGetSerializer(data).data),
+            'source': source,
+            'reference_formats': get_reference_formats(data),
         })
-    async_update_document.apply_async(args=(document_ids, rag_data_dict))
+    async_update_document.apply_async(args=[document_ids])
     search_result_save_cache(user_id, content, ret_data)
     total = len(ret_data)
     return {
         'list': ret_data[start_num:(page_size * page_num)] if total > start_num else [],
         'total': total,
     }
+
+
+def get_documents_by_rag(rag_data):
+    """
+    批量处理 Document
+    """
+    rag_dict = {f"{d['collection_id']}-{d['doc_id']}": d for d in rag_data}
+    rag_docs = [{'id': None, 'collection_id': d['collection_id'], 'doc_id': d['doc_id']} for d in rag_data]
+    exit_documents = Document.raw_by_docs(rag_docs)
+    exit_docs = [{'id': d.id, 'collection_id': d.collection_id, 'doc_id': d.doc_id} for d in exit_documents]
+    diff_docs = Document.difference_docs(rag_docs, exit_docs)
+    diff_rag = [rag_dict[f"{d['collection_id']}-{d['doc_id']}"] for d in diff_docs]
+
+    diff_documents = Document.objects.bulk_create([Document(**d) for d in diff_rag])
+    documents = list(exit_documents) + diff_documents
+    return {f"{d.collection_id}-{d.doc_id}": d for d in documents}
 
 
 def search_result_from_cache(user_id, content, page_size=10, page_num=1):
