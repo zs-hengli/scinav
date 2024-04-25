@@ -1,6 +1,7 @@
 import logging
 
 from django.db import models
+from django.db.models import Q
 from rest_framework import serializers
 from django.utils.translation import gettext_lazy as _
 
@@ -105,7 +106,8 @@ class ConversationDetailSerializer(BaseModelSerializer):
 
     @staticmethod
     def get_questions(obj: Conversation):
-        questions = obj.question.filter(del_flag=False).all()
+        filter_query = Q(del_flag=False) & ~Q(answer='')
+        questions = obj.question.filter(filter_query).order_by('updated_at').all()
         return QuestionConvDetailSerializer(questions, many=True).data
 
     class Meta:
@@ -225,7 +227,7 @@ class QuestionUpdateAnswerQuerySerializer(serializers.Serializer):
                 question.is_stop = True
                 question.save()
         else:
-            Question.objects.filter(question_id=question_id).update(answer=answer, is_stop=True)
+            Question.objects.filter(id=question_id).update(answer=answer, is_stop=True)
         return True
 
 
