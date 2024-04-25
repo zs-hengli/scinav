@@ -243,7 +243,7 @@ class DocumentLibraryListQuerySerializer(serializers.Serializer):
 class DocumentLibraryPersonalSerializer(serializers.Serializer):
     id = serializers.CharField(required=True, allow_null=True)
     filename = serializers.CharField(required=True)
-    document_title = serializers.CharField(required=True)
+    document_title = serializers.CharField(required=True, allow_blank=True)
     document_id = serializers.CharField(required=True, allow_null=True)
     pages = serializers.IntegerField(required=False, allow_null=True, default=None)
     record_time = serializers.DateTimeField(required=True, format="%Y-%m-%d %H:%M:%S", allow_null=True)
