@@ -303,6 +303,8 @@ class Conversations:
                     'event': 'on_error', 'error': error_msg,
                     "detail": {"question_id": question_id, "conversation_id": conversation_id}}) + "\n"
                 return
+            question.is_stop = False
+            question.save()
 
         try:
             resp = rag_requests(url, json=post_data, method='POST', timeout=60, stream=True)
@@ -344,16 +346,22 @@ class Conversations:
                         if line_data['event'] == 'tool_end':
                             line_data['output'] = stream['output']
                         yield json.dumps(line_data) + '\n'
+            # # update question
+            question = Question.objects.filter(id=question.id).first()
+        except Exception as exc:
+            logger.error(f'query exception: {exc}')
+            yield json.dumps({'event': 'on_error', 'error': error_msg, 'detail': str(exc)}) + '\n'
+            question = Question.objects.filter(id=question.id).first()
+            if not question.is_stop: stream['chunk'] = [error_msg]
+        finally:
             # update question
             question.content = content
             question.stream = stream
             question.input_tokens = stream.get('statistics', {}).get('input_tokens', 0)
             question.output_tokens = stream.get('statistics', {}).get('output_tokens', 0)
-            question.answer = ''.join(stream['chunk'])
+            if not question.is_stop: question.answer = ''.join(stream['chunk'])
             question.save()
-        except Exception as exc:
-            logger.error(f'query exception: {exc}')
-            yield json.dumps({'event': 'on_error', 'error': error_msg, 'detail': str(exc)}) + '\n'
+
         yield json.dumps({
             'event': 'conversation', 'id': conversation_id, 'question_id': str(question.id) if question else None
         }) + '\n'

@@ -268,20 +268,18 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
         my_end_num = my_start_num + page_size - len(list_data)
         query_set = query_set[my_start_num:my_end_num]
         my_list_data = []
+        document_ids = [str(doc_lib.document_id) for doc_lib in query_set if doc_lib.document_id]
+        documents = Document.objects.filter(id__in=document_ids).all()
+        documents_dict = {str(document.id): document for document in documents}
         for doc_lib in query_set:
-            document_title = doc_lib.document.title if doc_lib.document else '-'
+            ref_type, document = None, documents_dict.get(str(doc_lib.document_id), None)
+            document_title = document.title if document else '-'
             filename = doc_lib.filename if doc_lib.filename else document_title
-            ref_type, document = None, None
-            if doc_lib.document_id:
-                document = doc_lib.document
+            if document:
                 if document.ref_doc_id:
                     ref_type = 'reference'
-                    ref_document = Document.objects.filter(
-                        doc_id=document.ref_doc_id, collection_id=document.ref_collection_id,
-                        object_path__isnull=False, del_flag=False
-                    ).first()
-                    if ref_document:
-                        ref_type = 'reference&full_text_accessible'
+                if document.ref_doc_id and document.full_text_accessible:
+                    ref_type = 'reference&full_text_accessible'
             stat_comp = DocumentLibrary.TaskStatusChoices.COMPLETED
             stat_queue = DocumentLibrary.TaskStatusChoices.QUEUEING
             stat_in = DocumentLibrary.TaskStatusChoices.IN_PROGRESS

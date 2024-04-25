@@ -72,6 +72,7 @@ class Question(models.Model):
     input_tokens = models.IntegerField(null=True, default=None, db_default=None)
     output_tokens = models.IntegerField(null=True, default=None, db_default=None)
     del_flag = models.BooleanField(default=False, db_default=False)
+    is_stop = models.BooleanField(default=False, db_default=False)
     updated_at = models.DateTimeField(null=True, auto_now=True)
     created_at = models.DateTimeField(null=True, auto_now_add=True)
 

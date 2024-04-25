@@ -132,16 +132,20 @@ class QuestionLikeAnswer(APIView):
 class QuestionUpdateAnswer(APIView):
 
     @staticmethod
-    def put(request, question_id, *args, **kwargs):
+    def put(request, *args, **kwargs):
         query = request.data
         query['user_id'] = request.user.id
-        query['question_id'] = question_id
         serial = QuestionUpdateAnswerQuerySerializer(data=query)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
-        valid_data = serial.validated_data
-        serial.update_answer(valid_data)
-        return my_json_response({'id': question_id, 'answer': valid_data['answer']})
+        validated_data = serial.validated_data
+        serial.update_answer(validated_data)
+        data = {'answer': validated_data['answer']}
+        if validated_data.get('question_id'):
+            data['question_id'] = validated_data['question_id']
+        if validated_data.get('conversation_id'):
+            data['conversation_id'] = validated_data['conversation_id']
+        return my_json_response(data)
 
 
 

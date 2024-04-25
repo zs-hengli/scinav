@@ -1,3 +1,4 @@
+import copy
 import datetime
 import logging
 
@@ -70,11 +71,9 @@ def collection_list(user_id, list_type, page_size, page_num):
             elif coll['type'] == Collection.TypeChoices.SUBSCRIBE:
                 bot = bots_dict.get(coll['bot_id'])
                 coll['is_all_in_document_library'] = True
-                if bot and bot.type == Bot.TypeChoices.PUBLIC:
-                    coll['is_all_in_document_library'] = True
                 # todo 未发布专题 分享出去 没有全文
-                elif bot and bot.type == Bot.TypeChoices.PERSONAL:
-                    sub_bot_info = sub_bot_infos.get(coll['id'], {})
+                if bot and bot.type == Bot.TypeChoices.PERSONAL:
+                    sub_bot_info = sub_bot_infos.get(coll['bot_id'], {})
                     coll['is_all_in_document_library'] = sub_bot_info.get('is_all_in_document_library', False)
             else:
                 coll['is_all_in_document_library'] = _is_collection_docs_all_in_document_library(coll['id'], user_id)
@@ -168,15 +167,16 @@ def _bot_subscribe_collection_list(user_id):
             # if bot.type == Bot.TypeChoices.PUBLIC:
             bot_sub_collect[bot_id]['total'] += len(ref_documents)
             if bot.type == Bot.TypeChoices.PERSONAL:
-                query_set1, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
-                    user_id, bot_sub_collect[bot_id]['collection_ids'], 'personal', bot)
+                new_bot = copy.deepcopy(bot)
+                new_bot.type = Bot.TypeChoices.PUBLIC
+                my_doc_lib_doc_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(user_id)
                 query_set2, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
-                    bot.user_id, bot_sub_collect[bot_id]['collection_ids'], 'personal', bot)
+                    user_id, bot_sub_collect[bot_id]['collection_ids'], 'personal', new_bot)
                 diff_set = (
-                    set([d['document_id'] for d in query_set2.all()])
-                    - set([d['document_id'] for d in query_set1.all()])
+                    set([d['document_id'] for d in query_set2.all()] + d3) - set(my_doc_lib_doc_ids)
                 )
                 sub_bot_infos[bot_id] = {'is_all_in_document_library': False if diff_set else True}
+            else: sub_bot_infos[bot_id] = {'is_all_in_document_library': True}
     # 排序 updated_at 倒序
     list_data = sorted(bot_sub_collect.values(), key=lambda x: x['updated_at'], reverse=True)
     return list_data, bots_dict, sub_bot_infos

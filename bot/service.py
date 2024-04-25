@@ -323,12 +323,18 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
     doc_ids = []
     show_total = 0
     # 个人上传文件库 关联的文献
-    # 未发布专题 显示未公共库， 专题广场专题显示为订阅全文
+    # 未发布专题 显示未公共库文献， 专题广场专题显示为订阅全文
+    ref_doc_lib_ids = set(d3 if d3 else []) & set(CollectionDocumentListSerializer._my_doc_lib_document_ids(user_id))
     if d3 and (
         list_type in ['all', 'all_documents']
         or (list_type in ['s2', 'arxiv'] and bot.type == Collection.TypeChoices.PERSONAL)
         or (list_type in ['subscribe_full_text'] and bot.type == Collection.TypeChoices.PUBLIC)
+        or (list_type in ['personal'] and ref_doc_lib_ids)
     ):
+        if list_type in ['personal']:
+            d3 = list(ref_doc_lib_ids)
+        elif list_type in ['s2', 'arxiv']:
+            d3 = list(set(d3) - set(ref_doc_lib_ids))
         doc_ids = d3[start_num:(page_size * page_num - need_public_count)]
         need_public_count += len(doc_ids)
         public_count += len(d3)

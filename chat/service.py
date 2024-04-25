@@ -221,14 +221,6 @@ def conversation_menu_list(user_id, list_type='all'):
     }
 
 
-def question_update(validated_data):
-    vd = validated_data
-    answer = vd['answer']
-    question_id = vd['question_id']
-    Question.objects.filter(question_id=question_id).update(answer=answer)
-    return True
-
-
 def chat_query(validated_data):
     if not validated_data.get('conversation_id'):
         conversation_id = conversation_create(validated_data)

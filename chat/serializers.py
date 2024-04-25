@@ -196,17 +196,36 @@ class QuestionAnswerSerializer(serializers.Serializer):
 
 class QuestionUpdateAnswerQuerySerializer(serializers.Serializer):
     user_id = serializers.CharField(required=True, max_length=36)
-    question_id = serializers.CharField(required=True, max_length=36)
-    answer = serializers.CharField(required=True, max_length=1024, trim_whitespace=False)
+    question_id = serializers.CharField(required=False, max_length=36)
+    conversation_id = serializers.CharField(required=False, max_length=36)
+    answer = serializers.CharField(required=True, max_length=1024, trim_whitespace=False, allow_blank=True)
 
     def validate(self, attrs):
-        if not Question.objects.filter(id=attrs['question_id'], conversation__user_id=attrs['user_id']).exists():
+        if not attrs.get('conversation_id') and not attrs.get('question_id'):
+            raise serializers.ValidationError('conversation_id and question_id are all empty')
+        if attrs.get('question_id') and not Question.objects.filter(
+            id=attrs['question_id'], conversation__user_id=attrs['user_id']
+        ).exists():
             raise serializers.ValidationError(f"question not found, question_id: {attrs['question_id']}")
+        if attrs.get('conversation_id') and not Conversation.objects.filter(
+            id=attrs['conversation_id'], user_id=attrs['user_id']
+        ).exists():
+            raise serializers.ValidationError(f"conversation not found, conversation_id: {attrs['conversation_id']}")
         return attrs
 
     @staticmethod
     def update_answer(validated_data):
-        Question.objects.filter(id=validated_data['question_id']).update(answer=validated_data['answer'])
+        vd = validated_data
+        answer = vd['answer']
+        question_id = vd.get('question_id')
+        conversation_id = vd.get('conversation_id')
+        if not question_id:
+            question = Question.objects.filter(conversation_id=conversation_id).order_by('-updated_at').first()
+            question.answer = answer
+            question.is_stop = True
+            question.save()
+        else:
+            Question.objects.filter(question_id=question_id).update(answer=answer, is_stop=True)
         return True
 
 
