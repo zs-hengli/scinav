@@ -220,10 +220,10 @@ class QuestionUpdateAnswerQuerySerializer(serializers.Serializer):
         question_id = vd.get('question_id')
         conversation_id = vd.get('conversation_id')
         if not question_id:
-            question = Question.objects.filter(conversation_id=conversation_id).order_by('-updated_at').first()
-            question.answer = answer
-            question.is_stop = True
-            question.save()
+            if question := Question.objects.filter(conversation_id=conversation_id).order_by('-updated_at').first():
+                question.answer = answer
+                question.is_stop = True
+                question.save()
         else:
             Question.objects.filter(question_id=question_id).update(answer=answer, is_stop=True)
         return True
