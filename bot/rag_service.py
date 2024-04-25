@@ -335,6 +335,7 @@ class Conversations:
                     output_tokens=stream.get('statistics', {}).get('output_tokens', 0),
                     answer=''.join(stream['chunk'])
                 )
+                question.save()
 
             for line in resp.iter_lines():
                 if line:
@@ -346,15 +347,12 @@ class Conversations:
                         if line_data['event'] == 'tool_end':
                             line_data['output'] = stream['output']
                         yield json.dumps(line_data) + '\n'
-            # # update question
-            question = Question.objects.filter(id=question.id).first()
         except Exception as exc:
             logger.error(f'query exception: {exc}')
             yield json.dumps({'event': 'on_error', 'error': error_msg, 'detail': str(exc)}) + '\n'
-            question = Question.objects.filter(id=question.id).first()
-            if not question.is_stop: stream['chunk'] = [error_msg]
         finally:
             # update question
+            question = Question.objects.filter(id=question.id).first()
             question.content = content
             question.stream = stream
             question.input_tokens = stream.get('statistics', {}).get('input_tokens', 0)
