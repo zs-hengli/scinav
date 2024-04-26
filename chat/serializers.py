@@ -106,7 +106,7 @@ class ConversationDetailSerializer(BaseModelSerializer):
 
     @staticmethod
     def get_questions(obj: Conversation):
-        filter_query = Q(del_flag=False) & ~Q(answer='') and Q(answer__isnull=False)
+        filter_query = Q(del_flag=False) & ~Q(answer='') & Q(answer__isnull=False)
         questions = obj.question.filter(filter_query).order_by('updated_at').all()
         return QuestionConvDetailSerializer(questions, many=True).data
 
