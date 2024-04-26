@@ -24,9 +24,6 @@ class Index(APIView):
 
     def get(self, request, *args, **kwargs):  # noqa
         logger.debug(f'kwargs: {kwargs}')
-        logger.debug(f"dddddddddd request_id: {request.request_id}")
-        logger.debug(f"dddddddddd REQUEST_ID_HEADER: {settings.REQUEST_ID_HEADER}")
-        logger.debug(f"dddddddddd REQUEST_ID: {settings.REQUEST_ID}")
         data = {'desc': 'chat index'}
 
         return my_json_response(data)

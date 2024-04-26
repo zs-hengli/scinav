@@ -1,5 +1,4 @@
-import copy
-import uuid
+import json
 import json
 import logging
 
@@ -7,8 +6,7 @@ import boto3
 from botocore.config import Config
 from django.conf import settings
 from django.core.cache import cache
-from django.db.models import Q
-from django.db.models import query as models_query
+from django.db.models import Q, F
 from django.utils.translation import gettext_lazy as _
 
 from bot.models import BotSubscribe, Bot, BotCollection
@@ -21,8 +19,8 @@ from core.utils.exceptions import ValidationError
 from document.base_service import document_update_from_rag_ret, update_document_lib
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentRagUpdateSerializer, \
-    DocumentLibrarySubscribeSerializer, DocumentLibraryPersonalSerializer, DocLibAddQuerySerializer, \
-    DocumentLibraryListQuerySerializer, DocumentDetailSerializer, DocumentRagGetSerializer, DocumentRagCreateSerializer
+    DocumentLibraryPersonalSerializer, DocLibAddQuerySerializer, \
+    DocumentLibraryListQuerySerializer, DocumentRagCreateSerializer
 from document.tasks import async_document_library_task, async_update_document
 
 logger = logging.getLogger(__name__)
@@ -92,6 +90,7 @@ def search(user_id, content, page_size=10, page_num=1, topn=100):
         return cache_data
 
     rag_ret = Rag_Document.search(user_id, content, limit=topn)
+    rag_ret = DocumentRagCreateSerializer(rag_ret, many=True).data
     ret_data = []
     rag_collections = list(set([r['collection_id'] for r in rag_ret]))
     collections = Collection.objects.filter(id__in=rag_collections).values('id', 'title').all()
@@ -100,7 +99,7 @@ def search(user_id, content, page_size=10, page_num=1, topn=100):
     document_ids = [d.id for d in documents_dict.values()]
     for doc in rag_ret:
         data = DocumentRagCreateSerializer(doc).data
-        data['id'] = documents_dict[f"{doc['collection_id']}-{doc['doc_id']}"].id
+        data['id'] = str(documents_dict[f"{doc['collection_id']}-{doc['doc_id']}"].id)
 
         if collections_dict.get(data['collection_id']):
             collection_title = collections_dict[data['collection_id']]['title']
@@ -143,7 +142,7 @@ def get_documents_by_rag(rag_data):
     """
     rag_dict = {f"{d['collection_id']}-{d['doc_id']}": d for d in rag_data}
     rag_docs = [{'id': None, 'collection_id': d['collection_id'], 'doc_id': d['doc_id']} for d in rag_data]
-    exit_documents = Document.raw_by_docs(rag_docs)
+    exit_documents = Document.raw_by_docs(rag_docs) if rag_docs else []
     exit_docs = [{'id': d.id, 'collection_id': d.collection_id, 'doc_id': d.doc_id} for d in exit_documents]
     diff_docs = Document.difference_docs(rag_docs, exit_docs)
     diff_rag = [rag_dict[f"{d['collection_id']}-{d['doc_id']}"] for d in diff_docs]
@@ -252,8 +251,11 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
             if document:
                 if document.ref_doc_id:
                     ref_type = 'reference'
-                if document.ref_doc_id and document.full_text_accessible:
-                    ref_type = 'reference&full_text_accessible'
+                    if document.full_text_accessible:
+                        ref_type = 'reference&full_text_accessible'
+                elif document.collection_type == Collection.TypeChoices.PUBLIC:
+                    ref_type = 'public'
+
             stat_comp = DocumentLibrary.TaskStatusChoices.COMPLETED
             stat_queue = DocumentLibrary.TaskStatusChoices.QUEUEING
             stat_in = DocumentLibrary.TaskStatusChoices.IN_PROGRESS
@@ -411,6 +413,7 @@ def document_personal_upload(validated_data):
             'object_path': file['object_path'],
             'del_flag': False,
             'task_status': DocumentLibrary.TaskStatusChoices.PENDING,
+            'task_type': Document.TypeChoices.PERSONAL,
             'task_id': None,
             'error': None,
         }
@@ -442,22 +445,22 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
      3. 文献列表添加
     """
     is_all = True
-    all_document_ids = []
+    all_document_ids, ref_ds = [], []
     if add_type == DocLibAddQuerySerializer.AddTypeChoices.DOCUMENT_SEARCH:
         search_result = search_result_from_cache(search_content, 200, 1)
         if search_result:
             all_document_ids = [d['id'] for d in search_result['list']]
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_ARXIV:
-        coll_documents, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
+        coll_documents, d1, d2, _ = CollectionDocumentListSerializer.get_collection_documents(
             user_id, [collection_id], 'arxiv')
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_S2:
-        coll_documents, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
+        coll_documents, d1, d2, _ = CollectionDocumentListSerializer.get_collection_documents(
             user_id, [collection_id], 's2')
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_SUBSCRIBE_FULL_TEXT:
         bot = Bot.objects.filter(id=bot_id).first()
-        coll_documents, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
+        coll_documents, d1, d2, _ = CollectionDocumentListSerializer.get_collection_documents(
             user_id, [collection_id], 'subscribe_full_text', bot)
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_DOCUMENT_LIBRARY:
@@ -465,11 +468,11 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
         if bot_id:
             collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False).values('collection_id').all()
             collection_ids += [c['collection_id'] for c in collections]
-        coll_documents, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
+        coll_documents, d1, d2, _ = CollectionDocumentListSerializer.get_collection_documents(
             user_id, collection_ids, 'document_library')
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_ALL:
-        coll_documents, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
+        coll_documents, d1, d2, ref_ds = CollectionDocumentListSerializer.get_collection_documents(
             user_id, [collection_id], 'all')
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     else:
@@ -493,7 +496,9 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
     else:
         document_ids = list(set(all_document_ids) - set(document_ids)) \
             if is_all else list(set(document_ids + all_document_ids))
-    document_ids = _get_public_document_ids(user_id, document_ids)
+    # document_ids = _get_public_document_ids(user_id, document_ids)
+    if ref_ds:
+        document_ids = list(set(document_ids) | set(ref_ds))
     update_document_lib(user_id, document_ids)
     async_document_library_task.apply_async()
     return True
@@ -572,7 +577,31 @@ def document_library_delete(user_id, ids, list_type):
     else:
         filter_query = Q(user_id=user_id, del_flag=False, id__in=ids)
     doc_libs = DocumentLibrary.objects.filter(filter_query)
-    effected_num = doc_libs.update(del_flag=True)
+    all_doc_libs = doc_libs.all()
+    user_per_document_ids = [doclib.document_id for doclib in all_doc_libs if doclib.document_id and doclib.filename]
+    in_progress_document_libs = [doclib for doclib in all_doc_libs if doclib.task_status in ['in_progress', 'queueing']]
+    # delete CollectionDocument
+    user_collections = Collection.objects.filter(user_id=user_id, del_flag=False).values('id').all()
+    user_collection_ids = [c['id'] for c in user_collections]
+    for coll_id in user_collection_ids:
+        effect_num = CollectionDocument.objects.filter(
+            document_id__in=user_per_document_ids,
+            collection_id=coll_id,
+        ).update(del_flag=True)
+        if effect_num:
+            Collection.objects.filter(id=coll_id).update(total_personal=F('total_personal') - effect_num)
+    # delete Document
+    Document.objects.filter(id__in=user_per_document_ids, collection_id=user_id).update(del_flag=True)
+    # todo rag delete
+    to_del_documents = Document.objects.filter(
+        id__in=user_per_document_ids, collection_type=Document.TypeChoices.PERSONAL
+    ).values('id', 'collection_id', 'doc_id').all()
+    for document in to_del_documents:
+        RagDocument.delete_personal_paper(document['collection_id'], document['doc_id'])
+    for task in in_progress_document_libs:
+        RagDocument.cancel_ingest_task(task.task_id)
+    # delete DocumentLibrary
+    effected_num = doc_libs.delete()
     return effected_num
 
 

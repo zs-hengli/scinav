@@ -3,8 +3,14 @@ import logging
 from celery import shared_task
 from django.db.models import Q
 
+from bot.base_service import recreate_bot
+from bot.models import BotCollection, Bot
 from bot.rag_service import Document as RagDocument
-from document.base_service import document_update_from_rag_ret, reference_doc_to_document, update_document_lib
+from chat.models import Conversation
+from collection.base_service import update_conversation_by_collection
+from collection.models import Collection
+from document.base_service import document_update_from_rag_ret, reference_doc_to_document, update_document_lib, \
+    reference_doc_to_document_library
 from document.models import DocumentLibrary, Document
 
 logger = logging.getLogger('celery')
@@ -58,26 +64,13 @@ def async_document_library_task(self, task_id=None):
                     Document.objects.filter(pk=i.document_id).update(state='error')
                 i.task_status = task_status
                 i.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message']}
-                if i.user_id == '0000' and i.document_id:
-                    document = Document.objects.filter(pk=i.document_id).first()
-                    if document:
-                        document.full_text_accessible = None
-                        document.save()
-                        Document.objects.filter(
-                            ref_doc_id=document.doc_id, ref_collection_id=document.collection_id
-                        ).update(full_text_accessible=None)
             else:  # COMPLETED
                 i.task_status = task_status
-                rag_ret['paper']['status'] = 'completed'
+                rag_ret['paper']['status'] = task_status
                 try:
                     document = document_update_from_rag_ret(rag_ret['paper'])
                     i.document = document
-                    if i.user_id == '0000':
-                        Document.objects.filter(
-                            ref_doc_id=document.doc_id, ref_collection_id=document.collection_id
-                        ).update(full_text_accessible=rag_ret['paper']['full_text_accessible'])
-                    if ref_document := reference_doc_to_document(document):
-                        update_document_lib('0000', [ref_document.id])
+                    reference_doc_to_document(document)
                 except Exception as e:
                     logger.error(f'async_document_library_task {i.task_id}, {e}')
             i.save()
@@ -108,4 +101,39 @@ def async_update_document(self, document_ids):
             setattr(documents[i], f, data[f])
     Document.objects.bulk_update(documents, fileds)
     logger.info(f'async_update_document end, documents len: {len(documents)}')
+    return True
+
+
+@shared_task(bind=True)
+def async_ref_document_to_document_library(self, document_ids):
+    """
+    下载个人上传的关联文献
+    """
+    documents = Document.objects.filter(pk__in=document_ids, ref_doc_id__gt=0).all()
+    ref_docs = [{'id': None, 'collection_id': d.ref_collection_id, 'doc_id': d.ref_doc_id} for d in documents]
+    ref_documents = Document.raw_by_docs(ref_docs) if ref_docs else []
+    for d in ref_documents:
+        reference_doc_to_document_library(d)
+    logger.info(f'ref_document_to_document_library end, ref_documents len: {len(ref_documents)}')
+    return True
+
+
+@shared_task(bind=True)
+def async_update_conversation_by_collection(self, collection_id):
+    """
+    收藏夹有调整 更新相关问答 和专题
+    """
+    collection_query = BotCollection.objects.filter(collection_id=collection_id)
+    collection = Collection.objects.filter(pk=collection_id).first()
+    if collection:
+        bots = Bot.objects.filter(
+            bot_id__in=collection_query.values_list('bot_id', flat=True),
+            del_flag=False
+        ).all()
+        for bot in bots:
+            recreate_bot(bot, collection_query)
+
+        conversations = Conversation.objects.filter(collections__contains=collection_id, del_flag=False).all()
+        for conv in conversations:
+            update_conversation_by_collection(collection.user_id, conv, conv.collections)
     return True

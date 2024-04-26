@@ -38,6 +38,8 @@ class CollectionDocument(models.Model):
     )
     document = models.ForeignKey(
         'document.Document', db_constraint=False, on_delete=models.DO_NOTHING, db_column='document_id')
+    doc_id = models.BigIntegerField(null=True)
+    doc_collection_id = models.CharField(null=True, max_length=36)
     full_text_accessible = models.BooleanField(null=True, default=None, db_default=None)
     del_flag = models.BooleanField(default=False, db_default=False)
     updated_at = models.DateTimeField(null=True, auto_now=True)
@@ -46,3 +48,4 @@ class CollectionDocument(models.Model):
     class Meta:
         db_table = 'collection_document'
         verbose_name = 'collection_document'
+        index_together = ['doc_collection_id', 'doc_id']

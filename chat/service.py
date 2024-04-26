@@ -8,6 +8,7 @@ from bot.rag_service import Conversations as RagConversation
 from chat.models import Conversation, Question
 from chat.serializers import ConversationCreateSerializer, ConversationDetailSerializer, ConversationListSerializer, \
     chat_paper_ids
+from collection.base_service import update_conversation_by_collection
 from collection.models import Collection, CollectionDocument
 from document.models import DocumentLibrary, Document
 
@@ -106,37 +107,7 @@ def conversation_update(user_id, conversation_id, validated_data):
         conversation.del_flag = vd['del_flag']
     if vd.get('collections'):
         # update conversation
-        document_ids, paper_ids = [], []
-        collections = Collection.objects.filter(id__in=vd['collections']).all()
-        public_collection_ids = [c.id for c in collections if c.type == Collection.TypeChoices.PUBLIC]
-        personal_collection_ids = [c.id for c in collections if c.type == Collection.TypeChoices.PERSONAL]
-
-        collection_docs = CollectionDocument.objects.filter(
-            collection_id__in=personal_collection_ids, del_flag=False).all()
-        document_ids += [doc.document_id for doc in collection_docs]
-        document_ids = list(set(document_ids))
-        papers_info = []
-        if document_ids:
-            documents = Document.objects.filter(id__in=document_ids).values(
-                'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
-                'ref_collection_id', 'ref_doc_id', 'object_path',
-            ).all()
-            papers_info = chat_paper_ids(user_id, documents)
-        for p in papers_info:
-            paper_ids.append({
-                'collection_id': p['collection_id'],
-                'collection_type': p['collection_type'],
-                'doc_id': p['doc_id'],
-            })
-        RagConversation.update(
-            conversation_id,
-            agent_id=conversation.agent_id,
-            paper_ids=paper_ids,
-            public_collection_ids=public_collection_ids
-        )
-        conversation.paper_ids = papers_info
-        conversation.collections = vd['collections']
-        conversation.bot_id = None
+        conversation = update_conversation_by_collection(user_id, conversation, vd['collections'])
 
     conversation.save()
     return ConversationListSerializer(conversation).data

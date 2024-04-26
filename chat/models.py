@@ -7,24 +7,6 @@ from django.utils.translation import gettext_lazy as _
 logger = logging.getLogger(__name__)
 
 
-# class Agent(models.Model):
-#     id = models.CharField(max_length=36, primary_key=True, default=uuid.uuid4)
-#     user = models.ForeignKey(
-#         'user.MyUser', db_constraint=False, on_delete=models.DO_NOTHING, null=True, db_column='user_id')
-#     version = models.CharField(null=True, blank=True, max_length=32, default=None, db_default=None)
-#     questions = models.JSONField(null=True, default=None, db_default=None)
-#     public_collection_ids = models.JSONField(null=True, blank=True, db_default=None)
-#     paper_ids = models.JSONField(null=True, blank=True, db_default=None)
-#     spec = models.JSONField(null=True)
-#     del_flag = models.BooleanField(default=False, db_default=False)
-#     updated_at = models.DateTimeField(null=True, auto_now=True)
-#     created_at = models.DateTimeField(null=True, auto_now_add=True)
-#
-#     class Meta:
-#         db_table = 'agent'
-#         verbose_name = 'agent'
-
-
 class Conversation(models.Model):
     class TypeChoices(models.TextChoices):
         BOT_COV = 'bot', _('bot')

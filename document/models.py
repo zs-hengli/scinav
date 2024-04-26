@@ -78,7 +78,7 @@ class Document(models.Model):
         return diff_docs
 
     class Meta:
-        unique_together = ['collection_id', 'doc_id']
+        unique_together = ['collection', 'doc_id']
         db_table = 'document'
         verbose_name = 'document'
 
@@ -89,6 +89,7 @@ class DocumentLibrary(models.Model):
         QUEUEING = 'queueing', _('queueing')
         IN_PROGRESS = 'in_progress', _('in_progress')
         COMPLETED = 'completed', _('completed')
+        CANCELLED = 'cancelled', _('cancelled')
         ERROR = 'error', _('error')
         # CANCELED = 'canceled', _('canceled')
 
@@ -99,6 +100,9 @@ class DocumentLibrary(models.Model):
         Document, db_constraint=False, on_delete=models.DO_NOTHING, db_column='document_id', related_name='doc_lib',
         null=True,
     )
+    doc_id = models.BigIntegerField(null=True)
+    collection_id = models.CharField(null=True, max_length=36)
+    task_type = models.CharField(null=True)
     task_id = models.CharField(null=True, blank=True, max_length=36)
     task_status = models.CharField(
         null=True, blank=True, max_length=32, db_index=True, default=TaskStatusChoices.PENDING)
@@ -114,6 +118,7 @@ class DocumentLibrary(models.Model):
     created_at = models.DateTimeField(null=True, auto_now_add=True)
 
     class Meta:
+        index_together = ['collection_id', 'doc_id']
         db_table = 'document_library'
         verbose_name = 'document_library'
 

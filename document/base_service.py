@@ -15,6 +15,7 @@ def update_document_lib(user_id, document_ids):
             'document_id': doc_id,
             'del_flag': False,
             'task_status': DocumentLibrary.TaskStatusChoices.PENDING,
+            'task_type': Document.TypeChoices.PUBLIC,
             'task_id': None,
             'error': None,
         }
@@ -57,3 +58,13 @@ def reference_doc_to_document(document: Document):
         return ref_document
     else:
         return False
+
+
+def reference_doc_to_document_library(document):
+    if document.ref_doc_id and document.ref_collection_id:
+        ref_document: Document = Document.objects.filter(
+            doc_id=document.ref_doc_id, collection_id=document.ref_collection_id).first()
+        if not ref_document:
+            ref_document = reference_doc_to_document(document)
+        if ref_document:
+            update_document_lib('0000', [ref_document.id])

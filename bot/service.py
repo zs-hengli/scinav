@@ -4,14 +4,15 @@ import logging
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
+from bot.base_service import recreate_bot, collections_doc_ids
 from bot.models import Bot, BotCollection, BotSubscribe, HotBot
 from bot.rag_service import Bot as RagBot
 from bot.serializers import (BotDetailSerializer, BotListAllSerializer, HotBotListSerializer, BotListChatMenuSerializer)
-from collection.models import Collection, CollectionDocument
+from collection.models import Collection
 from collection.serializers import CollectionDocumentListSerializer
 from core.utils.exceptions import InternalServerError, ValidationError
 from document.base_service import update_document_lib
-from document.models import Document, DocumentLibrary
+from document.models import Document
 from document.serializers import DocumentApaListSerializer, CollectionDocumentListCollectionSerializer
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ def bot_create(body):
         data['user_id'],
         data['prompt'],
         data['questions'],
-        paper_ids=_collections_doc_ids(collections),
+        paper_ids=collections_doc_ids(collections),
         public_collection_ids=public_collection_ids,
     )
     if rag_ret.get('id'):
@@ -71,16 +72,6 @@ def bot_create(body):
     return BotDetailSerializer(bot).data
 
 
-def _collections_doc_ids(collections: list[Collection]):
-    _cids = [c.id for c in collections if c.type == c.TypeChoices.PERSONAL]
-    c_docs = CollectionDocument.objects.filter(collection_id__in=_cids).all()
-    return [{
-        'collection_id': c_doc.document.collection_id,
-        'collection_type': c_doc.document.collection_type,
-        'doc_id': c_doc.document.doc_id} for c_doc in c_docs
-    ]
-
-
 # 修改专题
 def bot_update(bot, bot_collections, updated_attrs, validated_data):
     bc_ids = [bc.collection_id for bc in bot_collections]
@@ -89,7 +80,7 @@ def bot_update(bot, bot_collections, updated_attrs, validated_data):
     c_ids = [c.id for c in collections]
     need_recreate_attrs = ['questions', 'prompt_spec', 'collections']
     if set(need_recreate_attrs) & set(updated_attrs):
-        _recreate_bot(bot, collections)
+        recreate_bot(bot, collections)
     # update BotCollection
     if to_add_ids := set(c_ids) - set(bc_ids):
         logger.debug(f'bot_update to_add_ids: {to_add_ids}')
@@ -106,34 +97,6 @@ def bot_update(bot, bot_collections, updated_attrs, validated_data):
         BotCollection.objects.filter(bot_id=bot.id, collection_id__in=to_dell_c_ids).update(del_flag=True)
     bot.save()
     return BotDetailSerializer(bot).data
-
-
-def _recreate_bot(bot: Bot, collections):
-    RagBot.delete(bot.agent_id)
-    public_collection_ids = [c.id for c in collections if c.type == c.TypeChoices.PUBLIC]
-    rag_ret = RagBot.create(
-        bot.user_id,
-        bot.prompt,
-        bot.questions,
-        paper_ids=_collections_doc_ids(collections),
-        public_collection_ids=public_collection_ids,
-    )
-    if rag_ret.get('id'):
-        bot.extension = rag_ret
-        bot.agent_id = rag_ret['id']
-        BotCollection.objects.filter(bot_id=bot.id).update(del_flag=True)
-        # save BotCollection
-        for c in collections:
-            bc_data = {
-                'bot_id': bot.id,
-                'collection_id': c.id,
-                'collection_type': c.type,
-                'del_flag': False,
-            }
-            BotCollection.objects.update_or_create(
-                bc_data, bot_id=bc_data['bot_id'], collection_id=bc_data['collection_id'])
-    else:
-        raise InternalServerError('RAG create bot failed')
 
 
 # 删除专题
@@ -436,7 +399,7 @@ def bot_publish(bot_id, action=Bot.TypeChoices.PUBLIC):
         update_document_lib('0000', ref_documents)
 
     # 本人专题自动订阅
-    BotSubscribe.objects.update_or_create(
-        user_id=bot.user_id, bot_id=bot_id, defaults={'del_flag': False})
+    # BotSubscribe.objects.update_or_create(
+    #     user_id=bot.user_id, bot_id=bot_id, defaults={'del_flag': False})
     bot.save()
     return 0, ''

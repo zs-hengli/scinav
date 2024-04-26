@@ -49,6 +49,8 @@ tmp
 .pg_*
 
 
+doc/*
+static/*
 celery-*.log
 celery-*.pid
 celerybeat-schedule*

@@ -15,10 +15,10 @@ from collection.serializers import (CollectionCreateSerializer,
                                     CollectionUpdateSerializer, CollectionDeleteQuerySerializer,
                                     CollectionDocumentListQuerySerializer, CollectionCheckQuerySerializer,
                                     CollectionCreateBotCheckQuerySerializer)
-from collection.service import (collection_list, collections_docs, generate_collection_title, collection_delete,
+from collection.service import (collection_list, collections_docs, generate_collection_title,
                                 collections_delete, collection_chat_operation_check, collection_delete_operation_check,
                                 collections_published_bot_titles, collections_create_bot_check,
-                                collections_reference_bot_titles)
+                                collections_reference_bot_titles, collection_document_add, collection_document_delete)
 from core.utils.views import check_keys, extract_json, my_json_response
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,7 @@ class Collections(APIView):
             update_data['search_content'] = vd['search_content']
         update_serial = CollectionDocUpdateSerializer(data=update_data)
         update_serial.is_valid(raise_exception=True)
-        update_serial.create(update_serial.validated_data)
+        collection_document_add(update_serial.validated_data)
 
         data = CollectionDetailSerializer(collection).data
         return my_json_response(data)
@@ -169,9 +169,9 @@ class CollectionDocuments(APIView):
         user_id = request.user.id
         collection = Collection.objects.filter(pk=collection_id, user_id=user_id).first()
         if not collection:
-            return my_json_response({}, code=-1, msg='收藏夹不存在')
+            return my_json_response({}, code=100002, msg='收藏夹不存在')
         if collection.type == Collection.TypeChoices.PUBLIC:
-            return my_json_response({}, code=-2, msg='此收藏夹不支持添加文献')
+            return my_json_response({}, code=100003, msg='此收藏夹不支持添加文献')
 
         post_data = request.data
         post_data['user_id'] = user_id
@@ -180,9 +180,9 @@ class CollectionDocuments(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
         if serial.validated_data['action'] == 'add':
-            serial.create(serial.validated_data)
+            collection_document_add(serial.validated_data)
         else:
-            serial.delete_document(serial.validated_data)
+            collection_document_delete(serial.validated_data)
 
         return my_json_response({})
 

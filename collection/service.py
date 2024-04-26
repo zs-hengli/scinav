@@ -1,8 +1,10 @@
 import copy
 import datetime
+import json
 import logging
 
-from django.db.models import Q
+from django.core.cache import cache
+from django.db.models import Q, F
 from django.utils.translation import gettext_lazy as _
 
 from bot.models import BotCollection, BotSubscribe, Bot
@@ -11,9 +13,11 @@ from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionPublicSerializer, CollectionListSerializer, \
     CollectionRagPublicListSerializer, \
     CollectionSubscribeSerializer, CollectionDocumentListSerializer, bot_subscribe_personal_document_num
+from core.utils.common import str_hash
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentApaListSerializer, CollectionDocumentListCollectionSerializer
 from document.service import search_result_from_cache
+from document.tasks import async_ref_document_to_document_library, async_update_conversation_by_collection
 
 logger = logging.getLogger(__name__)
 
@@ -197,15 +201,75 @@ def collection_detail(user_id, collection_id):
     pass
 
 
-def collection_delete(collection):
-    # if BotCollection.objects.filter(collection_id=collection.id, del_flag=False).exists():
-    #     raise ValidationError(_('此收藏夹被用于专题中，不能删除'))
+def collection_document_add(validated_data):
+    vd = validated_data
+    document_ids = vd.get('document_ids', [])
+    instances = []
+    if vd.get('is_all') or (vd.get('list_type') and vd['list_type'] == 'all'):
+        doc_search_redis_key_prefix = 'doc:search'
+        content_hash = str_hash(f"{vd['user_id']}_{vd['search_content']}")
+        redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
+        search_cache = cache.get(redis_key)
+        if search_cache:
+            all_cache = json.loads(search_cache)
+            doc_ids = [c['id'] for c in all_cache]
+            if document_ids:
+                document_ids = list(set(doc_ids) - set(document_ids))
+            else:
+                document_ids = doc_ids
+    created_num, updated_num = 0, 0
+    updated_num = CollectionDocument.objects.filter(
+        collection_id=vd['collection_id'], document_id__in=document_ids, del_flag=True).update(del_flag=False)
+    d_lib = DocumentLibrary.objects.filter(
+        user_id=vd['user_id'], del_flag=False, document_id__in=vd['document_ids']
+    ).values_list('document_id', flat=True)
+    for d_id in document_ids:
+        cd_data = {
+            'collection_id': vd['collection_id'],
+            'document_id': d_id,
+            'full_text_accessible': d_id in d_lib,  # todo v1.0 默认都有全文 v2.0需要考虑策略
+        }
+        collection_document, created = (CollectionDocument.objects.update_or_create(
+            cd_data, collection_id=cd_data['collection_id'], document_id=cd_data['document_id']))
+        instances.append({
+            'collection_document': collection_document,
+            'created': created,
+        })
+        if created:
+            created_num += 1
+    if created_num + updated_num:
+        Collection.objects.filter(id=vd['collection_id']).update(
+            total_personal=F('total_personal') + created_num + updated_num)
+    if (
+        document_ids and
+        Collection.objects.filter(id=vd['collection_id'], type=Collection.TypeChoices.PUBLIC).exists()
+    ):
+        async_ref_document_to_document_library.apply_async(args=[document_ids])
+    async_update_conversation_by_collection.apply_async(args=[vd['collection_id']])
+    return instances
 
-    collection.del_flag = True
-    collection.save()
-    return True
-    pass
 
+def collection_document_delete(validated_data):
+    vd = validated_data
+    if vd.get('is_all') and not vd.get('list_type'):
+        vd['list_type'] = 'all'
+    if vd.get('list_type'):
+        query_set, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
+            vd['user_id'], [vd['collection_id']], vd['list_type'])
+        document_ids = [d['document_id'] for d in query_set.all()]
+        if vd.get('document_ids'):
+            document_ids = list(set(document_ids) - set(vd['document_ids']))
+        effect_num, deleted = CollectionDocument.objects.filter(
+            collection_id=vd['collection_id'], document_id__in=document_ids, del_flag=False
+        ).delete()
+        Collection.objects.filter(id=vd['collection_id']).update(total_personal=F('total_personal') - effect_num)
+    else:
+        effect_num, deleted = CollectionDocument.objects.filter(
+            collection_id=vd['collection_id'], document_id__in=vd['document_ids'], del_flag=False
+        ).delete()
+        Collection.objects.filter(id=vd['collection_id']).update(total_personal=F('total_personal') - effect_num)
+    async_update_conversation_by_collection.apply_async(args=[vd['collection_id']])
+    return validated_data
 
 def collections_delete(validated_data):
     vd = validated_data
@@ -315,27 +379,15 @@ def collections_docs(user_id, validated_data):
         for d in docs:
             temp = None
             # 本人个人库列表
-            if (
-                (
-                    DocumentLibrary.objects.filter(
-                        document_id=d.id, del_flag=False, user_id=user_id,
-                        task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
-                    ).exists()
-                    or d.collection_id == user_id)
-                and d.object_path
-            ):
-                temp = {
-                    'id': d.id,
-                    'doc_apa': data_dict[d.id]['doc_apa'],
-                    'has_full_text': True,
-                }
-
+            if ((
+                DocumentLibrary.objects.filter(
+                    document_id=d.id, del_flag=False, user_id=user_id,
+                    task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
+                ).exists() or d.collection_id == user_id
+            ) and d.object_path):
+                temp = {'id': d.id, 'doc_apa': data_dict[d.id]['doc_apa'], 'has_full_text': True, }
             if not temp:
-                temp = {
-                    'id': d.id,
-                    'doc_apa': data_dict[d.id]['doc_apa'],
-                    'has_full_text': False,
-                }
+                temp = {'id': d.id, 'doc_apa': data_dict[d.id]['doc_apa'], 'has_full_text': False, }
             temp_res_data.append(temp)
         for i, d in enumerate(temp_res_data):
             d['doc_apa'] = f"[{start_num + i + 1}] {d['doc_apa']}"

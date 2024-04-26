@@ -1,15 +1,12 @@
-import json
 import logging
 
-from django.core.cache import cache
 from django.db.models import F
-from django.utils.translation import gettext_lazy as _
 from django.db.models import Q
+from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
 from bot.models import BotCollection, Bot
 from collection.models import Collection, CollectionDocument
-from core.utils.common import str_hash
 from document.models import Document, DocumentLibrary
 
 logger = logging.getLogger(__name__)
@@ -197,78 +194,17 @@ class CollectionDocUpdateSerializer(serializers.Serializer):
     )
     is_all = serializers.BooleanField(required=False, default=False)
     action = serializers.ChoiceField(required=False, choices=['add', 'delete'], default='add')
+    list_type = serializers.ChoiceField(
+        required=False, choices=['s2', 'arxiv', 'document_library', 'all'], default=None)
     search_content = serializers.CharField(required=False, allow_null=True, default=None)
 
     def validate(self, attrs):
-        if not attrs.get('document_ids') and not attrs.get('is_all'):
-            raise serializers.ValidationError(f"document_ids and is_all {_('cannot be empty at the same time')}")
-        if attrs.get('is_all') and attrs.get('action') == 'add' and not attrs.get('search_content'):
+        if not attrs.get('document_ids') and not attrs.get('is_all') and not attrs.get('list_type'):
+            raise serializers.ValidationError(f"document_ids and list_type {_('cannot be empty at the same time')}")
+        if (attrs.get('is_all') or attrs.get('list_type')
+        ) and attrs.get('action') == 'add' and not attrs.get('search_content'):
             raise serializers.ValidationError("search_content required")
         return attrs
-
-    def create(self, validated_data):
-        vd = validated_data
-        instances = []
-        if vd.get('is_all'):
-            doc_search_redis_key_prefix = 'doc:search'
-            content_hash = str_hash(f"{vd['user_id']}_{vd['search_content']}")
-            redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
-            search_cache = cache.get(redis_key)
-            if search_cache:
-                all_cache = json.loads(search_cache)
-                doc_ids = [c['id'] for c in all_cache]
-                if vd.get('document_ids'):
-                    vd['document_ids'] = list(set(doc_ids) - set(vd['document_ids']))
-                else:
-                    vd['document_ids'] = doc_ids
-        created_num, updated_num = 0, 0
-        updated_num = CollectionDocument.objects.filter(
-            collection_id=vd['collection_id'], document_id__in=vd['document_ids'], del_flag=True).update(del_flag=False)
-        d_lib = DocumentLibrary.objects.filter(
-            user_id=vd['user_id'], del_flag=False, document_id__in=vd['document_ids']
-        ).values_list('document_id', flat=True)
-        for d_id in validated_data.get('document_ids', []):
-            cd_data = {
-                'collection_id': validated_data['collection_id'],
-                'document_id': d_id,
-                'full_text_accessible': d_id in d_lib,  # todo v1.0 默认都有全文 v2.0需要考虑策略
-            }
-            collection_document, created = (CollectionDocument.objects.update_or_create(
-                cd_data, collection_id=cd_data['collection_id'], document_id=cd_data['document_id']))
-            instances.append({
-                'collection_document': collection_document,
-                'created': created,
-            })
-            if created:
-                created_num += 1
-        if created_num + updated_num:
-            Collection.objects.filter(id=validated_data['collection_id']).update(
-                total_personal=F('total_personal') + created_num + updated_num)
-        return instances
-
-    @staticmethod
-    def delete_document(validated_data):
-        vd = validated_data
-        if vd.get('is_all'):
-            total = len(vd.get('document_ids', []))
-            if vd.get('document_id'):
-                filter_query = (
-                    Q(collection_id=vd['collection_id'], del_flag=False)
-                    & ~Q(document_id__in=vd['document_ids'])
-                )
-                CollectionDocument.objects.filter(filter_query).update(del_flag=True)
-            else:
-                CollectionDocument.objects.filter(
-                    collection_id=vd['collection_id'], del_flag=False
-                ).update(del_flag=True)
-
-            Collection.objects.filter(id=vd['collection_id']).update(total_personal=total, total_public=0)
-        else:
-            effect_num = CollectionDocument.objects.filter(
-                collection_id=vd['collection_id'], document_id__in=vd['document_ids'], del_flag=False
-            ).update(del_flag=True)
-            Collection.objects.filter(id=vd['collection_id']).update(total_personal=F('total_personal') - effect_num)
-        return validated_data
 
     @staticmethod
     def _update_bot_collections_doc_num(collection_id, num, action='update'):
@@ -301,7 +237,7 @@ class CollectionDocumentListQuerySerializer(serializers.Serializer):
 
 class CollectionDocumentListSerializer(serializers.Serializer):
     @staticmethod
-    def get_collection_documents(user_id, collection_ids, list_type, bot=None):
+    def get_collection_documents(user_id, collection_ids, list_type, bot=None, final_result=True):
         p_documents, ref_documents = [], []
         if bot and user_id != bot.user_id:
             p_documents, ref_documents = bot_subscribe_personal_document_num(bot.user_id, bot=bot)
@@ -397,17 +333,19 @@ class CollectionDocumentListSerializer(serializers.Serializer):
             doc_libs = DocumentLibrary.objects.filter(
                 user_id=user_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
             ).values('document_id').all()
-            filter_query = Q(collection_id=user_id) & ~Q(ref_doc_id=0)
+            # filter_query = Q(collection_id=user_id) & ~Q(ref_doc_id=0)
         else:
             doc_libs = DocumentLibrary.objects.filter(user_id=user_id, del_flag=False, task_status__in=[
                 DocumentLibrary.TaskStatusChoices.COMPLETED,
                 DocumentLibrary.TaskStatusChoices.PENDING,
+                DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
                 DocumentLibrary.TaskStatusChoices.QUEUEING,
             ]).values('document_id').all()
-            filter_query = Q(collection_id=user_id)
+            # filter_query = Q(collection_id=user_id)
         # 个人上传文献可能只在Document里面
-        my_documents = Document.objects.filter(filter_query).values('id').all()
-        return [d['document_id'] for d in doc_libs if d['document_id']] + [d['id'] for d in my_documents]
+        # my_documents = Document.objects.filter(filter_query).values('id').all()
+        # return [d['document_id'] for d in doc_libs if d['document_id']] + [d['id'] for d in my_documents]
+        return [d['document_id'] for d in doc_libs if d['document_id']]
 
 
 class CollectionCheckQuerySerializer(serializers.Serializer):

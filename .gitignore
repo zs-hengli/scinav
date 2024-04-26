@@ -57,7 +57,7 @@ deploy/nginx/certs/*
 
 doc/*
 static/*
-run.sh
+run*.sh
 
 *.log
 celery-*.pid

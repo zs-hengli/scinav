@@ -194,6 +194,21 @@ class Document:
         resp = resp.json()
         return resp
 
+    @staticmethod
+    def delete_personal_paper(collection_id, doc_id):
+        url = RAG_HOST + f'/api/v1/papers/personal/{collection_id}/{doc_id}'
+        resp = rag_requests(url, method='DELETE')
+        logger.info(f'url: {url}, response: {resp.text}')
+        return resp
+
+    @staticmethod
+    def cancel_ingest_task(task_id):
+        url = RAG_HOST + f'/api/v1/papers/ingest-task/{task_id}'
+        resp = rag_requests(url, method='PUT')
+        logger.info(f'url: {url}, response: {resp.text}')
+        resp = resp.json()
+        return resp
+
 
 class Conversations:
     @staticmethod
