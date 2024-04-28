@@ -274,7 +274,7 @@ class CollectionDocumentSelectedQuerySerializer(serializers.Serializer):
 
 class CollectionDocumentListSerializer(serializers.Serializer):
     @staticmethod
-    def get_collection_documents(user_id, collection_ids, list_type, bot=None, final_result=True):
+    def get_collection_documents(user_id, collection_ids, list_type, bot=None):
         p_documents, ref_documents = [], []
         if bot and user_id != bot.user_id:
             p_documents, ref_documents = bot_subscribe_personal_document_num(bot.user_id, bot=bot)
@@ -334,7 +334,8 @@ class CollectionDocumentListSerializer(serializers.Serializer):
                 filter_query).values('document_id').order_by('document_id').distinct()
         elif list_type == 'personal&subscribe_full_text':
             doc_lib_document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(user_id)
-            if bot.user_id == user_id or (bot.user_id != user_id and bot and bot.type == Bot.TypeChoices.PERSONAL):
+            if not bot or bot.user_id == user_id or (
+                bot.user_id != user_id and bot and bot.type == Bot.TypeChoices.PERSONAL):
                 sub_bot_document_ids = doc_lib_document_ids
             else:
                 sub_bot_document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(bot.user_id, False)

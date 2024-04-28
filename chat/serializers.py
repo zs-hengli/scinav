@@ -6,9 +6,10 @@ from django.db.models import Q
 from rest_framework import serializers
 from django.utils.translation import gettext_lazy as _
 
-from bot.models import BotCollection
+from bot.models import BotCollection, Bot
 from chat.models import Conversation, Question
 from collection.models import Collection, CollectionDocument
+from collection.serializers import CollectionDocumentListSerializer
 from document.models import Document, DocumentLibrary
 
 logger = logging.getLogger(__name__)
@@ -229,23 +230,22 @@ class ConversationsMenuQuerySerializer(serializers.Serializer):
 
 
 def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
-    ret_data = {}
+    ret_data = []
+    bot = None
+    if bot_id:
+        bot = Bot.objects.filter(id=bot_id).first()
+    query_set, doc_lib_document_ids, sub_bot_document_ids, ref_ds = \
+        CollectionDocumentListSerializer.get_collection_documents(
+            user_id, collection_ids, 'personal&subscribe_full_text', bot)
+    full_text_documents = doc_lib_document_ids + sub_bot_document_ids
+    if bot and bot.type == Bot.TypeChoices.PUBLIC:
+        full_text_documents += ref_ds
     for d in documents:
-        ret_data[d['id']] = {
+        ret_data.append({
             'collection_type': d['collection_type'],
             'collection_id': d['collection_id'],
             'doc_id': d['doc_id'],
             'document_id': d['id'],
-            'full_text_accessible': False
-        }
-        if user_id == d['user_id'] and d['object_path']:
-            ret_data[d['id']]['full_text_accessible'] = True
-        elif user_id == d['user_id'] and not d['object_path']:
-            ret_data[d['id']]['full_text_accessible'] = False
-        else:
-            if d['ref_doc_id']:
-                ref_doc = Document.objects.filter(
-                    doc_id=d['ref_doc_id'], collection_id=d['ref_collection_id'], del_flag=False).first()
-                if ref_doc and ref_doc.object_path:
-                    ret_data[d['id']]['full_text_accessible'] = True
-    return list(ret_data.values())
+            'full_text_accessible': d['id'] in full_text_documents
+        })
+    return ret_data
