@@ -21,7 +21,7 @@ def update_conversation_by_collection(user_id, conversation, collection_ids):
             'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
             'ref_collection_id', 'ref_doc_id', 'object_path',
         ).all()
-        papers_info = chat_paper_ids(user_id, documents)
+        papers_info = chat_paper_ids(user_id, documents, collection_ids=personal_collection_ids)
     for p in papers_info:
         paper_ids.append({
             'collection_id': p['collection_id'],

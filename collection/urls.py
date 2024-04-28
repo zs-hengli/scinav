@@ -3,9 +3,10 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path('collection/index', views.Index.as_view()),
+    path('collections/index', views.Index.as_view()),
 
     # must before 'collections/<str:collection_id>...'
+    path('collections/documents/selected', views.CollectionDocumentsSelected.as_view()),
     path('collections/documents', views.CollectionDocuments.as_view()),
     path('collections/documents/<str:list_type>', views.CollectionDocuments.as_view()),
 

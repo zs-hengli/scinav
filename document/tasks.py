@@ -1,3 +1,4 @@
+import datetime
 import logging
 
 from celery import shared_task
@@ -9,6 +10,7 @@ from bot.rag_service import Document as RagDocument
 from chat.models import Conversation
 from collection.base_service import update_conversation_by_collection
 from collection.models import Collection
+from collection.serializers import bot_subscribe_personal_document_num
 from document.base_service import document_update_from_rag_ret, reference_doc_to_document, update_document_lib, \
     reference_doc_to_document_library
 from document.models import DocumentLibrary, Document
@@ -78,6 +80,25 @@ def async_document_library_task(self, task_id=None):
 
 
 @shared_task(bind=True)
+def async_schedule_publish_bot_task(self, task_id=None):
+    logger.info(f'xxxxx async_schedule_publish_bot_task, {self}, {task_id}')
+    bots = Bot.objects.filter(type=Bot.TypeChoices.IN_PROGRESS).all()
+    for bot in bots:
+        personal_documents, ref_documents = bot_subscribe_personal_document_num(
+            bot.user_id, bot_collections=None, bot=bot)
+        ref_result_count = DocumentLibrary.objects.filter(
+            user_id='0000', document_id__in=ref_documents,
+            task_status__in=[DocumentLibrary.TaskStatusChoices.ERROR, DocumentLibrary.TaskStatusChoices.COMPLETED],
+        ).count()
+        if ref_result_count == len(ref_documents):
+            bot.type = Bot.TypeChoices.PUBLIC
+            bot.pub_date = datetime.datetime.now()
+            bot.save()
+        logger.info(f"async_schedule_publish_bot_task, {bot.id}, bot.type: {bot.type}")
+    return True
+
+
+@shared_task(bind=True)
 def async_update_document(self, document_ids):
     documents = Document.objects.filter(pk__in=document_ids).all()
     fileds = [
@@ -127,7 +148,7 @@ def async_update_conversation_by_collection(self, collection_id):
     collection = Collection.objects.filter(pk=collection_id).first()
     if collection:
         bots = Bot.objects.filter(
-            bot_id__in=collection_query.values_list('bot_id', flat=True),
+            id__in=collection_query.values_list('bot_id', flat=True),
             del_flag=False
         ).all()
         for bot in bots:

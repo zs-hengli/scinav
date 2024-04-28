@@ -194,7 +194,8 @@ def generate_collection_title(content=None, document_titles=None):
         ] if search_result and search_result.get('list') else [content]
     else:
         titles = document_titles
-    return RagConversations.generate_favorite_title(titles)
+    title = RagConversations.generate_favorite_title(titles)
+    return title[:255]
 
 
 def collection_detail(user_id, collection_id):
@@ -410,6 +411,44 @@ def collections_docs(user_id, validated_data):
         'is_all_in_document_library': True if vd['list_type'] == 'personal' else False,
         'total': total,
         'show_total': query_total,
+    }
+
+
+def collection_documents_select_list(user_id, validated_data):
+    vd = validated_data
+    collection_ids = vd['collection_ids']
+    list_type = vd['list_type']
+    bot, ref_doc_lib_ids, ref_ds = None, None, []
+    if vd.get('bot_id'):
+        bot = Bot.objects.filter(id=vd['bot_id'], del_flag=False).first()
+    query_set, d1, d2, ref_ds = CollectionDocumentListSerializer.get_collection_documents(
+        user_id, collection_ids, list_type, bot=bot)
+    ref_doc_lib_ids = (
+        list(set(ref_ds) & set(CollectionDocumentListSerializer._my_doc_lib_document_ids(user_id)))
+    )
+
+    if ref_ds and (
+        list_type in ['all', 'all_documents']
+        or (list_type in ['s2', 'arxiv'] and bot.type == Collection.TypeChoices.PERSONAL)
+        or (list_type in ['subscribe_full_text'] and bot.type == Collection.TypeChoices.PUBLIC)
+        or (list_type in ['document_library'] and ref_doc_lib_ids)
+    ):
+        if list_type in ['document_library']:
+            ref_ds = ref_doc_lib_ids
+        elif list_type in ['s2', 'arxiv', 'subscribe_full_text']:
+            ref_ds = list(set(ref_ds) - set(ref_doc_lib_ids))
+        else:
+            ref_ds = ref_ds
+    else:
+        ref_ds = []
+
+    all_c_docs = query_set.all()
+    document_ids = list(set([cd['document_id'] for cd in all_c_docs] + ref_ds))
+    if vd.get('document_ids'):
+        document_ids = list(set(document_ids) - set(vd['document_ids']))
+    return {
+        'document_ids': document_ids,
+        'total': len(document_ids),
     }
 
 

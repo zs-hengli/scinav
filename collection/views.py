@@ -14,11 +14,12 @@ from collection.serializers import (CollectionCreateSerializer,
                                     CollectionDocUpdateSerializer,
                                     CollectionUpdateSerializer, CollectionDeleteQuerySerializer,
                                     CollectionDocumentListQuerySerializer, CollectionCheckQuerySerializer,
-                                    CollectionCreateBotCheckQuerySerializer)
+                                    CollectionCreateBotCheckQuerySerializer, CollectionDocumentSelectedQuerySerializer)
 from collection.service import (collection_list, collections_docs, generate_collection_title,
                                 collections_delete, collection_chat_operation_check, collection_delete_operation_check,
                                 collections_published_bot_titles, collections_create_bot_check,
-                                collections_reference_bot_titles, collection_document_add, collection_document_delete)
+                                collections_reference_bot_titles, collection_document_add, collection_document_delete,
+                                collection_documents_select_list)
 from core.utils.views import check_keys, extract_json, my_json_response
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,6 @@ class Index(APIView):
     def get(self, request, *args, **kwargs):  # noqa
         logger.debug(f'kwargs: {kwargs}')
         data = {'desc': 'collection index'}
-
         return my_json_response(data)
 
 
@@ -185,6 +185,20 @@ class CollectionDocuments(APIView):
             collection_document_delete(serial.validated_data)
 
         return my_json_response({})
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['POST']), name='dispatch')
+class CollectionDocumentsSelected(APIView):
+
+    @staticmethod
+    def post(request, *args, **kwargs):
+        query = request.data
+        serial = CollectionDocumentSelectedQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        document_ids = collection_documents_select_list(request.user.id, serial.validated_data)
+        return my_json_response(document_ids)
 
 
 @method_decorator([extract_json], name='dispatch')

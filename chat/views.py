@@ -5,7 +5,6 @@ from django.views.decorators.http import require_http_methods
 from rest_framework.decorators import permission_classes, renderer_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
-from django.conf import settings
 
 from chat.models import Conversation
 from chat.serializers import ConversationCreateSerializer, ConversationUpdateSerializer, ChatQuerySerializer, \
@@ -25,7 +24,6 @@ class Index(APIView):
     def get(self, request, *args, **kwargs):  # noqa
         logger.debug(f'kwargs: {kwargs}')
         data = {'desc': 'chat index'}
-
         return my_json_response(data)
 
 

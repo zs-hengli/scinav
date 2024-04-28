@@ -252,6 +252,10 @@ class Conversations:
 
     @staticmethod
     def generate_favorite_title(titles):
+        titles = [title for title in titles if title]
+        if not titles:
+            logger.info(f'generate_favorite_title titles is empty')
+            return f"未命名-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
         url = RAG_HOST + '/api/v1/titles/favorites'
         resp = rag_requests(url, json=titles, method='POST', timeout=20)
         logger.info(f'url: {url}, response: {resp.text}')

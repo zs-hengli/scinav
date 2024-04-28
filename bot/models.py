@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 class Bot(models.Model):
     class TypeChoices(models.TextChoices):
         PERSONAL = 'personal', _('personal'),
+        IN_PROGRESS = 'in_progress', _('in_progress'),
         PUBLIC = 'public', _('public')
 
     id = models.CharField(max_length=36, primary_key=True, default=uuid.uuid4)

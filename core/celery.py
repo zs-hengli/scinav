@@ -21,6 +21,10 @@ app.conf.beat_schedule = {
         'task': 'document.tasks.async_document_library_task',
         'schedule': crontab(minute='*'),
     },
+    'async-publish-bot-every-minute': {
+        'task': 'document.tasks.async_schedule_publish_bot_task',
+        'schedule': crontab(minute='*'),
+    }
 }
 app.conf.broker_connection_retry_on_startup = True
 # 自动从Django的已注册app中发现任务

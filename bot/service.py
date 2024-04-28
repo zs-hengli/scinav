@@ -14,6 +14,7 @@ from core.utils.exceptions import InternalServerError, ValidationError
 from document.base_service import update_document_lib
 from document.models import Document
 from document.serializers import DocumentApaListSerializer, CollectionDocumentListCollectionSerializer
+from document.tasks import async_schedule_publish_bot_task
 
 logger = logging.getLogger(__name__)
 
@@ -280,28 +281,30 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
         need_public = True
     public_count = len(public_collections)
 
-    query_set, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
+    query_set, d1, d2, ref_ds = CollectionDocumentListSerializer.get_collection_documents(
         user_id, collection_ids, list_type, bot)
     start_num = page_size * (page_num - 1)
     doc_ids = []
     show_total = 0
     # 个人上传文件库 关联的文献
     # 未发布专题 显示未公共库文献， 专题广场专题显示为订阅全文
-    ref_doc_lib_ids = set(d3 if d3 else []) & set(CollectionDocumentListSerializer._my_doc_lib_document_ids(user_id))
-    if d3 and (
+    ref_doc_lib_ids = (
+        set(ref_ds if ref_ds else []) & set(CollectionDocumentListSerializer._my_doc_lib_document_ids(user_id))
+    )
+    if ref_ds and (
         list_type in ['all', 'all_documents']
         or (list_type in ['s2', 'arxiv'] and bot.type == Collection.TypeChoices.PERSONAL)
         or (list_type in ['subscribe_full_text'] and bot.type == Collection.TypeChoices.PUBLIC)
         or (list_type in ['personal'] and ref_doc_lib_ids)
     ):
         if list_type in ['personal']:
-            d3 = list(ref_doc_lib_ids)
+            ref_ds = list(ref_doc_lib_ids)
         elif list_type in ['s2', 'arxiv']:
-            d3 = list(set(d3) - set(ref_doc_lib_ids))
-        doc_ids = d3[start_num:(page_size * page_num - need_public_count)]
+            ref_ds = list(set(ref_ds) - set(ref_doc_lib_ids))
+        doc_ids = ref_ds[start_num:(page_size * page_num - need_public_count)]
         need_public_count += len(doc_ids)
-        public_count += len(d3)
-        show_total += len(d3)
+        public_count += len(ref_ds)
+        show_total += len(ref_ds)
     personal_count = query_set.count()
     total = public_count + personal_count
     show_total += personal_count
@@ -375,9 +378,12 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
 def bot_publish(bot_id, action=Bot.TypeChoices.PUBLIC):
     bot = Bot.objects.filter(pk=bot_id).first()
     if not bot:
-        return -1, 'bot not exist'
+        return 100002, 'bot not exist'
+    if bot.type == Bot.TypeChoices.IN_PROGRESS:
+        return 110006, 'bot publish is in progress'
+
     if action == Bot.TypeChoices.PUBLIC:
-        bot.type = Bot.TypeChoices.PUBLIC
+        bot.type = Bot.TypeChoices.IN_PROGRESS
         bot.pub_date = datetime.datetime.now()
     else:
         bot.type = Bot.TypeChoices.PERSONAL
@@ -397,9 +403,12 @@ def bot_publish(bot_id, action=Bot.TypeChoices.PUBLIC):
             ref_documents.append(ref_document['id'])
     if ref_documents:
         update_document_lib('0000', ref_documents)
+    elif action == Bot.TypeChoices.PUBLIC:
+        bot.type = Bot.TypeChoices.PUBLIC
 
     # 本人专题自动订阅
     # BotSubscribe.objects.update_or_create(
     #     user_id=bot.user_id, bot_id=bot_id, defaults={'del_flag': False})
     bot.save()
+    async_schedule_publish_bot_task.apply_async()
     return 0, ''

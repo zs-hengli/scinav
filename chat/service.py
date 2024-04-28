@@ -5,12 +5,11 @@ from dateutil.relativedelta import relativedelta
 
 from bot.models import Bot
 from bot.rag_service import Conversations as RagConversation
-from chat.models import Conversation, Question
-from chat.serializers import ConversationCreateSerializer, ConversationDetailSerializer, ConversationListSerializer, \
-    chat_paper_ids
+from chat.models import Conversation
+from chat.serializers import ConversationCreateSerializer, ConversationDetailSerializer, ConversationListSerializer
 from collection.base_service import update_conversation_by_collection
 from collection.models import Collection, CollectionDocument
-from document.models import DocumentLibrary, Document
+from document.models import DocumentLibrary
 
 logger = logging.getLogger(__name__)
 
@@ -35,29 +34,32 @@ def conversation_create(validated_data):
             title = vd['document_titles'][0]
         # auto create collection.
         collection_title = RagConversation.generate_favorite_title(vd['document_titles'])
-        collection = Collection.objects.create(
-            user_id=vd['user_id'],
-            title=collection_title,
-            type=Collection.TypeChoices.PERSONAL,
-            total_personal=len(vd['documents']),
-            updated_at=datetime.datetime.now(),
-        )
-        c_doc_objs = []
-        d_lib = DocumentLibrary.objects.filter(
-            user_id=vd['user_id'], del_flag=False, document_id__in=vd['documents']
-        ).values_list('document_id', flat=True)
-        for document_id in vd['documents']:
-            c_doc_objs.append(CollectionDocument(
-                collection=collection,
-                document_id=document_id,
-                full_text_accessible=document_id in d_lib,  # todo v1.0 默认都有全文 v2.0需要考虑策略
-            ))
-        CollectionDocument.objects.bulk_create(c_doc_objs)
+        collection_title = collection_title[:255]
+        collection = None
+        if len(vd['documents']) > 1:
+            collection = Collection.objects.create(
+                user_id=vd['user_id'],
+                title=collection_title,
+                type=Collection.TypeChoices.PERSONAL,
+                total_personal=len(vd['documents']),
+                updated_at=datetime.datetime.now(),
+            )
+            c_doc_objs = []
+            d_lib = DocumentLibrary.objects.filter(
+                user_id=vd['user_id'], del_flag=False, document_id__in=vd['documents']
+            ).values_list('document_id', flat=True)
+            for document_id in vd['documents']:
+                c_doc_objs.append(CollectionDocument(
+                    collection=collection,
+                    document_id=document_id,
+                    full_text_accessible=document_id in d_lib,  # todo v1.0 默认都有全文 v2.0需要考虑策略
+                ))
+            CollectionDocument.objects.bulk_create(c_doc_objs)
         agent_id = None
         # paper_ids = vd.get('paper_ids')
         public_collection_ids = vd.get('public_collection_ids')
         documents = vd.get('documents')
-        collections = vd.get('collections', []) + [str(collection.id)]
+        collections = vd.get('collections', []) + ([str(collection.id)] if collection else [])
     else:
         agent_id = None
         # paper_ids = vd.get('paper_ids')

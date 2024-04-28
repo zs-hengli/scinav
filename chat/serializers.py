@@ -1,4 +1,5 @@
 import logging
+import os
 
 from django.db import models
 from django.db.models import Q
@@ -8,7 +9,7 @@ from django.utils.translation import gettext_lazy as _
 from bot.models import BotCollection
 from chat.models import Conversation, Question
 from collection.models import Collection, CollectionDocument
-from document.models import Document
+from document.models import Document, DocumentLibrary
 
 logger = logging.getLogger(__name__)
 
@@ -16,29 +17,16 @@ logger = logging.getLogger(__name__)
 class BaseModelSerializer(serializers.ModelSerializer):
     created_at = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S")
     updated_at = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S")
-    
 
-class ConversationCreateSerializer(serializers.Serializer):
+
+class ConversationCreateBaseSerializer(serializers.Serializer):
     user_id = serializers.CharField(required=True, max_length=36)
     documents = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
     collections = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
     bot_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, min_length=32, max_length=36)
-    public_collection_ids = serializers.ListField(
-        required=False, child=serializers.CharField(min_length=1), allow_empty=True)
-    paper_ids = serializers.ListField(
-        required=False, child=serializers.JSONField(), allow_empty=True, allow_null=True, default=list())
-    question = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
     def validate(self, attrs):
-        if (
-            not attrs.get('documents')
-            and not attrs.get('collections')
-            and not attrs.get('bot_id')
-        ):
-            raise serializers.ValidationError('documents, collections, bot_id are all empty')
         document_ids = []
-        if attrs.get('question'):
-            attrs['content'] = attrs['question']
         if attrs.get('documents'):
             document_ids = attrs['documents']
         is_bot = False
@@ -60,11 +48,21 @@ class ConversationCreateSerializer(serializers.Serializer):
                 'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
                 'ref_collection_id', 'ref_doc_id', 'object_path',
             ).all()
+            attrs['document_titles'] = []
             if not is_bot:
-                attrs['document_titles'] = [d['title'] for d in documents if d['id'] in attrs.get('documents', [])]
-            else:
-                attrs['document_titles'] = []
-            attrs['papers_info'] = chat_paper_ids(attrs['user_id'], documents)
+                for d in documents:
+                    if d['id'] in attrs.get('documents', []):
+                        title = d['title']
+                        if not title:
+                            filename = DocumentLibrary.objects.filter(
+                                document_id=d['id'], filename__isnull=False).values_list('filename', flat=True).first()
+                            title = os.path.splitext(filename)[0]
+                        attrs['document_titles'].append(title)
+            attrs['papers_info'] = chat_paper_ids(
+                attrs['user_id'], documents,
+                collection_ids=attrs.get('collections'),
+                bot_id=attrs.get('bot_id'),
+            )
         return attrs
 
     @staticmethod
@@ -85,6 +83,26 @@ class ConversationCreateSerializer(serializers.Serializer):
             return Conversation.TypeChoices.MIX_COV
         else:
             return Conversation.TypeChoices.SIMPLE_COV
+    
+
+class ConversationCreateSerializer(ConversationCreateBaseSerializer):
+    public_collection_ids = serializers.ListField(
+        required=False, child=serializers.CharField(min_length=1), allow_empty=True)
+    paper_ids = serializers.ListField(
+        required=False, child=serializers.JSONField(), allow_empty=True, allow_null=True, default=list())
+    question = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if (
+            not attrs.get('documents')
+            and not attrs.get('collections')
+            and not attrs.get('bot_id')
+        ):
+            raise serializers.ValidationError('documents, collections, bot_id are all empty')
+        if attrs.get('question'):
+            attrs['content'] = attrs['question']
+        return attrs
 
 
 class ConversationUpdateSerializer(serializers.Serializer):
@@ -123,17 +141,14 @@ class ConversationListSerializer(BaseModelSerializer):
         fields = ['id', 'title', 'last_used_at', 'bot_id']
 
 
-class ChatQuerySerializer(serializers.Serializer):
-    user_id = serializers.CharField(required=True, max_length=36)
+class ChatQuerySerializer(ConversationCreateBaseSerializer):
     conversation_id = serializers.CharField(required=False, min_length=32, max_length=36)
     question_id = serializers.CharField(required=False, min_length=32, max_length=36)
     content = serializers.CharField(required=True, min_length=1, max_length=1024)
 
-    documents = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
-    collections = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
-    bot_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, min_length=32, max_length=36)
-
     def validate(self, attrs):
+        attrs = super().validate(attrs)
+
         if (
             not attrs.get('conversation_id')
             and not attrs.get('documents')
@@ -144,32 +159,6 @@ class ChatQuerySerializer(serializers.Serializer):
         if attrs.get('conversation_id'):
             if not Conversation.objects.filter(id=attrs['conversation_id']).exists():
                 raise serializers.ValidationError(f"conversation_id: {attrs['conversation_id']} is not exists")
-        document_ids = []
-        if attrs.get('documents'):
-            document_ids = attrs['documents']
-        is_bot = False
-        if attrs.get('bot_id'):
-            is_bot = True
-            collections = BotCollection.objects.filter(bot_id=attrs['bot_id']).values('collection_id').all()
-            attrs['collections'] = [c['collection_id'] for c in collections]
-        if attrs.get('collections'):
-            collections = Collection.objects.filter(id__in=attrs['collections']).all()
-            public_colls = [c.id for c in collections if c.type == Collection.TypeChoices.PUBLIC]
-            personal_colls = [c.id for c in collections if c.type == Collection.TypeChoices.PERSONAL]
-            attrs['public_collection_ids'] = public_colls
-            collection_docs = CollectionDocument.objects.filter(collection_id__in=personal_colls, del_flag=False).all()
-            document_ids += [doc.document_id for doc in collection_docs]
-            document_ids = list(set(document_ids))
-        if document_ids:
-            documents = Document.objects.filter(id__in=document_ids).values(
-                'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
-                'ref_collection_id', 'ref_doc_id', 'object_path',
-            ).all()
-            if not is_bot:
-                attrs['document_titles'] = [d['title'] for d in documents if d['id'] in attrs.get('documents', [])]
-            else:
-                attrs['document_titles'] = []
-            attrs['papers_info'] = chat_paper_ids(attrs['user_id'], documents)
         return attrs
 
 
@@ -239,7 +228,7 @@ class ConversationsMenuQuerySerializer(serializers.Serializer):
     list_type = serializers.ChoiceField(required=False, choices=ListTypeChoices, default=ListTypeChoices.ALL)
 
 
-def chat_paper_ids(user_id, documents):
+def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
     ret_data = {}
     for d in documents:
         ret_data[d['id']] = {
