@@ -175,9 +175,12 @@ def _bot_subscribe_collection_list(user_id):
                 new_bot.type = Bot.TypeChoices.PUBLIC
                 my_doc_lib_doc_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(user_id)
                 query_set2, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
-                    user_id, bot_sub_collect[bot_id]['collection_ids'], 'personal', new_bot)
+                    bot.user_id, bot_sub_collect[bot_id]['collection_ids'], 'personal', new_bot)
+                public_documents = set(
+                    [d['document_id'] for d in query_set2.all()] + ref_documents
+                ) - set(personal_documents)
                 diff_set = (
-                    set([d['document_id'] for d in query_set2.all()] + d3) - set(my_doc_lib_doc_ids)
+                    public_documents - set(my_doc_lib_doc_ids)
                 )
                 sub_bot_infos[bot_id] = {'is_all_in_document_library': False if diff_set else True}
             else: sub_bot_infos[bot_id] = {'is_all_in_document_library': True}
@@ -206,18 +209,6 @@ def collection_document_add(validated_data):
     vd = validated_data
     document_ids = vd.get('document_ids', [])
     instances = []
-    if vd.get('is_all') or (vd.get('list_type') and vd['list_type'] == 'all'):
-        doc_search_redis_key_prefix = 'doc:search'
-        content_hash = str_hash(f"{vd['user_id']}_{vd['search_content']}")
-        redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
-        search_cache = cache.get(redis_key)
-        if search_cache:
-            all_cache = json.loads(search_cache)
-            doc_ids = [c['id'] for c in all_cache]
-            if document_ids:
-                document_ids = list(set(doc_ids) - set(document_ids))
-            else:
-                document_ids = doc_ids
     created_num, updated_num = 0, 0
     updated_num = CollectionDocument.objects.filter(
         collection_id=vd['collection_id'], document_id__in=document_ids, del_flag=True).update(del_flag=False)
@@ -271,6 +262,7 @@ def collection_document_delete(validated_data):
         Collection.objects.filter(id=vd['collection_id']).update(total_personal=F('total_personal') - effect_num)
     async_update_conversation_by_collection.apply_async(args=[vd['collection_id']])
     return validated_data
+
 
 def collections_delete(validated_data):
     vd = validated_data
@@ -326,8 +318,6 @@ def collection_docs(collection_id, page_size=10, page_num=1):
     docs = [cd.document for cd in c_docs]
 
     docs_data = DocumentApaListSerializer(docs, many=True).data
-    for i, d_data in enumerate(docs_data):
-        docs_data[i]['doc_apa'] = f"[{start_num + i + 1}] {d_data['doc_apa']}"
 
     if c_docs:
         collection = c_docs[0].collection
@@ -390,9 +380,7 @@ def collections_docs(user_id, validated_data):
             if not temp:
                 temp = {'id': d.id, 'doc_apa': data_dict[d.id]['doc_apa'], 'has_full_text': False, }
             temp_res_data.append(temp)
-        for i, d in enumerate(temp_res_data):
-            d['doc_apa'] = f"[{start_num + i + 1}] {d['doc_apa']}"
-            res_data.append(d)
+        res_data = temp_res_data
     else:
         res_data = CollectionDocumentListCollectionSerializer(docs, many=True).data
         if vd['list_type'] == 'all_documents':

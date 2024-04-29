@@ -44,13 +44,13 @@ INSTALLED_APPS = [
     'request_id',
     'corsheaders',
     'rest_framework',
+    'django_celery_results',
+    'django_celery_beat',
     'user',
     'bot',
     'chat',
     'collection',
     'document',
-    'django_celery_results',
-    'django_celery_beat',
 ]
 
 MIDDLEWARE = [

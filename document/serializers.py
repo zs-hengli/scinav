@@ -163,7 +163,7 @@ class DocumentDetailSerializer(BaseModelSerializer):
     @staticmethod
     def get_citations(obj: Document):
         if obj.collection_type == Document.TypeChoices.PERSONAL:
-            if obj.ref_doc_id:
+            if obj.ref_doc_id and obj.ref_collection_id:
                 citations = RagDocument.citations('public', obj.ref_collection_id, obj.ref_doc_id)
             else:
                 citations = []
@@ -189,7 +189,7 @@ class DocumentDetailSerializer(BaseModelSerializer):
     @staticmethod
     def get_references(obj: Document):
         if obj.collection_type == Document.TypeChoices.PERSONAL:
-            if obj.ref_doc_id:
+            if obj.ref_doc_id and obj.ref_collection_id:
                 references = RagDocument.references('public', obj.ref_collection_id, obj.ref_doc_id)
             else:
                 references = []

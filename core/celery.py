@@ -1,7 +1,7 @@
 import os
 
 from celery import Celery, shared_task
-from celery.schedules import crontab
+from celery.schedules import crontab, timedelta
 from celery.utils.log import get_task_logger
 
 logger = get_task_logger(__name__)
@@ -17,9 +17,9 @@ app = Celery('core')
 app.config_from_object('django.conf:settings', namespace='CELERY')
 
 app.conf.beat_schedule = {
-    'async-document-library-every-minute': {
+    'async-document-library-every-10seconds': {
         'task': 'document.tasks.async_document_library_task',
-        'schedule': crontab(minute='*'),
+        'schedule': timedelta(seconds=10),
     },
     'async-publish-bot-every-minute': {
         'task': 'document.tasks.async_schedule_publish_bot_task',

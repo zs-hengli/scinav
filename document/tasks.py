@@ -11,8 +11,8 @@ from chat.models import Conversation
 from collection.base_service import update_conversation_by_collection
 from collection.models import Collection
 from collection.serializers import bot_subscribe_personal_document_num
-from document.base_service import document_update_from_rag_ret, reference_doc_to_document, update_document_lib, \
-    reference_doc_to_document_library
+from document.base_service import document_update_from_rag_ret, reference_doc_to_document, \
+    reference_doc_to_document_library, search_result_delete_cache
 from document.models import DocumentLibrary, Document
 
 logger = logging.getLogger('celery')
@@ -70,7 +70,8 @@ def async_document_library_task(self, task_id=None):
                 i.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message']}
             else:  # COMPLETED CANCELLED
                 i.task_status = task_status
-                rag_ret['paper']['status'] = task_status
+                if rag_ret.get('paper'):
+                    rag_ret['paper']['status'] = task_status
                 try:
                     document = document_update_from_rag_ret(rag_ret['paper']) if rag_ret['paper'] else None
                     i.document = document
@@ -78,6 +79,8 @@ def async_document_library_task(self, task_id=None):
                 except Exception as e:
                     logger.error(f'async_document_library_task {i.task_id}, {e}')
             i.save()
+            if i.task_status == DocumentLibrary.TaskStatusChoices.COMPLETED and i.task_type == 'personal':
+                search_result_delete_cache(i.user_id)
     return True
 
 

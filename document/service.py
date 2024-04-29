@@ -16,7 +16,7 @@ from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionDocumentListSerializer
 from core.utils.common import str_hash
 from core.utils.exceptions import ValidationError
-from document.base_service import document_update_from_rag_ret, update_document_lib
+from document.base_service import document_update_from_rag_ret, update_document_lib, search_result_delete_cache
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentRagUpdateSerializer, \
     DocumentLibraryPersonalSerializer, DocLibAddQuerySerializer, \
@@ -153,8 +153,8 @@ def get_documents_by_rag(rag_data):
 
 
 def search_result_from_cache(user_id, content, page_size=10, page_num=1):
-    doc_search_redis_key_prefix = 'doc:search'
-    content_hash = str_hash(f"{user_id}_{content}")
+    doc_search_redis_key_prefix = f'scinav:doc:search:{user_id}'
+    content_hash = str_hash(f'{content}')
     redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
     search_cache = cache.get(redis_key)
 
@@ -170,9 +170,9 @@ def search_result_from_cache(user_id, content, page_size=10, page_num=1):
         }
 
 
-def search_result_save_cache(user_id, content, data, search_result_expires=86400 * 7):
-    doc_search_redis_key_prefix = 'doc:search'
-    content_hash = str_hash(f"{user_id}_{content}")
+def search_result_save_cache(user_id, content, data, search_result_expires=600):
+    doc_search_redis_key_prefix = f'scinav:doc:search:{user_id}'
+    content_hash = str_hash(f'{content}')
     redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
     res = cache.set(redis_key, json.dumps(data), search_result_expires)
     return res
@@ -600,6 +600,9 @@ def document_library_delete(user_id, ids, list_type):
         RagDocument.delete_personal_paper(document['collection_id'], document['doc_id'])
     for task in in_progress_document_libs:
         RagDocument.cancel_ingest_task(task.task_id)
+    # delete search cache when delete personal document_library
+    if user_per_document_ids:
+        search_result_delete_cache(user_id)
     # delete DocumentLibrary
     effected_num = doc_libs.delete()
     return effected_num

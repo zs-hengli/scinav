@@ -1,3 +1,4 @@
+import json
 import logging
 
 from django.db.models import F
@@ -7,7 +8,9 @@ from rest_framework import serializers
 
 from bot.models import BotCollection, Bot
 from collection.models import Collection, CollectionDocument
+from core.utils.common import str_hash
 from document.models import Document, DocumentLibrary
+from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +48,19 @@ class CollectionCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(_('Please provide a search_content'))
         if attrs.get('title') and len(attrs['title']) > 255:
             attrs['title'] = attrs['title'][:255]
-        elif attrs.get('document_ids'):
+        if attrs.get('search_content'):
+            doc_search_redis_key_prefix = f"scinav:doc:search:{attrs['user_id']}"
+            content_hash = str_hash(attrs['search_content'])
+            redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
+            search_cache = cache.get(redis_key)
+            if search_cache:
+                all_cache = json.loads(search_cache)
+                doc_ids = [c['id'] for c in all_cache]
+                if attrs.get('document_ids'):
+                    attrs['document_ids'] = list(set(doc_ids) - set(attrs['document_ids']))
+                else:
+                    attrs['document_ids'] = doc_ids
+        if attrs.get('document_ids'):
             documents = Document.objects.filter(id__in=attrs['document_ids']).values("title", "id").all()
             titles = []
             for d in documents:

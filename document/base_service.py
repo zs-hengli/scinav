@@ -1,6 +1,8 @@
 import logging
 
-from collection.models import Collection, CollectionDocument
+from django.core.cache import cache
+
+from collection.models import Collection
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentRagCreateSerializer
 from bot.rag_service import Document as RagDocument
@@ -9,6 +11,9 @@ logger = logging.getLogger(__name__)
 
 
 def update_document_lib(user_id, document_ids):
+    document_ids = Document.objects.filter(
+        id__in=document_ids, del_flag=False, collection_type=Document.TypeChoices.PUBLIC
+    ).values_list('id', flat=True).all()
     for doc_id in document_ids:
         data = {
             'user_id': user_id,
@@ -68,3 +73,11 @@ def reference_doc_to_document_library(document):
             ref_document = reference_doc_to_document(document)
         if ref_document:
             update_document_lib('0000', [ref_document.id])
+
+
+def search_result_delete_cache(user_id):
+    doc_search_redis_key_prefix = f'scinav:doc:search:{user_id}'
+    keys = cache.keys(f"{doc_search_redis_key_prefix}:*")
+    if keys:
+        return cache.delete_many(keys)
+    return True

@@ -1,5 +1,6 @@
 import logging
 
+from django.core.cache import cache
 from django.db.models import Q
 from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
