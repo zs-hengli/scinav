@@ -173,7 +173,8 @@ def bot_list_all(user_id, page_size=10, page_num=1):
 def bot_list_subscribe(user_id, page_size=10, page_num=1):
     user_subscribe_bot = BotSubscribe.objects.filter(user_id=user_id, del_flag=False).all()
     bot_ids = [us_bot.bot_id for us_bot in user_subscribe_bot]
-    query_set = Bot.objects.filter(id__in=bot_ids, del_flag=False).order_by('-pub_date')
+    filter_query = Q(del_flag=False) & (Q(id__in=bot_ids) | Q(user_id=user_id))
+    query_set = Bot.objects.filter(filter_query).order_by('-pub_date')
     filter_count = query_set.count()
     start_num = page_size * (page_num - 1)
     logger.info(f"limit: [{start_num}: {page_size * page_num}]")

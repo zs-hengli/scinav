@@ -40,7 +40,8 @@ def async_document_library_task(self, task_id=None):
             i.save()
     # in progress
     if instances := DocumentLibrary.objects.filter(task_status__in=[
-        DocumentLibrary.TaskStatusChoices.IN_PROGRESS, DocumentLibrary.TaskStatusChoices.QUEUEING
+        DocumentLibrary.TaskStatusChoices.IN_PROGRESS, DocumentLibrary.TaskStatusChoices.QUEUEING,
+        DocumentLibrary.TaskStatusChoices.TO_BE_CANCELLED
     ]).all():
         for i in instances:
             try:
@@ -56,6 +57,7 @@ def async_document_library_task(self, task_id=None):
             if task_status in [
                 DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
                 DocumentLibrary.TaskStatusChoices.QUEUEING,
+                DocumentLibrary.TaskStatusChoices.TO_BE_CANCELLED
             ]:
                 if i.task_status == task_status:
                     continue
@@ -66,11 +68,11 @@ def async_document_library_task(self, task_id=None):
                     Document.objects.filter(pk=i.document_id).update(state='error')
                 i.task_status = task_status
                 i.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message']}
-            else:  # COMPLETED
+            else:  # COMPLETED CANCELLED
                 i.task_status = task_status
                 rag_ret['paper']['status'] = task_status
                 try:
-                    document = document_update_from_rag_ret(rag_ret['paper'])
+                    document = document_update_from_rag_ret(rag_ret['paper']) if rag_ret['paper'] else None
                     i.document = document
                     reference_doc_to_document(document)
                 except Exception as e:

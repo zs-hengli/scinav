@@ -89,6 +89,7 @@ class DocumentLibrary(models.Model):
         QUEUEING = 'queueing', _('queueing')
         IN_PROGRESS = 'in_progress', _('in_progress')
         COMPLETED = 'completed', _('completed')
+        TO_BE_CANCELLED = 'to_be_cancelled', _('to_be_cancelled')
         CANCELLED = 'cancelled', _('cancelled')
         ERROR = 'error', _('error')
         # CANCELED = 'canceled', _('canceled')

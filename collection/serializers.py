@@ -342,10 +342,9 @@ class CollectionDocumentListSerializer(serializers.Serializer):
                 if p_documents:
                     sub_bot_document_ids = list(set(sub_bot_document_ids) - set(p_documents))
             all_document_ids = doc_lib_document_ids + sub_bot_document_ids
-            filter_query = (
-                Q(document_id__in=all_document_ids)
-                & Q(collection_id__in=collection_ids, del_flag=False)
-            )
+            filter_query = Q(document_id__in=all_document_ids, del_flag=False)
+            if collection_ids:
+                filter_query &= Q(collection_id__in=collection_ids)
             query_set = CollectionDocument.objects.filter(
                 filter_query).values('document_id').order_by('document_id').distinct()
 
