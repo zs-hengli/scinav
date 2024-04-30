@@ -217,7 +217,7 @@ class DocumentsUrl(APIView):
             return my_json_response(code=100002, msg=f'document not found by document_id={document_id}')
         if document['collection_type'] == Document.TypeChoices.PERSONAL and user_id != document['collection_id']:
             url = None
-            if document['ref_doc_id']:
+            if document['ref_doc_id'] and document['ref_collection_id']:
                 if (
                     ref_document := Document.objects.filter(
                         doc_id=document['ref_doc_id'], collection_id=document['ref_collection_id']

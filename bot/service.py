@@ -7,8 +7,9 @@ from django.utils.translation import gettext_lazy as _
 from bot.base_service import recreate_bot, collections_doc_ids
 from bot.models import Bot, BotCollection, BotSubscribe, HotBot
 from bot.rag_service import Bot as RagBot
-from bot.serializers import (BotDetailSerializer, BotListAllSerializer, HotBotListSerializer, BotListChatMenuSerializer)
-from collection.models import Collection
+from bot.serializers import (BotDetailSerializer, BotListAllSerializer, HotBotListSerializer, BotListChatMenuSerializer,
+                             MyBotListAllSerializer)
+from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionDocumentListSerializer
 from core.utils.exceptions import InternalServerError, ValidationError
 from document.base_service import update_document_lib
@@ -195,15 +196,29 @@ def bot_list_my(user_id, page_size=10, page_num=1):
     start_num = page_size * (page_num - 1)
     logger.info(f"limit: [{start_num}: {page_size * page_num}]")
     bots = query_set[start_num:(page_size * page_num)]
-
-    bot_list_data = BotListAllSerializer(bots, many=True).data
+    bot_dict = {b.id: b for b in bots}
+    bot_list_data = MyBotListAllSerializer(bots, many=True).data
     for index, b_data in enumerate(bot_list_data):
+        bot_list_data[index]['doc_total'] = _mine_bot_documents_total(bot_dict[b_data['id']])
         bot_list_data[index]['subscribed'] = True
 
     return {
         'list': bot_list_data,
         'total': filter_count
     }
+
+
+def _mine_bot_documents_total(bot):
+    total = 0
+    collections = BotCollection.objects.filter(
+        bot_id=bot.id, del_flag=False).values_list('collection_id', flat=True).all()
+    public_collection_ids = Collection.objects.filter(
+        id__in=collections, type=Collection.TypeChoices.PUBLIC, del_flag=False).values('id', 'total_public').all()
+    if public_collection_ids:
+        total += sum([p_c['total_public'] for p_c in public_collection_ids])
+    total += CollectionDocument.objects.filter(
+        collection_id__in=collections, del_flag=False).values('document_id').distinct('document_id').count()
+    return total
 
 
 def bot_list_chat_menu(user_id, page_size=10, page_num=1):
@@ -309,9 +324,10 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
     personal_count = query_set.count()
     total = public_count + personal_count
     show_total += personal_count
-    logger.info(f"limit: [{start_num}: {page_size * page_num}]")
+    logger.info(f"limit: [{start_num}: {page_size * page_num}], personal_count: {personal_count}")
     if page_size * page_num > public_count:
-        c_docs = query_set[start_num:(page_size * page_num - need_public_count)] if total > start_num else []
+        start = start_num - (public_count % page_size if not need_public_count else 0)
+        c_docs = query_set[start:(page_size * page_num - need_public_count)] if total > start_num else []
         doc_ids += [cd['document_id'] for cd in c_docs]
     docs = Document.objects.filter(id__in=doc_ids).all()
     # docs = [cd.document for cd in c_docs]
@@ -366,7 +382,6 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
             res_data += CollectionDocumentListCollectionSerializer(docs, many=True).data
             for index, d_id in enumerate(res_data):
                 res_data[index]['type'] = list_type
-
     return {
         'list': res_data,
         # 个人库库文献 不能在添加到个人库

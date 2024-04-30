@@ -21,7 +21,7 @@ from document.models import Document, DocumentLibrary
 from document.serializers import DocumentRagUpdateSerializer, \
     DocumentLibraryPersonalSerializer, DocLibAddQuerySerializer, \
     DocumentLibraryListQuerySerializer, DocumentRagCreateSerializer
-from document.tasks import async_document_library_task, async_update_document
+from document.tasks import async_document_library_task, async_update_document, async_update_conversation_by_collection
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +213,15 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
 
     # personal
     if list_type == DocumentLibraryListQuerySerializer.ListTypeChoices.ALL:
-        query_set = DocumentLibrary.objects.filter(user_id=user_id, del_flag=False).order_by('-updated_at')
+        query_set = DocumentLibrary.objects.filter(
+            user_id=user_id, del_flag=False,
+            task_status__in=[DocumentLibrary.TaskStatusChoices.COMPLETED,
+                             DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
+                             DocumentLibrary.TaskStatusChoices.PENDING,
+                             DocumentLibrary.TaskStatusChoices.QUEUEING,
+                             DocumentLibrary.TaskStatusChoices.ERROR,
+                             ]
+        ).order_by('-updated_at')
     elif list_type == DocumentLibraryListQuerySerializer.ListTypeChoices.IN_PROGRESS:
         query_set = DocumentLibrary.objects.filter(
             user_id=user_id, del_flag=False,
@@ -249,7 +257,7 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
             document_title = document.title if document else '-'
             filename = doc_lib.filename if doc_lib.filename else document_title
             if document:
-                if document.ref_doc_id:
+                if document.ref_doc_id and document.ref_collection_id:
                     ref_type = 'reference'
                     if document.full_text_accessible:
                         ref_type = 'reference&full_text_accessible'
@@ -447,7 +455,7 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
     is_all = True
     all_document_ids, ref_ds = [], []
     if add_type == DocLibAddQuerySerializer.AddTypeChoices.DOCUMENT_SEARCH:
-        search_result = search_result_from_cache(search_content, 200, 1)
+        search_result = search(user_id, search_content, 200, 1)
         if search_result:
             all_document_ids = [d['id'] for d in search_result['list']]
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_ARXIV:
@@ -513,17 +521,15 @@ def _get_public_document_ids(user_id, document_ids):
     personal_documents = Document.objects.filter(
         id__in=document_ids, collection_type=Document.TypeChoices.PERSONAL, ref_doc_id__gt=0).all()
     if personal_documents:
-        filter_query = None
+        docs = []
         for d in personal_documents:
             if d.collection_id == user_id:
                 new_document_ids.append(d.id)
-            elif not filter_query:
-                filter_query = Q(doc_id=d.ref_doc_id, collection_id=d.ref_collection_id)
             else:
-                filter_query |= Q(doc_id=d.ref_doc_id, collection_id=d.ref_collection_id)
-        if filter_query:
-            per_documents = Document.objects.filter(filter_query).values('id').all()
-            new_document_ids += [d['id'] for d in per_documents] if per_documents else []
+                docs.append({'id': None, 'doc_id': d.ref_doc_id, 'collection_id': d.ref_collection_id})
+        if docs:
+            per_documents = Document.raw_by_docs(docs, fileds='id')
+            new_document_ids += [d.id for d in per_documents] if per_documents else []
     return new_document_ids
 
 
@@ -590,6 +596,7 @@ def document_library_delete(user_id, ids, list_type):
         ).update(del_flag=True)
         if effect_num:
             Collection.objects.filter(id=coll_id).update(total_personal=F('total_personal') - effect_num)
+            async_update_conversation_by_collection.apply_async(coll_id)
     # delete Document
     Document.objects.filter(id__in=user_per_document_ids, collection_id=user_id).update(del_flag=True)
     # todo rag delete

@@ -171,14 +171,23 @@ def _bot_subscribe_collection_list(user_id):
             # if bot.type == Bot.TypeChoices.PUBLIC:
             bot_sub_collect[bot_id]['total'] += len(ref_documents)
             if bot.type == Bot.TypeChoices.PERSONAL:
+                # 关联
+                # 标签的个人文献应该在文献列表中显示，但是它会作为全量文献库文献存在。 排除其他影响文献数量颜色的因素，外面文献列表显示绿色
+                # 关联 & 获取全文
+                # 标签的个人文献应该在文献列表中显示，作为个人库存在。 需要用户添加个人库，如果未添加个人库则显示黄色，已经添加个人库显示绿色
                 new_bot = copy.deepcopy(bot)
                 new_bot.type = Bot.TypeChoices.PUBLIC
                 my_doc_lib_doc_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(user_id)
                 query_set2, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
                     bot.user_id, bot_sub_collect[bot_id]['collection_ids'], 'personal', new_bot)
+                sub_full_ref_docs = []
+                if ref_documents:
+                    sub_full_ref_docs = Document.objects.filter(
+                        id__in=ref_documents, full_text_accessible=True).values_list('id', flat=True).all()
                 public_documents = set(
-                    [d['document_id'] for d in query_set2.all()] + ref_documents
+                    [d['document_id'] for d in query_set2.all()] + list(sub_full_ref_docs)
                 ) - set(personal_documents)
+
                 diff_set = (
                     public_documents - set(my_doc_lib_doc_ids)
                 )
@@ -359,8 +368,9 @@ def collections_docs(user_id, validated_data):
     # docs = Document.objects.filter(id__in=[cd['document_id'] for cd in c_docs]).all()
     # 按照名称升序排序
     all_c_docs = query_set.all()
+    start = start_num - (public_count % page_size if not need_public_count else 0)
     docs = Document.objects.filter(id__in=[cd['document_id'] for cd in all_c_docs]).order_by('title')[
-           start_num:(page_size * page_num - need_public_count)
+           start:(page_size * page_num - need_public_count)
     ]
 
     if vd['list_type'] == 'all':
@@ -380,7 +390,7 @@ def collections_docs(user_id, validated_data):
             if not temp:
                 temp = {'id': d.id, 'doc_apa': data_dict[d.id]['doc_apa'], 'has_full_text': False, }
             temp_res_data.append(temp)
-        res_data = temp_res_data
+        res_data += temp_res_data
     else:
         res_data = CollectionDocumentListCollectionSerializer(docs, many=True).data
         if vd['list_type'] == 'all_documents':

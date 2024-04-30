@@ -176,7 +176,7 @@ class DocumentDetailSerializer(BaseModelSerializer):
                 title = c['title']
                 year = c['year']
                 source = c['journal'] if c['journal'] else c['conference'] if c['conference'] else c['venue']
-                doc_apa = f'[{i + 1}] {authors};{title}.{source} {year}'  # noqa
+                doc_apa = f'{authors};{title}.{source} {year}'  # noqa
                 ret_data.append({
                     'doc_id': c['doc_id'],
                     'collection_id': c['collection_id'],
@@ -202,7 +202,7 @@ class DocumentDetailSerializer(BaseModelSerializer):
                 title = r['title']
                 year = r['year']
                 source = r['journal'] if r['journal'] else r['conference'] if r['conference'] else r['venue']
-                doc_apa = f'[{i + 1}] {authors};{title}.{source} {year}'  # noqa
+                doc_apa = f'{authors};{title}.{source} {year}'  # noqa
                 ret_data.append({
                     'doc_id': r['doc_id'],
                     'collection_id': r['collection_id'],

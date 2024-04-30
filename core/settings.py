@@ -172,6 +172,7 @@ LOGGING = {
             'filename': LOG_FILE,
             'formatter': 'verbose',
             'maxBytes': 1024 * 1024 * 300,  # 300M
+            'backupCount': 100,
         },
     },
     'root': {

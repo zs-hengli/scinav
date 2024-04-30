@@ -124,7 +124,8 @@ def async_update_document(self, document_ids):
             logger.error(f'async_update_document, {d.doc_id}_{d.collection_id}_{d.collection_type}, {e}')
             continue
         for f in fileds:
-            setattr(documents[i], f, data[f])
+            if data[f] or isinstance(data[f], bool):
+                setattr(documents[i], f, data[f])
     Document.objects.bulk_update(documents, fileds)
     logger.info(f'async_update_document end, documents len: {len(documents)}')
     return True

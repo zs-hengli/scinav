@@ -107,6 +107,13 @@ class BotListQuerySerializer(serializers.Serializer):
     page_size = serializers.IntegerField(required=False, default=10)
 
 
+class MyBotListAllSerializer(BaseModelSerializer):
+
+    class Meta:
+        model = Bot
+        fields = ['id', 'author', 'title', 'description', 'updated_at', 'user_id']
+
+
 class BotListAllSerializer(BaseModelSerializer):
     doc_total = serializers.SerializerMethodField()
 
