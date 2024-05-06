@@ -46,7 +46,7 @@ class Collections(APIView):
         list_type = list_type.split(',')
         types = ['my', 'public', 'subscribe']
         if set(list_type) - set(types):
-            return my_json_response({}, code=-1, msg='list_type error')
+            return my_json_response({}, code=100001, msg='list_type error')
         query = request.query_params
         page_size = int(query.get('page_size', 10))
         page_num = int(query.get('page_num', 1))
@@ -68,7 +68,7 @@ class Collections(APIView):
         query['user_id'] = request.user.id
         serial = CollectionCreateSerializer(data=query)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         vd = serial.validated_data
         if vd.get('document_ids'):
             title = generate_collection_title(document_titles=vd['document_titles'])
@@ -104,12 +104,12 @@ class Collections(APIView):
         user_id = request.user.id
         collection = Collection.objects.filter(pk=collection_id, user_id=user_id).first()
         if not collection:
-            return my_json_response({}, code=-1, msg='validate collection_id error')
+            return my_json_response({}, code=100002, msg='validate collection_id error')
 
         request_data = request.data
         serial = CollectionUpdateSerializer(data=request_data)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
 
         collection = serial.update(collection, validated_data=serial.validated_data)
         data = CollectionUpdateSerializer(collection).data
@@ -124,9 +124,9 @@ class Collections(APIView):
         if collection_id:
             collection = Collection.objects.filter(pk=collection_id, user_id=user_id).first()
             if not collection:
-                return my_json_response({}, code=-1, msg='收藏夹不存在')
+                return my_json_response({}, code=100002, msg='收藏夹不存在')
             if collection.type == Collection.TypeChoices.PUBLIC:
-                return my_json_response({}, code=-2, msg=_('您无法删除公共库或订阅专题收藏夹，请重新选择。'))
+                return my_json_response({}, code=100003, msg=_('您无法删除公共库或订阅专题收藏夹，请重新选择。'))
             # collection_delete(collection)
             query = {
                 'ids': [collection_id]
@@ -136,10 +136,10 @@ class Collections(APIView):
         query['user_id'] = user_id
         serial = CollectionDeleteQuerySerializer(data=query)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         query_data = serial.validated_data
         if not query_data['is_all'] and query_data.get('ids') and has_public_collection(query_data['ids']):
-            return my_json_response({}, code=-2, msg=_('您无法删除公共库或订阅专题收藏夹，请重新选择。'))
+            return my_json_response({}, code=100003, msg=_('您无法删除公共库或订阅专题收藏夹，请重新选择。'))
         collections_delete(query_data)
         return my_json_response({})
 
@@ -160,7 +160,7 @@ class CollectionDocuments(APIView):
 
         serial = CollectionDocumentListQuerySerializer(data=query)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         data = collections_docs(request.user.id, serial.validated_data)
         return my_json_response(data)
 
@@ -178,7 +178,7 @@ class CollectionDocuments(APIView):
         post_data['collection_id'] = collection_id
         serial = CollectionDocUpdateSerializer(data=post_data)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         if serial.validated_data['action'] == 'add':
             collection_document_add(serial.validated_data)
         else:
@@ -213,10 +213,7 @@ class CollectionChatOperationCheck(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         code, data = collection_chat_operation_check(request.user.id, serial.validated_data)
-        if code == 0:
-            return my_json_response(data)
-        else:
-            return my_json_response({}, code=code, msg=data)
+        return my_json_response(data, code=code)
 
 
 @method_decorator([extract_json], name='dispatch')
@@ -231,10 +228,7 @@ class CollectionDeleteOperationCheck(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         code, data = collection_delete_operation_check(request.user.id, serial.validated_data)
-        if code == 0:
-            return my_json_response(data)
-        else:
-            return my_json_response(data, code=code, msg=data['msg'])
+        return my_json_response(data, code=code, msg=data.get('msg'))
 
 
 @method_decorator([extract_json], name='dispatch')
@@ -249,10 +243,7 @@ class CollectionsCreateBotCheck(APIView):
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         vd = serial.validated_data
         code, msg = collections_create_bot_check(request.user.id, vd['ids'], vd['bot_id'])
-        if code == 0:
-            return my_json_response({})
-        else:
-            return my_json_response({}, code=code, msg=msg)
+        return my_json_response({}, code=code, msg=msg)
 
 
 @method_decorator([extract_json], name='dispatch')

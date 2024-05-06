@@ -68,7 +68,7 @@ class Bots(APIView):
         if bot_id:
             bot = Bot.objects.filter(pk=bot_id).first()
             if not bot:
-                return my_json_response(code=100002, msg= _('bot not found'))
+                return my_json_response(code=100002, msg=_('bot not found'))
             data = bot_detail(user_id, bot)
         else:
             query_data = kwargs['request_data']['GET']
@@ -86,7 +86,7 @@ class Bots(APIView):
         request_data['user_id'] = user_id
         serial = BotCreateSerializer(data=request_data)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
 
         data = bot_create(serial.validated_data)
         return my_json_response(data)
@@ -102,7 +102,7 @@ class Bots(APIView):
         request_data['user_id'] = request.user.id
         serial = BotCreateSerializer(data=request_data)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=-2, msg=f'validate error, {list(serial.errors.keys())}')
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         validated_data = serial.validated_data
         del validated_data['type']  # update bot not update type
         updated_bot, bot_collections, updated_attrs = serial.updated_attrs(bot, validated_data)
@@ -112,7 +112,7 @@ class Bots(APIView):
     @staticmethod
     def delete(request, bot_id, *args, **kwargs):
         # if HotBot.objects.filter(bot_id=bot_id, del_flag=False).exists():
-        #     return my_json_response({}, code=-1, msg=_('bot is hot, can not delete'))
+        #     return my_json_response({}, code=100003, msg=_('bot is hot, can not delete'))
         bot_delete(bot_id)
         return my_json_response({'bot_id': bot_id})
 
@@ -129,9 +129,9 @@ class BotSubscribe(APIView):
             raise ValidationError(f'action is illegal must in {action_map}')
         bot = Bot.objects.filter(pk=bot_id).first()
         if not bot:
-            return my_json_response({}, code=-1, msg=_('bot_id is illegal'))
-        # if bot.user_id == user_id:  # todo 有用户体系后调整
-        #     return my_json_response({}, code=-2, msg=_('can not subscribe self bot'))
+            return my_json_response({}, code=100002, msg=_('bot_id is illegal'))
+        if bot.user_id == user_id:
+            return my_json_response({}, code=100003, msg=_('can not subscribe self bot'))
         bot_subscribe(user_id, bot_id, action)
         return my_json_response({'bot_id': bot_id})
 

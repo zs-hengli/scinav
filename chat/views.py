@@ -64,7 +64,7 @@ class Conversations(APIView):
         query_data['user_id'] = request.user.id
         serial = ConversationCreateSerializer(data=query_data)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         conversation_id = conversation_create(serial.validated_data)
         return my_json_response({'conversation_id': conversation_id})
 
@@ -99,7 +99,7 @@ class Chat(APIView):
         query_data['user_id'] = request.user.id
         serial = ChatQuerySerializer(data=query_data)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         data = chat_query(serial.validated_data)
         return streaming_response(data)
 
@@ -117,7 +117,7 @@ class QuestionLikeAnswer(APIView):
         }
         serial = QuestionAnswerSerializer(data=query_data)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         serial.save(serial.validated_data)
         return my_json_response({'id': question_id, 'is_like': is_like})
 
@@ -132,7 +132,7 @@ class QuestionUpdateAnswer(APIView):
         query['user_id'] = request.user.id
         serial = QuestionUpdateAnswerQuerySerializer(data=query)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=-1, msg=f'validate error, {list(serial.errors.keys())}')
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         validated_data = serial.validated_data
         serial.update_answer(validated_data)
         data = {'answer': validated_data['answer']}

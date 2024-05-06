@@ -180,11 +180,8 @@ class DocumentsLibraryOperationCheck(APIView):
         serial = DocLibCheckQuerySerializer(data=query)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg='invalid post data')
-        code, data = doc_lib_batch_operation_check(request.user.id, serial.validated_data)
-        if code == 0:
-            return my_json_response({'document_ids': data})
-        else:
-            return my_json_response(code=code, msg=data, data={})
+        code, data, msg = doc_lib_batch_operation_check(request.user.id, serial.validated_data)
+        return my_json_response(data, code=code, msg=data)
 
 
 @method_decorator([extract_json], name='dispatch')
@@ -200,7 +197,7 @@ class DocumentsPersonal(APIView):
         query['user_id'] = request.user.id
         serial = DocumentUploadQuerySerializer(data=query)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=1, msg='invalid post data')
+            return my_json_response(serial.errors, code=100001, msg='invalid post data')
         data = document_personal_upload(serial.validated_data)
         return my_json_response(data)
 
@@ -260,11 +257,11 @@ class DocumentsRagUpdate(APIView):
         query = request.data
         serial = DocumentRagUpdateSerializer(data=query)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=1, msg='invalid query data')
+            return my_json_response(serial.errors, code=100001, msg='invalid query data')
         doc_info = RagDocument.get(serial.validated_data)
         serial = DocumentRagCreateSerializer(data=doc_info)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=2, msg='invalid get rag paper info')
+            return my_json_response(serial.errors, code=100000, msg='invalid get rag paper info')
         document, _ = Document.objects.update_or_create(
             serial.validated_data,
             doc_id=serial.validated_data['doc_id'],

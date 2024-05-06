@@ -559,9 +559,9 @@ def doc_lib_batch_operation_check(user_id, validated_data):
     ]
     cannot_filter_query = Q(task_status__in=cannot_status) | Q(document_id__isnull=True)
     if doc_libs.filter(cannot_filter_query).exists():
-        return 130003, '您选择的文件当前尚未收录完成，无法执行该操作，请您耐心等待或修改选择对象。'
+        return 130003, {}, '您选择的文件当前尚未收录完成，无法执行该操作，请您耐心等待或修改选择对象。'
     document_ids = [doclib.document_id for doclib in doc_libs.all() if doclib.document_id]
-    return 0, document_ids
+    return 0, {'document_ids': document_ids}, ''
 
 
 def document_library_delete(user_id, ids, list_type):

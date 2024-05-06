@@ -485,7 +485,7 @@ def collection_delete_operation_check(user_id, validated_data):
             'bot_titles': bot_titles,
         }
     else:
-        return 0, ''
+        return 0, {}
 
 
 def collections_create_bot_check(user_id, collection_ids=None, bot_id=None):

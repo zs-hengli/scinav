@@ -3,6 +3,7 @@ import uuid
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 logger = logging.getLogger(__name__)
 
@@ -29,3 +30,25 @@ class MyUser(AbstractUser):
         db_table = 'my_user'
         verbose_name = 'user'
         verbose_name_plural = verbose_name
+
+
+class UserOperationLog(models.Model):
+    class OperationType(models.TextChoices):
+        SEARCH = 'search', _('search')
+        DOCUMENT_DETAIL = 'document_detail', _('document_detail')
+        DOCUMENT_URL = 'document_url', _('document_url')
+
+    id = models.CharField(max_length=36, primary_key=True, default=uuid.uuid4)
+    user = models.ForeignKey(
+        MyUser, db_constraint=False, on_delete=models.DO_NOTHING, null=True, related_name='user_operation_log'
+    )
+    operation_type = models.CharField(null=False, db_index=True, max_length=32)
+    obj_id1 = models.CharField(null=True, db_index=True, max_length=40, default=None, db_default=None)
+    obj_id2 = models.CharField(null=True, db_index=True, max_length=40, default=None, db_default=None)
+    obj_id3 = models.IntegerField(null=True, db_index=True, default=None, db_default=None)
+    operation_content = models.TextField(null=True, default=None, db_default=None)
+    created_at = models.DateTimeField(null=False, auto_now_add=True)
+
+    class Meta:
+        db_table = 'user_operation_log'
+        verbose_name = 'user operation log'

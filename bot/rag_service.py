@@ -282,7 +282,9 @@ class Conversations:
         elif event == EventTypes.MODEL_STATISTICS:
             stream[event]['name'] = line_data.get('name', '')
             stream['run_id'] = line_data.get('run_id', '')
-            stream['statistics'] = line_data.get('statistics', {})
+            stream['statistics']['model_name'] = line_data.get('statistics', {}).get('model_name', '')
+            stream['statistics']['input_tokens'] += line_data.get('statistics', {}).get('input_tokens', 0)
+            stream['statistics']['output_tokens'] += line_data.get('statistics', {}).get('output_tokens', 0)
             stream['metadata'] = line_data.get('metadata', {})
         elif event == EventTypes.ON_ERROR:
             stream[event] = line_data.get('error', '')  # todo on_error 信息
@@ -307,19 +309,21 @@ class Conversations:
         if not conversation:
             error_msg = f'此会话不存在 {conversation_id}'
             yield json.dumps({
-                'event': 'on_error', 'error': error_msg, "detail": {"conversation_id": conversation_id}}) + "\n"
+                'event': 'on_error', 'error_code': 120001, 'error': error_msg,
+                "detail": {"conversation_id": conversation_id}}) + "\n"
             return
         if question_id:
             question = Question.objects.filter(id=question_id).first()
             if not question:
                 error_msg = f'此问题id不存在 {question_id}'
                 yield json.dumps({
-                    'event': 'on_error', 'error': error_msg, "detail": {"question_id": question_id}}) + "\n"
+                    'event': 'on_error', 'error_code': 120001, 'error': error_msg,
+                    "detail": {"question_id": question_id}}) + "\n"
                 return
             elif question.conversation_id != conversation_id:
                 error_msg = f'此问题id不属于该会话, question_id: {question_id}, conversation_id: {conversation_id}'
                 yield json.dumps({
-                    'event': 'on_error', 'error': error_msg,
+                    'event': 'on_error', 'error_code': 120001, 'error': error_msg,
                     "detail": {"question_id": question_id, "conversation_id": conversation_id}}) + "\n"
                 return
             question.is_stop = False
@@ -329,7 +333,7 @@ class Conversations:
             resp = rag_requests(url, json=post_data, method='POST', timeout=60, stream=True)
         except requests.exceptions.RequestException as e:
             logger.error(f'Request error: {e}')
-            yield json.dumps({'event': 'on_error', 'error': error_msg, "detail": str(e)}) + "\n"
+            yield json.dumps({'event': 'on_error', 'error_code': 120001, 'error': error_msg, "detail": str(e)}) + "\n"
             return
         stream = {
             "input": {},
@@ -341,7 +345,7 @@ class Conversations:
             "on_error": {},
             "model_stream": {"name": None, "chunk": None, },
             "metadata": {},
-            "statistics": {},
+            "statistics": {'model_name': '', 'input_tokens': 0, 'output_tokens': 0},
             "chunk": []
         }
         try:
@@ -368,7 +372,7 @@ class Conversations:
                         yield json.dumps(line_data) + '\n'
         except Exception as exc:
             logger.error(f'query exception: {exc}')
-            yield json.dumps({'event': 'on_error', 'error': error_msg, 'detail': str(exc)}) + '\n'
+            yield json.dumps({'event': 'on_error', 'error_code': 120001, 'error': error_msg, 'detail': str(exc)}) + '\n'
         finally:
             # update question
             question = Question.objects.filter(id=question.id).first()
