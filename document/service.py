@@ -596,7 +596,7 @@ def document_library_delete(user_id, ids, list_type):
         ).update(del_flag=True)
         if effect_num:
             Collection.objects.filter(id=coll_id).update(total_personal=F('total_personal') - effect_num)
-            async_update_conversation_by_collection.apply_async(coll_id)
+            async_update_conversation_by_collection.apply_async(args=(coll_id,))
     # delete Document
     Document.objects.filter(id__in=user_per_document_ids, collection_id=user_id).update(del_flag=True)
     # todo rag delete
