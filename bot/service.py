@@ -281,18 +281,19 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
     # query_set = CollectionDocument.objects.filter(
     #     collection_id__in=collection_ids).distinct().values('document_id').order_by('document_id')
     public_count, need_public, need_public_count, personal_count, public_collections = 0, False, 0, 0, []
-    public_collections = Collection.objects.filter(id__in=collection_ids, type=Collection.TypeChoices.PUBLIC).all()
-    public_collection_ids = [c.id for c in public_collections]
+    all_public_collections = Collection.objects.filter(id__in=collection_ids, type=Collection.TypeChoices.PUBLIC).all()
+    all_public_collection_ids = [c.id for c in all_public_collections]
     if page_num == 1 and list_type in ['all', 'all_documents']:
-        need_public_count = len(public_collections)
+        need_public_count = len(all_public_collections)
+        public_collections = all_public_collections
     elif page_num == 1 and list_type == 's2':
-        if 's2' in public_collection_ids:
+        if 's2' in all_public_collection_ids:
             need_public_count = 1
-            public_collections = [pc for pc in public_collections if pc.id == 's2']
+            public_collections = [pc for pc in all_public_collections if pc.id == 's2']
     elif page_num == 1 and list_type == 'arxiv':
-        if 'arxiv' in public_collection_ids:
+        if 'arxiv' in all_public_collection_ids:
             need_public_count = 1
-            public_collections = [pc for pc in public_collections if pc.id == 'arxiv']
+            public_collections = [pc for pc in all_public_collections if pc.id == 'arxiv']
     if page_num == 1 and list_type in ['all', 'all_documents', 's2', 'arxiv']:
         need_public = True
     public_count = len(public_collections)
@@ -324,9 +325,9 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
     personal_count = query_set.count()
     total = public_count + personal_count
     show_total += personal_count
-    logger.info(f"limit: [{start_num}: {page_size * page_num}], personal_count: {personal_count}")
+    logger.info(f"limit: [{start_num}:{page_size * page_num}], personal_count: {personal_count}")
     if page_size * page_num > public_count:
-        start = start_num - (public_count % page_size if not need_public_count else 0)
+        start = start_num - (public_count % page_size if not need_public_count and start_num else 0)
         c_docs = query_set[start:(page_size * page_num - need_public_count)] if total > start_num else []
         doc_ids += [cd['document_id'] for cd in c_docs]
     docs = Document.objects.filter(id__in=doc_ids).all()

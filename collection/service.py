@@ -368,7 +368,7 @@ def collections_docs(user_id, validated_data):
     # docs = Document.objects.filter(id__in=[cd['document_id'] for cd in c_docs]).all()
     # 按照名称升序排序
     all_c_docs = query_set.all()
-    start = start_num - (public_count % page_size if not need_public_count else 0)
+    start = start_num - (public_count % page_size if not need_public_count and start_num else 0)
     docs = Document.objects.filter(id__in=[cd['document_id'] for cd in all_c_docs]).order_by('title')[
            start:(page_size * page_num - need_public_count)
     ]

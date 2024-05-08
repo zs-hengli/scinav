@@ -35,6 +35,7 @@ class MyUser(AbstractUser):
 class UserOperationLog(models.Model):
     class OperationType(models.TextChoices):
         SEARCH = 'search', _('search')
+        BOT_DETAIL = 'bot_detail', _('bot_detail')
         DOCUMENT_DETAIL = 'document_detail', _('document_detail')
         DOCUMENT_URL = 'document_url', _('document_url')
 
@@ -47,6 +48,7 @@ class UserOperationLog(models.Model):
     obj_id2 = models.CharField(null=True, db_index=True, max_length=40, default=None, db_default=None)
     obj_id3 = models.IntegerField(null=True, db_index=True, default=None, db_default=None)
     operation_content = models.TextField(null=True, default=None, db_default=None)
+    result = models.JSONField(null=True, default=None, db_default=None)
     created_at = models.DateTimeField(null=False, auto_now_add=True)
 
     class Meta:
