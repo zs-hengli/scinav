@@ -14,6 +14,7 @@ urlpatterns = [
 
     path('documents/<str:document_id>', views.Documents.as_view()),
     path('documents/<str:document_id>/url', views.DocumentsUrl.as_view()),
+    path('documents/<str:collection_id>/<int:doc_id>/url', views.DocumentsUrl.as_view()),
     path('documents/<str:document_id>/citations', views.DocumentsCitations.as_view()),
     path('documents/<str:document_id>/references', views.DocumentsReferences.as_view()),
 

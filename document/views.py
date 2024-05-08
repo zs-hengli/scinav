@@ -220,11 +220,18 @@ class DocumentsPersonal(APIView):
 @method_decorator(require_http_methods(['GET']), name='dispatch')
 class DocumentsUrl(APIView):
     @staticmethod
-    def get(request, document_id, *args, **kwargs):
+    def get(request, document_id=None, collection_id=None, doc_id=None, *args, **kwargs):
         user_id = request.user.id
-        document = Document.objects.filter(id=document_id).values(
-            'id', 'object_path', 'collection_id', 'doc_id', 'collection_type', 'ref_doc_id', 'ref_collection_id'
-        ).first()
+        if document_id:
+            document = Document.objects.filter(id=document_id).values(
+                'id', 'object_path', 'collection_id', 'doc_id', 'collection_type', 'ref_doc_id', 'ref_collection_id'
+            ).first()
+        elif collection_id and doc_id:
+            document = Document.objects.filter(collection_id=collection_id, doc_id=doc_id).values(
+                'id', 'object_path', 'collection_id', 'doc_id', 'collection_type', 'ref_doc_id', 'ref_collection_id'
+            ).first()
+        else:
+            return my_json_response(code=100001, msg=f'document_id or (collection_id, doc_id) not found')
         if not document:
             return my_json_response(code=100002, msg=f'document not found by document_id={document_id}')
         url_document = None
@@ -252,6 +259,8 @@ class DocumentsUrl(APIView):
 
         return my_json_response({
             'id': document['id'],
+            'collection_id': document['collection_id'],
+            'doc_id': document['doc_id'],
             'url': url
         })
 
