@@ -4,7 +4,7 @@ import logging
 from celery import shared_task
 from django.db.models import Q
 
-from bot.base_service import recreate_bot
+from bot.base_service import recreate_bot, bot_detail, bot_documents
 from bot.models import BotCollection, Bot
 from bot.rag_service import Document as RagDocument
 from chat.models import Conversation
@@ -14,6 +14,7 @@ from collection.serializers import bot_subscribe_personal_document_num
 from document.base_service import document_update_from_rag_ret, reference_doc_to_document, \
     reference_doc_to_document_library, search_result_delete_cache
 from document.models import DocumentLibrary, Document
+from user.models import UserOperationLog
 
 logger = logging.getLogger('celery')
 
@@ -167,3 +168,38 @@ def async_update_conversation_by_collection(self, collection_id):
         for conv in conversations:
             update_conversation_by_collection(collection.user_id, conv, conv.collections)
     return True
+
+
+@shared_task(bind=True)
+def async_add_user_operation_log(
+    self, user_id, operation_type, operation_content=None, obj_id1=None, obj_id2=None, obj_id3=None, source=None
+):
+    """
+    添加用户操作日志
+    """
+    result = None
+    if operation_type == UserOperationLog.OperationType.BOT_DETAIL:
+        # 保存 bot detail 到 result
+        result = _bot_detail_to_log(user_id, obj_id1)
+    operation_log = UserOperationLog.objects.create(
+        user_id=user_id,
+        operation_type=operation_type,
+        operation_content=operation_content,
+        result=result,
+        obj_id1=obj_id1,
+        obj_id2=obj_id2,
+        obj_id3=obj_id3,
+        source=source,
+    )
+    logger.info(f'async_add_user_operation_log, {operation_log.id}')
+    return True
+
+
+def _bot_detail_to_log(user_id, bot_id):
+    bot = Bot.objects.filter(pk=bot_id).first()
+    detail = bot_detail(user_id, bot)
+    documents = bot_documents(user_id, bot, 'all', 2000, 1)
+    return {
+        'bot_detail': detail,
+        'documents': documents,
+    }

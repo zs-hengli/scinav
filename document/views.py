@@ -16,9 +16,10 @@ from document.serializers import DocumentDetailSerializer, GenPresignedUrlQueryS
     DocumentLibraryListQuerySerializer, DocumentRagUpdateSerializer, DocLibUpdateNameQuerySerializer, \
     DocLibAddQuerySerializer, DocLibDeleteQuerySerializer, DocLibCheckQuerySerializer, DocumentRagCreateSerializer, \
     ImportPapersToCollectionSerializer
-from document.service import search, documents_update_from_rag, presigned_url, document_personal_upload, \
+from document.service import search, presigned_url, document_personal_upload, \
     get_document_library_list, document_library_add, document_library_delete, doc_lib_batch_operation_check, \
     get_url_by_object_path, get_reference_formats, update_exist_documents, import_papers_to_collection
+from document.tasks import async_add_user_operation_log
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,11 @@ class Search(APIView):
             'topn': int(body.get('topn', 100))
         }
         data = search(user_id, body['content'], post_data['page_size'], post_data['page_num'], topn=post_data['topn'])
+        async_add_user_operation_log.apply_async(kwargs={
+            'user_id': user_id,
+            'operation_type': 'search',
+            'operation_content': body['content'],
+        })
         return my_json_response(data)
 
 
@@ -74,6 +80,7 @@ class Documents(APIView):
 
     @staticmethod
     def get(request, document_id, *args, **kwargs):
+        user_id = request.user.id
         document = Document.objects.filter(id=document_id).first()
         if not document:
             return my_json_response(code=100002, msg=f'document not found by document_id={document_id}')
@@ -81,6 +88,13 @@ class Documents(APIView):
         document_data['citation_count'] = len(document_data['citations']) if document_data['citations'] else document_data['citation_count']
         document_data['reference_count'] = len(document_data['references']) if document_data['references'] else document_data['reference_count']
         document_data['reference_formats'] = get_reference_formats(document_data)
+        async_add_user_operation_log.apply_async(kwargs={
+            'user_id': user_id,
+            'operation_type': 'document_detail',
+            'obj_id1': document.id,
+            'obj_id2': document.collection_id,
+            'obj_id3': document.doc_id,
+        })
         return my_json_response(document_data)
 
 
@@ -209,20 +223,33 @@ class DocumentsUrl(APIView):
     def get(request, document_id, *args, **kwargs):
         user_id = request.user.id
         document = Document.objects.filter(id=document_id).values(
-            'id', 'object_path', 'collection_id', 'collection_type', 'ref_doc_id', 'ref_collection_id').first()
+            'id', 'object_path', 'collection_id', 'doc_id', 'collection_type', 'ref_doc_id', 'ref_collection_id'
+        ).first()
         if not document:
             return my_json_response(code=100002, msg=f'document not found by document_id={document_id}')
+        url_document = None
         if document['collection_type'] == Document.TypeChoices.PERSONAL and user_id != document['collection_id']:
             url = None
             if document['ref_doc_id'] and document['ref_collection_id']:
                 if (
                     ref_document := Document.objects.filter(
                         doc_id=document['ref_doc_id'], collection_id=document['ref_collection_id']
-                    ).values('id', 'object_path').first()
+                    ).values('id', 'collection_id', 'doc_id', 'object_path').first()
                 ):
                     url = get_url_by_object_path(user_id, ref_document['object_path'])
+                    url_document = ref_document
         else:
             url = get_url_by_object_path(user_id, document['object_path'])
+            url_document = document
+        if url_document:
+            async_add_user_operation_log.apply_async(kwargs={
+                'user_id': user_id,
+                'operation_type': 'document_url',
+                'obj_id1': url_document['id'],
+                'obj_id2': url_document['collection_id'],
+                'obj_id3': url_document['doc_id'],
+            })
+
         return my_json_response({
             'id': document['id'],
             'url': url

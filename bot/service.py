@@ -14,7 +14,6 @@ from collection.serializers import CollectionDocumentListSerializer
 from core.utils.exceptions import InternalServerError, ValidationError
 from document.base_service import update_document_lib
 from document.models import Document
-from document.serializers import DocumentApaListSerializer, CollectionDocumentListCollectionSerializer
 from document.tasks import async_schedule_publish_bot_task
 
 logger = logging.getLogger(__name__)
@@ -109,25 +108,6 @@ def bot_delete(bot_id):
     bot.del_flag = True
     bot.save()
     return bot_id
-
-
-# 专题详情
-def bot_detail(user_id, bot):
-    # bot = Bot.objects.get(pk=bot_id)
-    bot_data = BotDetailSerializer(bot).data
-    if is_subscribed(user_id, bot):
-        bot_data['subscribed'] = True
-    else:
-        bot_data['subscribed'] = False
-    return bot_data
-
-
-def is_subscribed(user_id, bot: Bot):
-    # if bot.user_id == user_id:
-    #     return True
-    if BotSubscribe.objects.filter(user_id=user_id, bot=bot, del_flag=False).exists():
-        return True
-    return False
 
 
 # 专题列表
@@ -270,126 +250,6 @@ def bot_subscribe(user_id, bot_id, action='subscribe'):
         'del_flag': action != 'subscribe'
     }
     BotSubscribe.objects.update_or_create(data, user_id=user_id, bot_id=bot_id)
-
-
-# 专题文献列表
-def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
-    bot_id = bot.id
-    bot_collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False)
-    collections = [bc.collection for bc in bot_collections]
-    collection_ids = [c.id for c in collections]
-    # query_set = CollectionDocument.objects.filter(
-    #     collection_id__in=collection_ids).distinct().values('document_id').order_by('document_id')
-    public_count, need_public, need_public_count, personal_count, public_collections = 0, False, 0, 0, []
-    all_public_collections = Collection.objects.filter(id__in=collection_ids, type=Collection.TypeChoices.PUBLIC).all()
-    all_public_collection_ids = [c.id for c in all_public_collections]
-    if page_num == 1 and list_type in ['all', 'all_documents']:
-        need_public_count = len(all_public_collections)
-        public_collections = all_public_collections
-    elif page_num == 1 and list_type == 's2':
-        if 's2' in all_public_collection_ids:
-            need_public_count = 1
-            public_collections = [pc for pc in all_public_collections if pc.id == 's2']
-    elif page_num == 1 and list_type == 'arxiv':
-        if 'arxiv' in all_public_collection_ids:
-            need_public_count = 1
-            public_collections = [pc for pc in all_public_collections if pc.id == 'arxiv']
-    if page_num == 1 and list_type in ['all', 'all_documents', 's2', 'arxiv']:
-        need_public = True
-    public_count = len(public_collections)
-
-    query_set, d1, d2, ref_ds = CollectionDocumentListSerializer.get_collection_documents(
-        user_id, collection_ids, list_type, bot)
-    start_num = page_size * (page_num - 1)
-    doc_ids = []
-    show_total = 0
-    # 个人上传文件库 关联的文献
-    # 未发布专题 显示未公共库文献， 专题广场专题显示为订阅全文
-    ref_doc_lib_ids = (
-        set(ref_ds if ref_ds else []) & set(CollectionDocumentListSerializer._my_doc_lib_document_ids(user_id))
-    )
-    if ref_ds and (
-        list_type in ['all', 'all_documents']
-        or (list_type in ['s2', 'arxiv'] and bot.type == Collection.TypeChoices.PERSONAL)
-        or (list_type in ['subscribe_full_text'] and bot.type == Collection.TypeChoices.PUBLIC)
-        or (list_type in ['personal'] and ref_doc_lib_ids)
-    ):
-        if list_type in ['personal']:
-            ref_ds = list(ref_doc_lib_ids)
-        elif list_type in ['s2', 'arxiv']:
-            ref_ds = list(set(ref_ds) - set(ref_doc_lib_ids))
-        doc_ids = ref_ds[start_num:(page_size * page_num - need_public_count)]
-        need_public_count += len(doc_ids)
-        public_count += len(ref_ds)
-        show_total += len(ref_ds)
-    personal_count = query_set.count()
-    total = public_count + personal_count
-    show_total += personal_count
-    logger.info(f"limit: [{start_num}:{page_size * page_num}], personal_count: {personal_count}")
-    if page_size * page_num > public_count:
-        start = start_num - (public_count % page_size if not need_public_count and start_num else 0)
-        c_docs = query_set[start:(page_size * page_num - need_public_count)] if total > start_num else []
-        doc_ids += [cd['document_id'] for cd in c_docs]
-    docs = Document.objects.filter(id__in=doc_ids).all()
-    # docs = [cd.document for cd in c_docs]
-    res_data = []
-    if list_type in ['all', 'all_documents', 's2', 'arxiv'] and public_collections and need_public:
-        for p_c in public_collections:
-            res_data.append({
-                'id': None,
-                'collection_id': p_c.id,
-                'doc_apa': f"{_('公共库')}: {p_c.title}",
-                'title': f"{_('公共库')}: {p_c.title}",
-                'has_full_text': False,
-                'type': p_c.id,
-            })
-    if list_type == 'all':
-        docs_data = DocumentApaListSerializer(docs, many=True).data
-        data_dict = {d['id']: d for d in docs_data}
-        # todo has_full_text
-        query_set, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
-            user_id, collection_ids, 'personal&subscribe_full_text', bot)
-        all_full_text_docs = [d['document_id'] for d in query_set.all()]
-
-        for doc in docs:
-            has_full_text = (
-                True
-                if doc.id in all_full_text_docs or (
-                    doc.id in d3 and doc.object_path and bot.type == Bot.TypeChoices.PUBLIC)
-                else False
-            )
-            res_data.append({
-                'id': doc.id,
-                'doc_apa': data_dict[doc.id]['doc_apa'],
-                'has_full_text': has_full_text,
-            })
-    else:
-        if list_type == 'all_documents':
-            res_data += CollectionDocumentListCollectionSerializer(docs, many=True).data
-            query_set, doc_lib_document_ids, sub_bot_document_ids, ref_documents = \
-                CollectionDocumentListSerializer.get_collection_documents(
-                    user_id, collection_ids, 'personal&subscribe_full_text', bot)
-            # document_ids = [cd['document_id'] for cd in query_set.all()]
-            for index, d_id in enumerate(res_data):
-                if not d_id['id']:
-                    continue
-                if d_id['id'] in doc_lib_document_ids:
-                    res_data[index]['type'] = 'personal'
-                elif d_id['id'] in sub_bot_document_ids:
-                    res_data[index]['type'] = 'subscribe_full_text'
-                elif bot.type == Bot.TypeChoices.PUBLIC and d_id['id'] in ref_documents:
-                    res_data[index]['type'] = 'subscribe_full_text'
-        else:
-            res_data += CollectionDocumentListCollectionSerializer(docs, many=True).data
-            for index, d_id in enumerate(res_data):
-                res_data[index]['type'] = list_type
-    return {
-        'list': res_data,
-        # 个人库库文献 不能在添加到个人库
-        'is_all_in_document_library': True if list_type == 'personal' else False,
-        'total': total,
-        'show_total': show_total,
-    }
 
 
 def bot_publish(bot_id, action=Bot.TypeChoices.PUBLIC):

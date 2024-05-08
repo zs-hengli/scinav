@@ -46,9 +46,10 @@ class UserOperationLog(models.Model):
     operation_type = models.CharField(null=False, db_index=True, max_length=32)
     obj_id1 = models.CharField(null=True, db_index=True, max_length=40, default=None, db_default=None)
     obj_id2 = models.CharField(null=True, db_index=True, max_length=40, default=None, db_default=None)
-    obj_id3 = models.IntegerField(null=True, db_index=True, default=None, db_default=None)
+    obj_id3 = models.BigIntegerField(null=True, db_index=True, default=None, db_default=None)
     operation_content = models.TextField(null=True, default=None, db_default=None)
     result = models.JSONField(null=True, default=None, db_default=None)
+    source = models.CharField(null=True, max_length=512, default=None, db_default=None)
     created_at = models.DateTimeField(null=False, auto_now_add=True)
 
     class Meta:

@@ -7,10 +7,11 @@ from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
+from bot.base_service import bot_detail, bot_documents
 from bot.models import Bot, HotBot
 from bot.serializers import BotCreateSerializer, BotListQuerySerializer, BotDocumentsQuerySerializer
-from bot.service import (bot_create, bot_delete, bot_detail, bot_documents,
-                         bot_publish, bot_subscribe, bot_update, hot_bots, get_bot_list)
+from bot.service import (bot_create, bot_delete, bot_publish, bot_subscribe, bot_update, hot_bots, get_bot_list)
+from document.tasks import async_add_user_operation_log
 from core.utils.exceptions import ValidationError
 from core.utils.views import extract_json, my_json_response
 
@@ -65,11 +66,18 @@ class Bots(APIView):
     @staticmethod
     def get(request, bot_id=None, *args, **kwargs):
         user_id = request.user.id
+        query = request.query_params.dict()
         if bot_id:
             bot = Bot.objects.filter(pk=bot_id).first()
             if not bot:
                 return my_json_response(code=100002, msg=_('bot not found'))
             data = bot_detail(user_id, bot)
+            async_add_user_operation_log.apply_async(kwargs={
+                'user_id': user_id,
+                'operation_type': 'bot_detail',
+                'obj_id1': bot.id,
+                'obj_id2': query['from'][:32] if query.get('from') else None,
+            })
         else:
             query_data = kwargs['request_data']['GET']
             query_data['user_id'] = user_id
