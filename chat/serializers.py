@@ -27,6 +27,8 @@ class ConversationCreateBaseSerializer(serializers.Serializer):
     bot_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, min_length=32, max_length=36)
 
     def validate(self, attrs):
+        if attrs.get('conversation_id'):
+            return attrs
         document_ids = []
         if attrs.get('documents'):
             document_ids = attrs['documents']
