@@ -166,9 +166,24 @@ class ChatQuerySerializer(ConversationCreateBaseSerializer):
 
 
 class QuestionConvDetailSerializer(serializers.ModelSerializer):
+    references = serializers.SerializerMethodField()
+
+    @staticmethod
+    def get_references(obj: Question):
+        data = []
+        if obj.stream and obj.stream.get('output'):
+            data = [{
+                'bbox': o['bbox'],
+                'doc_id': o['doc_id'],
+                'citation_id': o['citation_id'],
+                'collection_id': o['collection_id'],
+                'collection_type': o['collection_type'],
+            } for o in obj.stream['output'] if o.get('bbox')]
+        return data
+
     class Meta:
         model = Question
-        fields = ['id', 'content', 'answer', 'input_tokens', 'output_tokens', 'is_like']
+        fields = ['id', 'content', 'answer', 'input_tokens', 'output_tokens', 'is_like', 'references']
 
 
 class QuestionAnswerSerializer(serializers.Serializer):
