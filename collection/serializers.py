@@ -180,6 +180,21 @@ class CollectionRagPublicListSerializer(serializers.Serializer):
         fields = ['id', 'name', 'total', 'updated_at', 'type']
 
 
+class CollectionListQuerySerializer(serializers.Serializer):
+    keyword = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
+    list_type = serializers.CharField(required=True)
+    page_size = serializers.IntegerField(required=False, default=10)
+    page_num = serializers.IntegerField(required=False, default=1)
+
+    def validate(self, attrs):
+        if attrs.get('list_type'):
+            attrs['list_type'] = attrs['list_type'].split(',')
+            all_types = ['my', 'public', 'subscribe']
+            if set(attrs['list_type']) - set(all_types):
+                raise serializers.ValidationError(_('list_type must be my, public, subscribe'))
+        return attrs
+
+
 class CollectionListSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source='title')
     updated_at = serializers.DateTimeField(required=False, format="%Y-%m-%d %H:%M:%S")
@@ -243,6 +258,7 @@ class CollectionDocUpdateSerializer(serializers.Serializer):
 
 class CollectionDocumentListQuerySerializer(serializers.Serializer):
     user_id = serializers.CharField(required=True, max_length=36)
+    keyword = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
     collection_ids = serializers.ListField(
         required=False, child=serializers.CharField(max_length=36, min_length=1)
     )

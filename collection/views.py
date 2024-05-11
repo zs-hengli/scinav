@@ -14,7 +14,8 @@ from collection.serializers import (CollectionCreateSerializer,
                                     CollectionDocUpdateSerializer,
                                     CollectionUpdateSerializer, CollectionDeleteQuerySerializer,
                                     CollectionDocumentListQuerySerializer, CollectionCheckQuerySerializer,
-                                    CollectionCreateBotCheckQuerySerializer, CollectionDocumentSelectedQuerySerializer)
+                                    CollectionCreateBotCheckQuerySerializer, CollectionDocumentSelectedQuerySerializer,
+                                    CollectionListQuerySerializer)
 from collection.service import (collection_list, collections_docs, generate_collection_title,
                                 collections_delete, collection_chat_operation_check, collection_delete_operation_check,
                                 collections_published_bot_titles, collections_create_bot_check,
@@ -43,23 +44,26 @@ class Collections(APIView):
     @staticmethod
     def get(request, collection_id=None, list_type='my', *args, **kwargs):
         logger.info(f'collection_id: {collection_id}, list_type: {list_type}')
-        list_type = list_type.split(',')
-        types = ['my', 'public', 'subscribe']
-        if set(list_type) - set(types):
-            return my_json_response({}, code=100001, msg='list_type error')
-        query = request.query_params
-        page_size = int(query.get('page_size', 10))
-        page_num = int(query.get('page_num', 1))
 
         user_id = request.user.id
         if collection_id:
             collection = Collection.objects.filter(pk=collection_id, user_id=user_id).first()
             if not collection:
                 return my_json_response(code=100002, msg='collection not found')
-
             data = CollectionDetailSerializer(collection).data
         else:
-            data = collection_list(user_id, list_type=list_type, page_size=page_size, page_num=page_num)
+            query = request.query_params.dict()
+            serial = CollectionListQuerySerializer(data=query)
+            if not serial.is_valid():
+                return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+            query_data = serial.validated_data
+            data = collection_list(
+                user_id,
+                list_type=query_data['list_type'],
+                page_size=query_data['page_size'],
+                page_num=query_data['page_num'],
+                keyword=query_data['keyword'],
+            )
         return my_json_response(data)
 
     @staticmethod

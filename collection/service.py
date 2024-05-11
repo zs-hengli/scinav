@@ -22,7 +22,7 @@ from document.tasks import async_ref_document_to_document_library, async_update_
 logger = logging.getLogger(__name__)
 
 
-def collection_list(user_id, list_type, page_size, page_num):
+def collection_list(user_id, list_type, page_size, page_num, keyword=None):
     coll_list = []
     start_num = page_size * (page_num - 1)
     # 1 public collections
@@ -61,7 +61,10 @@ def collection_list(user_id, list_type, page_size, page_num):
 
     # 3 user collections
     if 'my' in list_type:
-        collections = Collection.objects.filter(user_id=user_id, del_flag=False).order_by('-updated_at')
+        filter_query = Q(user_id=user_id, del_flag=False)
+        if keyword:
+            filter_query &= Q(title__icontains=keyword)
+        collections = Collection.objects.filter(filter_query).order_by('-updated_at')
         my_total = collections.count()
         if len(coll_list) < page_size:
             my_start_num = 0 if coll_list else max(start_num - subscribe_total - public_total, 0)
@@ -370,7 +373,10 @@ def collections_docs(user_id, validated_data):
     # 按照名称升序排序
     all_c_docs = query_set.all()
     start = start_num - (public_count % page_size if not need_public_count and start_num else 0)
-    docs = Document.objects.filter(id__in=[cd['document_id'] for cd in all_c_docs]).order_by('title')[
+    filter_query = Q(id__in=[cd['document_id'] for cd in all_c_docs])
+    if vd.get('keyword'):
+        filter_query &= Q(title__icontains=vd['keyword'])
+    docs = Document.objects.filter(filter_query).order_by('title')[
            start:(page_size * page_num - need_public_count)
     ]
 

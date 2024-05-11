@@ -254,11 +254,13 @@ class DocumentsUrl(APIView):
         user_id = request.user.id
         if document_id:
             document = Document.objects.filter(id=document_id).values(
-                'id', 'object_path', 'collection_id', 'doc_id', 'collection_type', 'ref_doc_id', 'ref_collection_id'
+                'id', 'title', 'object_path', 'collection_id', 'doc_id', 'collection_type',
+                'ref_doc_id', 'ref_collection_id'
             ).first()
         elif collection_id and doc_id:
             document = Document.objects.filter(collection_id=collection_id, doc_id=doc_id).values(
-                'id', 'object_path', 'collection_id', 'doc_id', 'collection_type', 'ref_doc_id', 'ref_collection_id'
+                'id', 'title', 'object_path', 'collection_id', 'doc_id', 'collection_type',
+                'ref_doc_id', 'ref_collection_id'
             ).first()
         else:
             return my_json_response(code=100001, msg=f'document_id or (collection_id, doc_id) not found')
@@ -291,6 +293,7 @@ class DocumentsUrl(APIView):
             'id': document['id'],
             'collection_id': document['collection_id'],
             'doc_id': document['doc_id'],
+            'title': document['title'],
             'url': url
         })
 

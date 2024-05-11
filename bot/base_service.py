@@ -1,4 +1,5 @@
 import logging
+from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
 from bot.models import Bot, BotCollection, BotSubscribe
@@ -32,7 +33,7 @@ def is_subscribed(user_id, bot: Bot):
     return False
 
 
-def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
+def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=None):
     """
     专题文献列表
     """
@@ -92,7 +93,10 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
         start = start_num - (public_count % page_size if not need_public_count and start_num else 0)
         c_docs = query_set[start:(page_size * page_num - need_public_count)] if total > start_num else []
         doc_ids += [cd['document_id'] for cd in c_docs]
-    docs = Document.objects.filter(id__in=doc_ids).all()
+    filter_query = Q(id__in=doc_ids)
+    if keyword:
+        filter_query &= Q(title__icontains=keyword)
+    docs = Document.objects.filter(filter_query).all()
     # docs = [cd.document for cd in c_docs]
     res_data = []
     if list_type in ['all', 'all_documents', 's2', 'arxiv'] and public_collections and need_public:
