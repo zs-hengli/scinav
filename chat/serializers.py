@@ -25,6 +25,7 @@ class ConversationCreateBaseSerializer(serializers.Serializer):
     documents = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
     collections = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
     bot_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, min_length=32, max_length=36)
+    model = serializers.ChoiceField(choices=['gpt-3.5-turbo', 'gpt-4'], required=False, default=None)
 
     def validate(self, attrs):
         if attrs.get('conversation_id'):
@@ -112,10 +113,11 @@ class ConversationUpdateSerializer(serializers.Serializer):
     title = serializers.CharField(required=False, min_length=1, max_length=128, allow_blank=True, trim_whitespace=False)
     collections = serializers.ListField(
         required=False, child=serializers.CharField(min_length=1), allow_null=True)
+    model = serializers.ChoiceField(choices=['gpt-3.5-turbo', 'gpt-4'], required=False, default=None)
 
     def validate(self, attrs):
-        if not attrs.get('collections') and not attrs.get('title'):
-            raise serializers.ValidationError('title and collections are all empty')
+        if not attrs.get('collections') and not attrs.get('title') and not attrs.get('model'):
+            raise serializers.ValidationError('collections, title, model are all empty')
         if attrs.get('title') and len(attrs['title']) > 128:
             attrs['title'] = attrs['title'][:128]
         return attrs
@@ -133,7 +135,7 @@ class ConversationDetailSerializer(BaseModelSerializer):
 
     class Meta:
         model = Conversation
-        fields = ['id', 'title', 'user_id', 'bot_id', 'documents', 'collections', 'type', 'questions']
+        fields = ['id', 'title', 'user_id', 'bot_id', 'model', 'documents', 'collections', 'type', 'questions']
 
 
 class ConversationListSerializer(BaseModelSerializer):
@@ -141,7 +143,7 @@ class ConversationListSerializer(BaseModelSerializer):
 
     class Meta:
         model = Conversation
-        fields = ['id', 'title', 'last_used_at', 'bot_id']
+        fields = ['id', 'title', 'last_used_at', 'bot_id', 'model']
 
 
 class ChatQuerySerializer(ConversationCreateBaseSerializer):
@@ -186,7 +188,7 @@ class QuestionConvDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Question
-        fields = ['id', 'content', 'answer', 'input_tokens', 'output_tokens', 'is_like', 'references']
+        fields = ['id', 'content', 'answer', 'model', 'input_tokens', 'output_tokens', 'is_like', 'references']
 
 
 class QuestionAnswerSerializer(serializers.Serializer):

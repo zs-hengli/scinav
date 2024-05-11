@@ -81,6 +81,7 @@ def conversation_create(validated_data):
         agent_id=agent_id,
         paper_ids=paper_ids,
         public_collection_ids=public_collection_ids,
+        llm_name=vd['model'],
     )
     conversation = Conversation.objects.create(
         id=conv['id'],
@@ -88,6 +89,7 @@ def conversation_create(validated_data):
         user_id=conv['user_id'],
         agent_id=conv['agent_id'],
         documents=documents,
+        model=vd['model'] if vd['model'] else 'gpt-3.5-turbo',
         collections=collections,
         public_collection_ids=conv['public_collection_ids'],
         paper_ids=papers_info,
@@ -103,13 +105,13 @@ def conversation_update(user_id, conversation_id, validated_data):
     vd = validated_data
     conversation = Conversation.objects.get(pk=conversation_id, user_id=user_id)
 
+    if vd.get('collections') or vd.get('model'):
+        # update conversation
+        conversation = update_conversation_by_collection(user_id, conversation, vd.get('collections'), vd.get('model'))
     if vd.get('title'):
         conversation.title = vd['title']
     if vd.get('del_flag'):
         conversation.del_flag = vd['del_flag']
-    if vd.get('collections'):
-        # update conversation
-        conversation = update_conversation_by_collection(user_id, conversation, vd['collections'])
 
     conversation.save()
     return ConversationListSerializer(conversation).data

@@ -51,6 +51,7 @@ class Question(models.Model):
     answer = models.TextField(null=True, blank=True, db_default=None)
     is_like = models.BooleanField(null=True, default=None, db_default=None)
     stream = models.JSONField(null=True, blank=True, db_default=None)
+    model = models.CharField(null=True, blank=True, max_length=64, default='gpt-3.5-turbo', db_default='gpt-3.5-turbo')
     input_tokens = models.IntegerField(null=True, default=None, db_default=None)
     output_tokens = models.IntegerField(null=True, default=None, db_default=None)
     del_flag = models.BooleanField(default=False, db_default=False)

@@ -212,13 +212,14 @@ class Document:
 
 class Conversations:
     @staticmethod
-    def create(user_id, agent_id=None, paper_ids=None, public_collection_ids=None):
+    def create(user_id, agent_id=None, paper_ids=None, public_collection_ids=None, llm_name=None):
         url = RAG_HOST + '/api/v1/conversations'
         post_data = {
             'user_id': user_id,
             'agent_id': agent_id,
             'paper_ids': paper_ids,
             'public_collection_ids': public_collection_ids,
+            'llm_name': llm_name,
         }
         resp = rag_requests(url, json=post_data, method='POST')
         logger.info(f'url: {url}, response: {resp.text}')
@@ -226,12 +227,13 @@ class Conversations:
         return resp
 
     @staticmethod
-    def update(conversation_id, agent_id, paper_ids=None, public_collection_ids=None):
+    def update(conversation_id, agent_id, paper_ids=None, public_collection_ids=None, llm_name=None):
         url = RAG_HOST + '/api/v1/conversations/' + conversation_id
         post_data = {
             'agent_id': agent_id,
             'paper_ids': paper_ids,
             'public_collection_ids': public_collection_ids,
+            'llm_name': llm_name,
         }
         resp = rag_requests(url, json=post_data, method='PUT')
         logger.info(f'url: {url}, response: {resp.text}')
@@ -327,6 +329,7 @@ class Conversations:
                     "detail": {"question_id": question_id, "conversation_id": conversation_id}}) + "\n"
                 return
             question.is_stop = False
+            question.model = conversation.model
             question.save()
 
         try:
@@ -354,6 +357,7 @@ class Conversations:
                     conversation_id=conversation_id,
                     content=content,
                     stream=stream,
+                    model=conversation.model,
                     input_tokens=stream.get('statistics', {}).get('input_tokens', 0),
                     output_tokens=stream.get('statistics', {}).get('output_tokens', 0),
                     answer=''.join(stream['chunk'])
