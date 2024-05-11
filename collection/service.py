@@ -355,6 +355,7 @@ def collections_docs(user_id, validated_data):
             res_data.append({
                 'id': None,
                 'doc_apa': f"{_('公共库')}: {c.title}",
+                'title': f"{_('公共库')}: {c.title}",
                 'has_full_text': False,
             })
     query_set, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
@@ -378,7 +379,12 @@ def collections_docs(user_id, validated_data):
         data_dict = {d['id']: d for d in docs_data}
         temp_res_data = []
         for d in docs:
-            temp = None
+            temp = {
+                'id': d.id,
+                'doc_apa': data_dict[d.id]['doc_apa'],
+                'title': data_dict[d.id]['title'],
+                'has_full_text': False,
+            }
             # 本人个人库列表
             if ((
                 DocumentLibrary.objects.filter(
@@ -386,9 +392,7 @@ def collections_docs(user_id, validated_data):
                     task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
                 ).exists() or d.collection_id == user_id
             ) and d.object_path):
-                temp = {'id': d.id, 'doc_apa': data_dict[d.id]['doc_apa'], 'has_full_text': True, }
-            if not temp:
-                temp = {'id': d.id, 'doc_apa': data_dict[d.id]['doc_apa'], 'has_full_text': False, }
+                temp['has_full_text'] = True
             temp_res_data.append(temp)
         res_data += temp_res_data
     else:

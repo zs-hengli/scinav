@@ -126,6 +126,7 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1):
                 'collection_id': doc.collection_id,
                 'doc_id': doc.doc_id,
                 'doc_apa': data_dict[doc.id]['doc_apa'],
+                'title': data_dict[doc.id]['title'],
                 'has_full_text': has_full_text,
             })
     else:

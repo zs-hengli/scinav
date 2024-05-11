@@ -33,7 +33,7 @@ class DocumentApaListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Document
-        fields = ['id', 'doc_apa']
+        fields = ['id', 'doc_apa', 'title']
 
 
 class DocumentApcReadListSerializer(serializers.ModelSerializer):
@@ -50,7 +50,7 @@ class DocumentApcReadListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Document
-        fields = ['id', 'doc_apa', 'full_text_accessible', 'object_path', 'ref_collection_id', 'ref_doc_id']
+        fields = ['id', 'doc_apa', 'title', 'full_text_accessible', 'object_path', 'ref_collection_id', 'ref_doc_id']
 
 
 class CollectionDocumentListCollectionSerializer(serializers.ModelSerializer):
@@ -180,6 +180,7 @@ class DocumentDetailSerializer(BaseModelSerializer):
                     'doc_id': c['doc_id'],
                     'collection_id': c['collection_id'],
                     'collection_type': c['collection_type'],
+                    'title': c['title'],
                     'doc_apa': doc_apa
                 })
             return ret_data
@@ -206,6 +207,7 @@ class DocumentDetailSerializer(BaseModelSerializer):
                     'doc_id': r['doc_id'],
                     'collection_id': r['collection_id'],
                     'collection_type': r['collection_type'],
+                    'title': r['title'],
                     'doc_apa': doc_apa
                 })
             return ret_data
