@@ -309,24 +309,21 @@ def _bot_subscribe_document_library_list(user_id):
     return list_data
 
 
-def document_update_from_rag(validated_data):
+def document_update_from_rag(collection_type, collection_id, doc_id):
+    validated_data = {
+        'collection_id': collection_id,
+        'collection_type': collection_type,
+        'doc_id': doc_id,
+    }
     doc_info = RagDocument.get(validated_data)
-
-    document = document_update_from_rag_ret(doc_info)
-    data = DocumentRagUpdateSerializer(document).data
-    return data
+    return document_update_from_rag_ret(doc_info)
 
 
 def documents_update_from_rag(begin_id, end_id):
     documents = Document.objects.filter(doc_id__gte=begin_id, doc_id__lte=end_id).values_list(
         'doc_id', 'collection_id', 'collection_type', named=True).all()
     for d in documents:
-        data = {
-            'collection_id': d.collection_id,
-            'collection_type': d.collection_type,
-            'doc_id': d.doc_id,
-        }
-        document_update_from_rag(data)
+        document_update_from_rag(d.collection_type, d.collection_id, d.doc_id)
         logger.info(f"success update doc_Id: {d.doc_id}")
     return True
 
@@ -344,7 +341,7 @@ def import_papers_to_collection(collection_papers):
     skip_ids = []
     for doc_id in doc_ids:
         try:
-            data = import_one_document(collection_id, collection_type, doc_id)
+            document = document_update_from_rag(collection_id, collection_type, doc_id)
         except Exception as e:
             logger.error(f"import_papers_to_collection error: {doc_id}, {e}")
             skip_ids.append(doc_id)
@@ -352,18 +349,18 @@ def import_papers_to_collection(collection_papers):
         count += 1
         c_doc_objs.append(CollectionDocument(
             collection_id=personal_collection_id,
-            document_id=data['id'],
+            document_id=document.id,
             full_text_accessible=True,
             del_flag=False,
         ))
         coll_doc = {
             'collection_id': personal_collection_id,
-            'document_id': data['id'],
+            'document_id': document.id,
             'full_text_accessible': True,
             'del_flag': False,
         }
         collection, created = CollectionDocument.objects.update_or_create(
-            coll_doc, collection_id=personal_collection_id, document_id=data['id'])
+            coll_doc, collection_id=personal_collection_id, document_id=document.id)
         if created:
             add_num += 1
     if add_num:
@@ -378,17 +375,6 @@ def import_papers_to_collection(collection_papers):
     }
 
 
-def import_one_document(collection_id, collection_type, doc_id):
-    data = {
-        'collection_id': collection_id,
-        'collection_type': collection_type,
-        'doc_id': doc_id,
-    }
-    data = document_update_from_rag(data)
-    logger.info(f"success update doc_id: {doc_id}")
-    return data
-
-
 def update_exist_documents():
     page_size = 200
     page_num = 1
@@ -398,12 +384,7 @@ def update_exist_documents():
     while documents:
         logger.debug(f'ddddddddd page_size: {page_size}, page_num: {page_num}')
         for d in documents:
-            data = {
-                'collection_id': d['collection_id'],
-                'collection_type': d['collection_type'],
-                'doc_id': d['doc_id'],
-            }
-            document_update_from_rag(data)
+            document_update_from_rag(d['collection_type'], d['collection_id'], d['doc_id'])
             logger.debug(f"ddddddddd success update doc_id: {d['doc_id']}")
         page_num += 1
         documents = Document.objects.filter(del_flag=False).values(

@@ -29,7 +29,7 @@ def custom_exception_handler(exc, context):
     # error body structure
     exception_type = exc.exception_type if hasattr(exc, 'exception_type') else ''
     response_data = {
-        'code': -1,
+        'code': 100000,
         'msg': f"{exception_type}:{str(exc)}",
         'data': {},
         'validation_errors': {},

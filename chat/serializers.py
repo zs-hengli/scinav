@@ -86,7 +86,7 @@ class ConversationCreateBaseSerializer(serializers.Serializer):
             return Conversation.TypeChoices.MIX_COV
         else:
             return Conversation.TypeChoices.SIMPLE_COV
-    
+
 
 class ConversationCreateSerializer(ConversationCreateBaseSerializer):
     public_collection_ids = serializers.ListField(
@@ -165,6 +165,15 @@ class ChatQuerySerializer(ConversationCreateBaseSerializer):
         return attrs
 
 
+class QuestionReferenceSerializer(serializers.Serializer):
+    bbox = serializers.JSONField(required=True, allow_null=True)
+    doc_id = serializers.CharField(required=True, min_length=1, max_length=36)
+    citation_id = serializers.CharField(required=True, min_length=1, max_length=36)
+    content_type = serializers.CharField(required=False, min_length=1, max_length=64)
+    collection_id = serializers.CharField(required=True, min_length=1, max_length=36)
+    collection_type = serializers.CharField(required=False, min_length=1, max_length=36)
+
+
 class QuestionConvDetailSerializer(serializers.ModelSerializer):
     references = serializers.SerializerMethodField()
 
@@ -172,13 +181,7 @@ class QuestionConvDetailSerializer(serializers.ModelSerializer):
     def get_references(obj: Question):
         data = []
         if obj.stream and obj.stream.get('output'):
-            data = [{
-                'bbox': o['bbox'],
-                'doc_id': o['doc_id'],
-                'citation_id': o['citation_id'],
-                'collection_id': o['collection_id'],
-                'collection_type': o['collection_type'],
-            } for o in obj.stream['output'] if o.get('bbox')]
+            data = [QuestionReferenceSerializer(o).data for o in obj.stream['output'] if 'bbox' in o]
         return data
 
     class Meta:
@@ -199,7 +202,8 @@ class QuestionAnswerSerializer(serializers.Serializer):
         return attrs
 
     def save(self, validated_data):
-        effect_count = Question.objects.filter(id=validated_data['question_id']).update(is_like=validated_data['is_like'])
+        effect_count = Question.objects.filter(id=validated_data['question_id']).update(
+            is_like=validated_data['is_like'])
         return effect_count
 
 

@@ -18,7 +18,8 @@ from document.serializers import DocumentDetailSerializer, GenPresignedUrlQueryS
     ImportPapersToCollectionSerializer
 from document.service import search, presigned_url, document_personal_upload, \
     get_document_library_list, document_library_add, document_library_delete, doc_lib_batch_operation_check, \
-    get_url_by_object_path, get_reference_formats, update_exist_documents, import_papers_to_collection
+    get_url_by_object_path, get_reference_formats, update_exist_documents, import_papers_to_collection, \
+    document_update_from_rag
 from document.tasks import async_add_user_operation_log
 
 logger = logging.getLogger(__name__)
@@ -84,6 +85,35 @@ class Documents(APIView):
         document = Document.objects.filter(id=document_id).first()
         if not document:
             return my_json_response(code=100002, msg=f'document not found by document_id={document_id}')
+        document_data = DocumentDetailSerializer(document).data
+        document_data['citation_count'] = len(document_data['citations']) if document_data['citations'] else document_data['citation_count']
+        document_data['reference_count'] = len(document_data['references']) if document_data['references'] else document_data['reference_count']
+        document_data['reference_formats'] = get_reference_formats(document_data)
+        async_add_user_operation_log.apply_async(kwargs={
+            'user_id': user_id,
+            'operation_type': 'document_detail',
+            'obj_id1': document.id,
+            'obj_id2': document.collection_id,
+            'obj_id3': document.doc_id,
+        })
+        return my_json_response(document_data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['PUT', 'GET']), name='dispatch')
+class DocumentsByDocId(APIView):
+
+    @staticmethod
+    def get(request, collection_id, doc_id, *args, **kwargs):
+        user_id = request.user.id
+        document = Document.objects.filter(collection_id=collection_id, doc_id=doc_id).first()
+        collection_type = (
+            Document.TypeChoices.PUBLIC
+            if collection_id in ['arxiv', 's2']
+            else Document.TypeChoices.PERSONAL
+        )
+        if not document:
+            document = document_update_from_rag(collection_type, collection_id, doc_id)
         document_data = DocumentDetailSerializer(document).data
         document_data['citation_count'] = len(document_data['citations']) if document_data['citations'] else document_data['citation_count']
         document_data['reference_count'] = len(document_data['references']) if document_data['references'] else document_data['reference_count']
@@ -233,7 +263,7 @@ class DocumentsUrl(APIView):
         else:
             return my_json_response(code=100001, msg=f'document_id or (collection_id, doc_id) not found')
         if not document:
-            return my_json_response(code=100002, msg=f'document not found by document_id={document_id}')
+            return my_json_response(code=100002, msg=f'document not found')
         url_document = None
         if document['collection_type'] == Document.TypeChoices.PERSONAL and user_id != document['collection_id']:
             url = None
