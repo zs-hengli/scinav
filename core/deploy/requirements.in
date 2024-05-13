@@ -19,7 +19,7 @@ django-celery-results
 django-celery-beat
 
 redis
-django-request-id
+django-log-request-id
 django-cors-headers
 
 # authing

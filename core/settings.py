@@ -41,7 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'request_id',
+    'log_request_id',
     'corsheaders',
     'rest_framework',
     'django_celery_results',
@@ -54,7 +54,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'request_id.middleware.RequestIdMiddleware',
+    'log_request_id.middleware.RequestIDMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -133,10 +133,6 @@ if os.environ.get('DEBUG', 'false').lower() == 'true':
     print(f"DATABASES: {DATABASES}")
     print(f"CACHES: {CACHES}")
 
-# django-request-id
-REQUEST_ID_HEADER = None
-REQUEST_ID = None
-
 LOG_FILE = os.environ.get('LOG_FILE', 'all.log')
 if not os.path.exists(LOG_FILE):
     dirname = os.path.dirname(LOG_FILE)
@@ -148,7 +144,7 @@ LOGGING = {
     'disable_existing_loggers': False,
     "filters": {
         "request_id": {
-            "()": "request_id.logging.RequestIdFilter"
+            "()": "log_request_id.filters.RequestIDFilter"
         }
     },
     'formatters': {
@@ -169,6 +165,7 @@ LOGGING = {
         },
         'file': {
             'class': 'logging.handlers.RotatingFileHandler',
+            "filters": ["request_id"],
             'filename': LOG_FILE,
             'formatter': 'verbose',
             'maxBytes': 1024 * 1024 * 300,  # 300M
@@ -273,3 +270,11 @@ AUTHING_APP_ID = os.environ.get('AUTHING_APP_ID', 'authing_app_id')
 AUTHING_APP_SECRET = os.environ.get('AUTHING_APP_SECRET', 'authing_app_secret')
 AUTHING_APP_HOST = os.environ.get('AUTHING_APP_HOST', 'authing_app_host')
 AUTHING_APP_REDIRECT_URI = os.environ.get('AUTHING_APP_REDIRECT_URI', 'authing_app_redirect_uri')
+
+# request_id
+REQUEST_ID = None
+NO_REQUEST_ID = None
+LOG_REQUESTS = True
+GENERATE_REQUEST_ID_IF_NOT_IN_HEADER = True
+LOG_REQUEST_ID_HEADER = "HTTP_X_REQUEST_ID"
+REQUEST_ID_RESPONSE_HEADER = "X-Request-Id"

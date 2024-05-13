@@ -13,7 +13,7 @@ from rest_framework.exceptions import APIException
 from rest_framework.renderers import BaseRenderer
 
 from core.utils.exceptions import ValidationError
-from request_id import get_current_request_id
+from log_request_id.middleware import local
 
 logger = logging.getLogger(__name__)
 
@@ -127,10 +127,8 @@ def extract_json(view_func):
 
 def _extract_json(request):
     data = {'GET': {}, 'POST': {}, 'JSON': {}}
-    if hasattr(request, 'header_id'):
-        settings.REQUEST_ID = request.header_id
-    else:
-        settings.REQUEST_ID = get_current_request_id()
+    settings.REQUEST_ID = request.id
+    settings.NO_REQUEST_ID = request.id
     try:
         # 简单点只支持一个值
         # https://docs.djangoproject.com/en/3.0/ref/request-response/#django.http.QueryDict.dict  # noqa
