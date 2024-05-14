@@ -310,6 +310,12 @@ def _bot_subscribe_document_library_list(user_id):
 
 
 def document_update_from_rag(collection_type, collection_id, doc_id):
+    if not collection_type:
+        collection_type = (
+            Document.TypeChoices.PUBLIC
+            if collection_id in ['arxiv', 's2']
+            else Document.TypeChoices.PERSONAL
+        )
     validated_data = {
         'collection_id': collection_id,
         'collection_type': collection_type,
@@ -341,7 +347,7 @@ def import_papers_to_collection(collection_papers):
     skip_ids = []
     for doc_id in doc_ids:
         try:
-            document = document_update_from_rag(collection_id, collection_type, doc_id)
+            document = document_update_from_rag(collection_type, collection_id, doc_id)
         except Exception as e:
             logger.error(f"import_papers_to_collection error: {doc_id}, {e}")
             skip_ids.append(doc_id)

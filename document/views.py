@@ -9,6 +9,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from bot.rag_service import Document as RagDocument
+from collection.models import Collection
 from core.utils.views import check_keys, extract_json, my_json_response
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentDetailSerializer, GenPresignedUrlQuerySerializer, \
@@ -107,13 +108,8 @@ class DocumentsByDocId(APIView):
     def get(request, collection_id, doc_id, *args, **kwargs):
         user_id = request.user.id
         document = Document.objects.filter(collection_id=collection_id, doc_id=doc_id).first()
-        collection_type = (
-            Document.TypeChoices.PUBLIC
-            if collection_id in ['arxiv', 's2']
-            else Document.TypeChoices.PERSONAL
-        )
         if not document:
-            document = document_update_from_rag(collection_type, collection_id, doc_id)
+            document = document_update_from_rag(None, collection_id, doc_id)
         document_data = DocumentDetailSerializer(document).data
         document_data['citation_count'] = len(document_data['citations']) if document_data['citations'] else document_data['citation_count']
         document_data['reference_count'] = len(document_data['references']) if document_data['references'] else document_data['reference_count']
@@ -262,6 +258,8 @@ class DocumentsUrl(APIView):
                 'id', 'title', 'object_path', 'collection_id', 'doc_id', 'collection_type',
                 'ref_doc_id', 'ref_collection_id'
             ).first()
+            if not document:
+                document = document_update_from_rag(None, collection_id, doc_id)
         else:
             return my_json_response(code=100001, msg=f'document_id or (collection_id, doc_id) not found')
         if not document:
