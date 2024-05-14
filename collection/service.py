@@ -357,6 +357,8 @@ def collections_docs(user_id, validated_data):
         for c in public_collections:
             res_data.append({
                 'id': None,
+                'collection_id': c.id,
+                'doc_id': None,
                 'doc_apa': f"{_('公共库')}: {c.title}",
                 'title': f"{_('公共库')}: {c.title}",
                 'has_full_text': False,
@@ -387,6 +389,8 @@ def collections_docs(user_id, validated_data):
         for d in docs:
             temp = {
                 'id': d.id,
+                'collection_id': d.collection_id,
+                'doc_id': d.doc_id,
                 'doc_apa': data_dict[d.id]['doc_apa'],
                 'title': data_dict[d.id]['title'],
                 'has_full_text': False,
