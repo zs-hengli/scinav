@@ -33,7 +33,12 @@ class Conversations(APIView):
     @staticmethod
     def get(request, conversation_id=None, *args, **kwargs):
         logger.debug(f"conversation_id: {conversation_id}")
+        conversation = Conversation.objects.filter(id=conversation_id).first()
         if conversation_id and conversation_id != 'menu':
+            if not conversation:
+                return my_json_response({}, code=100002, msg='conversation not found')
+            elif conversation.user_id != request.user.id:
+                return my_json_response({}, code=100003, msg='access denied for this conversation')
             data = conversation_detail(conversation_id)
         else:
             query = kwargs['request_data']['GET']

@@ -152,3 +152,44 @@ def round_floats(o):
     if isinstance(o, (list, tuple)):
         return [round_floats(x) for x in o]
     return o
+
+
+def cmp_ignore_order(src=None, dst=None, sort_fun=None):
+    """
+    比较两个字典或者list是否相等。
+    和原始比较方法的不同之处在于，对list类型先做排序，再进行比较。
+    params:src dst 需要比较的两组数据
+    params:sort_fun list类型做排序时，自定义的排序方法
+    """
+    if isinstance(src, dict) & isinstance(dst, dict):
+        for key in dst:
+            if key not in src:
+                return False
+        for key in src:
+            if key in dst:
+                if not cmp_ignore_order(src[key], dst[key], sort_fun):
+                    return False
+            else:
+                return False
+        return True
+    elif isinstance(src, list) & isinstance(dst, list):
+        if len(src) != len(dst):
+            return False
+        else:
+            if sort_fun is not None:
+                src.sort(key=sort_fun)
+                dst.sort(key=sort_fun)
+            for i in range(0, len(src)):
+                if not cmp_ignore_order(src[i], dst[i], sort_fun):
+                    return False
+            return True
+    else:
+        return src == dst
+
+
+if __name__ == '__main__':
+    from operator import itemgetter
+    l1 = [{"read": False, "write": "100"}, {"write": "100", "read": False, 'id': 12}]
+    l2 = [{"write": "100", "read": False}, {"read": False, "write": "100", 'id': 12}]
+    print(l1, l2)
+    print(cmp_ignore_order(l1, l2, sort_fun=itemgetter('write', 'read')))
