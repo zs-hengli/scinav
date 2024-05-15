@@ -598,7 +598,7 @@ def document_library_delete(user_id, ids, list_type):
     if user_per_document_ids:
         search_result_delete_cache(user_id)
     # delete DocumentLibrary
-    effected_num = doc_libs.delete()
+    effected_num = doc_libs.update(del_flag=True)
     return effected_num
 
 

@@ -9,7 +9,7 @@ from chat.models import Conversation
 from chat.serializers import ConversationCreateSerializer, ConversationDetailSerializer, ConversationListSerializer
 from collection.base_service import update_conversation_by_collection
 from collection.models import Collection, CollectionDocument
-from document.models import DocumentLibrary
+from document.models import DocumentLibrary, Document
 
 logger = logging.getLogger(__name__)
 
@@ -117,8 +117,37 @@ def conversation_update(user_id, conversation_id, validated_data):
     return ConversationListSerializer(conversation).data
 
 
+def update_simple_conversation(conversation: Conversation):
+    """
+    单文献问答，考虑文献被删情况
+    """
+    if not conversation or not conversation.documents:
+        return Conversation
+    doc_libs = DocumentLibrary.objects.filter(
+        user_id=conversation.user_id, document_id__in=conversation.documents, del_flag=False)
+    if doc_libs.count() != len(conversation.documents):
+        paper_ids, new_document_ids = None, None
+        if doc_libs:
+            new_document_ids = [dl.document_id for dl in doc_libs]
+            documents = Document.objects.filter(id__in=new_document_ids)
+            paper_ids = [
+                {'collection_id': d['collection_id'], 'collection_type': d['collection_type'], 'doc_id': d['doc_id']}
+                for d in documents
+            ]
+        update_data = {
+            'conversation_id': conversation.id,
+            'agent_id': conversation.agent_id,
+            'paper_ids': paper_ids,
+        }
+        RagConversation.update(**update_data)
+        conversation.documents = new_document_ids
+        conversation.save()
+    return conversation
+
+
 def conversation_detail(conversation_id):
     conversation = Conversation.objects.get(pk=conversation_id)
+    conversation = update_simple_conversation(conversation)
     collections = (
         Collection.objects.filter(id__in=conversation.collections, del_flag=False).values('id').all()
         if conversation.collections else []
