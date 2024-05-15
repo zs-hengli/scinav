@@ -122,7 +122,7 @@ def update_simple_conversation(conversation: Conversation):
     单文献问答，考虑文献被删情况
     """
     if not conversation or not conversation.documents:
-        return Conversation
+        return conversation
     doc_libs = DocumentLibrary.objects.filter(
         user_id=conversation.user_id, document_id__in=conversation.documents, del_flag=False)
     if doc_libs.count() != len(conversation.documents):
