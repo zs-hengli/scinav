@@ -16,7 +16,7 @@ RAG_HOST = settings.RAG_HOST
 RAG_API_KEY = settings.RAG_API_KEY
 
 
-def rag_requests(url, json=None, method='POST', headers=None, timeout=60, stream=None):
+def rag_requests(url, json=None, method='POST', headers=None, timeout=20, stream=None):
     if headers is None:
         headers = {}
     request_id = settings.REQUEST_ID[:24] + str(uuid.uuid4())[24:] if settings.REQUEST_ID else str(uuid.uuid4())
@@ -333,7 +333,7 @@ class Conversations:
             question.save()
 
         try:
-            resp = rag_requests(url, json=post_data, method='POST', timeout=60, stream=True)
+            resp = rag_requests(url, json=post_data, method='POST', timeout=15, stream=True)
         except requests.exceptions.RequestException as e:
             logger.error(f'Request error: {e}')
             yield json.dumps({'event': 'on_error', 'error_code': 120001, 'error': error_msg, "detail": str(e)}) + "\n"
