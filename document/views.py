@@ -248,6 +248,8 @@ class DocumentsUrl(APIView):
     @staticmethod
     def get(request, document_id=None, collection_id=None, doc_id=None, *args, **kwargs):
         user_id = request.user.id
+        query = request.query_params.dict()
+        is_paper_chat = int(query.pop('is_paper_chat', '0'))
         if document_id:
             document = Document.objects.filter(id=document_id).values(
                 'id', 'title', 'object_path', 'collection_id', 'doc_id', 'collection_type',
@@ -265,7 +267,12 @@ class DocumentsUrl(APIView):
         if not document:
             return my_json_response(code=100002, msg=f'document not found')
         url_document = None
-        if document['collection_type'] == Document.TypeChoices.PERSONAL and user_id != document['collection_id']:
+        if is_paper_chat and not DocumentLibrary.objects.filter(
+                user_id=user_id, document_id=document['id'], del_flag=False,
+                task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
+        ).exists():
+            url = ''
+        elif document['collection_type'] == Document.TypeChoices.PERSONAL and user_id != document['collection_id']:
             url = None
             if document['ref_doc_id'] and document['ref_collection_id']:
                 if (

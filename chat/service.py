@@ -2,6 +2,7 @@ import datetime
 import logging
 
 from dateutil.relativedelta import relativedelta
+from operator import itemgetter
 
 from bot.models import Bot
 from bot.rag_service import Conversations as RagConversation
@@ -9,6 +10,7 @@ from chat.models import Conversation
 from chat.serializers import ConversationCreateSerializer, ConversationDetailSerializer, ConversationListSerializer
 from collection.base_service import update_conversation_by_collection
 from collection.models import Collection, CollectionDocument
+from core.utils.common import cmp_ignore_order
 from document.models import DocumentLibrary, Document
 
 logger = logging.getLogger(__name__)
@@ -124,23 +126,27 @@ def update_simple_conversation(conversation: Conversation):
     if not conversation or not conversation.documents:
         return conversation
     doc_libs = DocumentLibrary.objects.filter(
-        user_id=conversation.user_id, document_id__in=conversation.documents, del_flag=False)
-    if doc_libs.count() != len(conversation.documents):
-        paper_ids, new_document_ids = None, None
-        if doc_libs:
-            new_document_ids = [dl.document_id for dl in doc_libs]
-            documents = Document.objects.filter(id__in=new_document_ids)
-            paper_ids = [
-                {'collection_id': d['collection_id'], 'collection_type': d['collection_type'], 'doc_id': d['doc_id']}
-                for d in documents
-            ]
+        user_id=conversation.user_id,
+        document_id__in=conversation.documents,
+        del_flag=False,
+        task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
+    ).values_list('document_id', flat=True).all()
+    documents = Document.objects.filter(id__in=conversation.documents, del_flag=False).all()
+    new_paper_ids = [{
+        'collection_id': d.collection_id,
+        'collection_type': d.collection_type,
+        'doc_id': d.doc_id,
+        'full_text_accessible': d.id in doc_libs,
+    } for d in documents] if documents else []
+
+    if not cmp_ignore_order(conversation.paper_ids, new_paper_ids, sort_fun=itemgetter('collection_id', 'doc_id')):
         update_data = {
             'conversation_id': conversation.id,
             'agent_id': conversation.agent_id,
-            'paper_ids': paper_ids,
+            'paper_ids': new_paper_ids,
         }
         RagConversation.update(**update_data)
-        conversation.documents = new_document_ids
+        conversation.documents = [d.id for d in documents] if documents else []
         conversation.save()
     return conversation
 
