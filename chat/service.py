@@ -147,6 +147,7 @@ def update_simple_conversation(conversation: Conversation):
         }
         RagConversation.update(**update_data)
         conversation.documents = [d.id for d in documents] if documents else []
+        conversation.paper_ids = new_paper_ids
         conversation.save()
     return conversation
 
