@@ -1,5 +1,8 @@
+from operator import itemgetter
+
 from chat.serializers import chat_paper_ids
 from collection.models import Collection, CollectionDocument
+from core.utils.common import cmp_ignore_order
 from document.models import Document
 from bot.rag_service import Conversations as RagConversation
 
@@ -36,15 +39,19 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
                 'collection_id': p['collection_id'],
                 'collection_type': p['collection_type'],
                 'doc_id': p['doc_id'],
+                'full_text_accessible': p['full_text_accessible'],
             })
-        update_data['paper_ids'] = paper_ids
-        update_data['public_collection_ids'] = public_collection_ids
-        conversation.paper_ids = papers_info
-        conversation.public_collection_ids = public_collection_ids
-        conversation.collections = collection_ids
-        conversation.save()
+
+        if not cmp_ignore_order(conversation.paper_ids, papers_info, sort_fun=itemgetter('collection_id', 'doc_id')):
+            update_data['paper_ids'] = paper_ids
+            update_data['public_collection_ids'] = public_collection_ids
+            conversation.paper_ids = papers_info
+            conversation.public_collection_ids = public_collection_ids
+            conversation.collections = collection_ids
+            conversation.save()
     if model:
         update_data['llm_name'] = model
         conversation.model = model
+        conversation.save()
     RagConversation.update(**update_data)
     return conversation

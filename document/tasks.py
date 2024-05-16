@@ -109,7 +109,7 @@ def async_update_document(self, document_ids):
     documents = Document.objects.filter(pk__in=document_ids).all()
     fileds = [
         'title', 'abstract', 'authors', 'doi', 'categories',
-        'year', 'pub_date', 'pub_type', 'venue', 'journal', 'conference', 'keywords', 'full_text_accessible',
+        'year', 'pub_date', 'pub_type', 'venue', 'journal', 'conference', 'keywords',  # 'full_text_accessible',
         'pages', 'citation_count', 'reference_count', 'object_path', 'source_url', 'checksum',
         'ref_collection_id', 'ref_doc_id',
     ]

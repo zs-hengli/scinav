@@ -123,32 +123,43 @@ def update_simple_conversation(conversation: Conversation):
     """
     单文献问答，考虑文献被删情况
     """
-    if not conversation or not conversation.documents:
+    if not conversation or not conversation.documents or not conversation.bot_id:
         return conversation
-    doc_libs = DocumentLibrary.objects.filter(
-        user_id=conversation.user_id,
-        document_id__in=conversation.documents,
-        del_flag=False,
-        task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
-    ).values_list('document_id', flat=True).all()
-    documents = Document.objects.filter(id__in=conversation.documents, del_flag=False).all()
-    new_paper_ids = [{
-        'collection_id': d.collection_id,
-        'collection_type': d.collection_type,
-        'doc_id': d.doc_id,
-        'full_text_accessible': d.id in doc_libs,
-    } for d in documents] if documents else []
+    if conversation.documents:
+        doc_libs = DocumentLibrary.objects.filter(
+            user_id=conversation.user_id,
+            document_id__in=conversation.documents,
+            del_flag=False,
+            task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
+        ).values_list('document_id', flat=True).all()
+        documents = Document.objects.filter(id__in=conversation.documents, del_flag=False).all()
+        new_paper_ids = [{
+            'collection_id': d.collection_id,
+            'collection_type': d.collection_type,
+            'doc_id': d.doc_id,
+            'full_text_accessible': d.id in doc_libs,
+        } for d in documents] if documents else []
+        new_papers_info = [{
+            'collection_id': d.collection_id,
+            'collection_type': d.collection_type,
+            'doc_id': d.doc_id,
+            'document_id': d.id,
+            'full_text_accessible': d.id in doc_libs,
+        } for d in documents] if documents else []
 
-    if not cmp_ignore_order(conversation.paper_ids, new_paper_ids, sort_fun=itemgetter('collection_id', 'doc_id')):
-        update_data = {
-            'conversation_id': conversation.id,
-            'agent_id': conversation.agent_id,
-            'paper_ids': new_paper_ids,
-        }
-        RagConversation.update(**update_data)
-        conversation.documents = [d.id for d in documents] if documents else []
-        conversation.paper_ids = new_paper_ids
-        conversation.save()
+        if not cmp_ignore_order(conversation.paper_ids, new_papers_info, sort_fun=itemgetter('collection_id', 'doc_id')):
+            update_data = {
+                'conversation_id': conversation.id,
+                'agent_id': conversation.agent_id,
+                'paper_ids': new_paper_ids,
+            }
+            RagConversation.update(**update_data)
+            conversation.documents = [d.id for d in documents] if documents else []
+            conversation.paper_ids = new_papers_info
+            conversation.save()
+    elif conversation.bot_id:
+        conversation = update_conversation_by_collection(conversation.user_id, conversation, conversation.collections)
+
     return conversation
 
 

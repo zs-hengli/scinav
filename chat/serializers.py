@@ -276,7 +276,7 @@ def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
             ).all()
             documents += ref_documents
             ref_text_accessible_ds = [
-                d['id'] for rd in ref_documents for d in org_documents
+                rd['id'] for rd in ref_documents for d in org_documents
                 if rd['doc_id'] == d['ref_doc_id'] and d['full_text_accessible']
             ]
     if bot and bot.type == Bot.TypeChoices.PUBLIC and is_sub:
