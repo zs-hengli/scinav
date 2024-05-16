@@ -217,7 +217,7 @@ class QuestionUpdateAnswerQuerySerializer(serializers.Serializer):
     user_id = serializers.CharField(required=True, max_length=36)
     question_id = serializers.CharField(required=False, max_length=36)
     conversation_id = serializers.CharField(required=False, max_length=36)
-    answer = serializers.CharField(required=True, max_length=1024, trim_whitespace=False, allow_blank=True)
+    answer = serializers.CharField(required=True, trim_whitespace=False, allow_blank=True)
 
     def validate(self, attrs):
         if not attrs.get('conversation_id') and not attrs.get('question_id'):
