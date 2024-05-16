@@ -6,7 +6,7 @@ from django.db.models import Q
 from rest_framework import serializers
 from django.utils.translation import gettext_lazy as _
 
-from bot.models import BotCollection, Bot
+from bot.models import BotCollection, Bot, BotSubscribe
 from chat.models import Conversation, Question
 from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionDocumentListSerializer
@@ -78,11 +78,15 @@ class ConversationCreateBaseSerializer(serializers.Serializer):
         if bot:
             return Conversation.TypeChoices.BOT_COV
         elif doc_ids and not bot and not collections:
-            if len(doc_ids) == 1: return Conversation.TypeChoices.DOC_COV
-            else: return Conversation.TypeChoices.DOCS_COV
+            if len(doc_ids) == 1:
+                return Conversation.TypeChoices.DOC_COV
+            else:
+                return Conversation.TypeChoices.DOCS_COV
         elif collections and not bot and not doc_ids:
-            if len(collections) == 1: return Conversation.TypeChoices.COLLECTION_COV
-            else: return Conversation.TypeChoices.COLLECTIONS_COV
+            if len(collections) == 1:
+                return Conversation.TypeChoices.COLLECTION_COV
+            else:
+                return Conversation.TypeChoices.COLLECTIONS_COV
         elif doc_ids and collections:
             return Conversation.TypeChoices.MIX_COV
         else:
@@ -253,16 +257,31 @@ class ConversationsMenuQuerySerializer(serializers.Serializer):
 
 
 def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
-    ret_data = []
+    ret_data, org_documents, ref_text_accessible_ds = [], documents, []
     bot = None
     if bot_id:
         bot = Bot.objects.filter(id=bot_id).first()
     query_set, doc_lib_document_ids, sub_bot_document_ids, ref_ds = \
         CollectionDocumentListSerializer.get_collection_documents(
             user_id, collection_ids, 'personal&subscribe_full_text', bot)
-    full_text_documents = doc_lib_document_ids + sub_bot_document_ids
-    if bot and bot.type == Bot.TypeChoices.PUBLIC:
-        full_text_documents += ref_ds
+    full_text_documents = doc_lib_document_ids
+    # 订阅专题会话 获取paper_ids
+    is_sub = BotSubscribe.objects.filter(user_id=user_id, bot_id=bot_id).exists()
+    if bot and user_id != bot.user_id:
+        documents = [d for d in documents if d['collection_type'] == 'public']
+        if ref_ds and is_sub:
+            ref_documents = Document.objects.filter(id__in=ref_ds).values(
+                'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
+                'ref_collection_id', 'ref_doc_id', 'object_path',
+            ).all()
+            documents += ref_documents
+            ref_text_accessible_ds = [
+                d['id'] for rd in ref_documents for d in org_documents
+                if rd['doc_id'] == d['ref_doc_id'] and d['full_text_accessible']
+            ]
+    if bot and bot.type == Bot.TypeChoices.PUBLIC and is_sub:
+        full_text_documents += sub_bot_document_ids
+        full_text_documents += ref_text_accessible_ds
     for d in documents:
         ret_data.append({
             'collection_type': d['collection_type'],

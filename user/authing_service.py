@@ -6,7 +6,7 @@ from authing.v2.management import ManagementClient, ManagementClientOptions
 from authing.v2.authentication import (AuthenticationClient, AuthenticationClientOptions)
 
 
-logger = logging.Logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def get_manage_client():
