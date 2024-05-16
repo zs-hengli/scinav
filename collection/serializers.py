@@ -401,7 +401,6 @@ class CollectionDocumentListSerializer(serializers.Serializer):
             doc_libs = DocumentLibrary.objects.filter(
                 user_id=user_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
             ).values('document_id').all()
-            # filter_query = Q(collection_id=user_id) & ~Q(ref_doc_id=0)
         else:
             doc_libs = DocumentLibrary.objects.filter(user_id=user_id, del_flag=False, task_status__in=[
                 DocumentLibrary.TaskStatusChoices.COMPLETED,
@@ -409,10 +408,6 @@ class CollectionDocumentListSerializer(serializers.Serializer):
                 DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
                 DocumentLibrary.TaskStatusChoices.QUEUEING,
             ]).values('document_id').all()
-            # filter_query = Q(collection_id=user_id)
-        # 个人上传文献可能只在Document里面
-        # my_documents = Document.objects.filter(filter_query).values('id').all()
-        # return [d['document_id'] for d in doc_libs if d['document_id']] + [d['id'] for d in my_documents]
         return [d['document_id'] for d in doc_libs if d['document_id']]
 
 

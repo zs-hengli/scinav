@@ -28,17 +28,6 @@ def collection_list(user_id, list_type, page_size, page_num, keyword=None):
     # 1 public collections
     public_total, subscribe_total, sub_add_list, my_total = 0, 0, [], 0
     if 'public' in list_type:
-        # todo /api/v1/public-collections 接口超时暂时跳过
-        # saved_colls = Collection.objects.filter(type=Collection.TypeChoices.PUBLIC, del_flag=False)
-        # public_total = saved_colls.count()
-        # for coll in saved_colls:
-        #     coll_list.append({
-        #         'id': coll.id,
-        #         'name': coll.title,
-        #         'updated_at': coll.updated_at,
-        #         'total': coll.total_public,
-        #         'type': coll.type,
-        #     })
         public_collections = RagCollection.list()
         public_collections = [pc | {'updated_at': pc['update_time']} for pc in public_collections]
         pub_serial = CollectionRagPublicListSerializer(data=public_collections, many=True)
@@ -73,14 +62,14 @@ def collection_list(user_id, list_type, page_size, page_num, keyword=None):
             coll_list += list(CollectionListSerializer(query_set, many=True).data)
     if set(list_type) == {'public', 'subscribe', 'my'}:
         for coll in coll_list:
+            sub_bot_info = sub_bot_infos.get(coll['bot_id'], {}) if coll.get('bot_id') else {}
             if coll['type'] == Collection.TypeChoices.PUBLIC:
-                coll['is_all_in_document_library'] = True
+                coll['is_all_in_document_library'] = sub_bot_info.get('is_all_in_document_library', True)
             elif coll['type'] == Collection.TypeChoices.SUBSCRIBE:
                 bot = bots_dict.get(coll['bot_id'])
-                coll['is_all_in_document_library'] = True
+                coll['is_all_in_document_library'] = sub_bot_info.get('is_all_in_document_library', True)
                 # todo 未发布专题 分享出去 没有全文
                 if bot and bot.type == Bot.TypeChoices.PERSONAL:
-                    sub_bot_info = sub_bot_infos.get(coll['bot_id'], {})
                     coll['is_all_in_document_library'] = sub_bot_info.get('is_all_in_document_library', False)
             else:
                 coll['is_all_in_document_library'] = _is_collection_docs_all_in_document_library(coll['id'], user_id)
@@ -173,6 +162,8 @@ def _bot_subscribe_collection_list(user_id):
             bot_sub_collect[bot_id]['total'] -= len(personal_documents)
             # if bot.type == Bot.TypeChoices.PUBLIC:
             bot_sub_collect[bot_id]['total'] += len(ref_documents)
+            if bot.id == '1fab1cd8-07ef-4e30-b9c2-a046a7f5488a':
+                logger.debug(f'ddddddddd {bot.id} personal_documents: {personal_documents}, ref_documents: {ref_documents}')
             if bot.type == Bot.TypeChoices.PERSONAL:
                 # 关联
                 # 标签的个人文献应该在文献列表中显示，但是它会作为全量文献库文献存在。 排除其他影响文献数量颜色的因素，外面文献列表显示绿色
@@ -195,7 +186,10 @@ def _bot_subscribe_collection_list(user_id):
                     public_documents - set(my_doc_lib_doc_ids)
                 )
                 sub_bot_infos[bot_id] = {'is_all_in_document_library': False if diff_set else True}
-            else: sub_bot_infos[bot_id] = {'is_all_in_document_library': True}
+            elif ref_documents and Document.objects.filter(id__in=ref_documents, full_text_accessible=False).exists():
+                sub_bot_infos[bot_id] = {'is_all_in_document_library': False}
+            else:
+                sub_bot_infos[bot_id] = {'is_all_in_document_library': True}
     # 排序 updated_at 倒序
     list_data = sorted(bot_sub_collect.values(), key=lambda x: x['updated_at'], reverse=True)
     return list_data, bots_dict, sub_bot_infos
@@ -319,28 +313,6 @@ def _save_public_collection(saved_collections, public_collections):
             # update
             collection = saved_collections_dict[pc['id']]
             serial.update(collection, coll_data)
-
-
-def collection_docs(collection_id, page_size=10, page_num=1):
-    query_set = CollectionDocument.objects.filter(collection_id=collection_id, del_flag=False).order_by('-updated_at')
-    total = query_set.count()
-    start_num = page_size * (page_num - 1)
-    logger.info(f"limit: [{start_num}: {page_size * page_num}]")
-    c_docs = query_set[start_num:(page_size * page_num)]
-    docs = [cd.document for cd in c_docs]
-
-    docs_data = DocumentApaListSerializer(docs, many=True).data
-
-    if c_docs:
-        collection = c_docs[0].collection
-        return {
-            'collection_id': collection_id,
-            'collection_type': collection.type,
-            'collection_title': collection.title,
-            'list': docs_data,
-            'total': total
-        }
-    return {}
 
 
 def collections_docs(user_id, validated_data):
