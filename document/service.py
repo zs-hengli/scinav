@@ -574,6 +574,7 @@ def document_library_delete(user_id, ids, list_type):
     doc_libs = DocumentLibrary.objects.filter(filter_query)
     all_doc_libs = doc_libs.all()
     user_per_document_ids = [doclib.document_id for doclib in all_doc_libs if doclib.document_id and doclib.filename]
+    user_pub_doc_ids = [doclib.document_id for doclib in all_doc_libs if doclib.task_type == 'public']
     in_progress_document_libs = [doclib for doclib in all_doc_libs if doclib.task_status in ['in_progress', 'queueing']]
     # delete CollectionDocument
     user_collections = Collection.objects.filter(user_id=user_id, del_flag=False).values('id').all()
@@ -586,6 +587,12 @@ def document_library_delete(user_id, ids, list_type):
         if effect_num:
             Collection.objects.filter(id=coll_id).update(total_personal=F('total_personal') - effect_num)
             async_update_conversation_by_collection.apply_async(args=(coll_id,))
+    effect_pub_coll_ids = CollectionDocument.objects.filter(
+        collection_id__in=user_collection_ids, document_id__in=user_pub_doc_ids
+    ).values_list('collection_id', flat=True).distinct('collection_id')
+    for coll_id in effect_pub_coll_ids:
+        async_update_conversation_by_collection.apply_async(args=(coll_id,))
+
     # delete Document
     Document.objects.filter(id__in=user_per_document_ids, collection_id=user_id).update(del_flag=True)
     # todo rag delete

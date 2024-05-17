@@ -6,6 +6,7 @@ from rest_framework.decorators import permission_classes, renderer_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
+from bot.models import Bot
 from chat.models import Conversation
 from chat.serializers import ConversationCreateSerializer, ConversationUpdateSerializer, ChatQuerySerializer, \
     QuestionAnswerSerializer, ConversationsMenuQuerySerializer, QuestionUpdateAnswerQuerySerializer
@@ -70,6 +71,12 @@ class Conversations(APIView):
         serial = ConversationCreateSerializer(data=query_data)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        validated_data = serial.validated_data
+        if (
+            validated_data.get('bot_id')
+            and not Bot.objects.filter(id=validated_data['bot_id'], del_flag=False).exists()
+        ):
+            return my_json_response({}, code=100002, msg='bot not found')
         conversation_id = conversation_create(serial.validated_data)
         return my_json_response({'conversation_id': conversation_id})
 
@@ -105,7 +112,13 @@ class Chat(APIView):
         serial = ChatQuerySerializer(data=query_data)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
-        data = chat_query(serial.validated_data)
+        validated_data = serial.validated_data
+        if (
+            validated_data.get('bot_id')
+            and not Bot.objects.filter(id=validated_data['bot_id'], del_flag=False).exists()
+        ):
+            return my_json_response({}, code=100002, msg='bot not found')
+        data = chat_query(validated_data)
         return streaming_response(data)
 
 
