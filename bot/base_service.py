@@ -8,7 +8,7 @@ from bot.serializers import BotDetailSerializer
 from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionDocumentListSerializer
 from core.utils.exceptions import InternalServerError
-from document.models import Document
+from document.models import Document, DocumentLibrary
 from document.serializers import DocumentApaListSerializer, CollectionDocumentListCollectionSerializer
 
 logger = logging.getLogger(__name__)
@@ -121,15 +121,24 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
         docs_data = DocumentApaListSerializer(docs, many=True).data
         data_dict = {d['id']: d for d in docs_data}
         # todo has_full_text
-        query_set, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
+        query_set, d1, d2, ref_ds = CollectionDocumentListSerializer.get_collection_documents(
             user_id, collection_ids, 'personal&subscribe_full_text', bot)
         all_full_text_docs = [d['document_id'] for d in query_set.all()]
-
+        # 个人关联文献是否有全文
+        if ref_ds:
+            full_text_ref_documents = Document.objects.filter(
+                id__in=ref_ds, full_text_accessible=True).values_list('id', flat=True).all()
+            if bot.type == Bot.TypeChoices.PERSONAL:
+                full_text_ref_documents = DocumentLibrary.objects.filter(
+                    user_id=user_id, document_id__in=list(full_text_ref_documents),
+                    task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
+                ).values_list('document_id', flat=True).all()
+            all_full_text_docs += list(full_text_ref_documents)
         for doc in docs:
             has_full_text = (
                 True
                 if doc.id in all_full_text_docs or (
-                    doc.id in d3 and doc.object_path and bot.type == Bot.TypeChoices.PUBLIC)
+                    doc.id in ref_ds and doc.object_path and bot.type == Bot.TypeChoices.PUBLIC)
                 else False
             )
             res_data.append({
