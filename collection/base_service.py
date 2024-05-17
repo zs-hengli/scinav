@@ -1,6 +1,7 @@
 from operator import itemgetter
 
 from bot.rag_service import Conversations as RagConversation
+from chat.models import Conversation
 from chat.serializers import chat_paper_ids
 from collection.models import Collection, CollectionDocument
 from core.utils.common import cmp_ignore_order
@@ -48,6 +49,11 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
             conversation.paper_ids = papers_info
             conversation.public_collection_ids = public_collection_ids
             conversation.collections = collection_ids
+            if collection_ids and not conversation.bot_id:
+                conversation.type = (
+                    Conversation.TypeChoices.COLLECTION_COV
+                    if len(collection_ids) == 1 else Conversation.TypeChoices.COLLECTIONS_COV
+                )
             conversation.save()
     elif collection_ids is not None and collection_ids != conversation.collections:
         paper_ids = []
