@@ -130,6 +130,7 @@ class ConversationUpdateSerializer(serializers.Serializer):
 class ConversationDetailSerializer(BaseModelSerializer):
     # todo answers, questions
     questions = serializers.SerializerMethodField()
+    stop_chat_type = serializers.SerializerMethodField(default=None)
 
     @staticmethod
     def get_questions(obj: Conversation):
@@ -137,9 +138,20 @@ class ConversationDetailSerializer(BaseModelSerializer):
         questions = obj.question.filter(filter_query).order_by('updated_at').all()
         return QuestionConvDetailSerializer(questions, many=True).data
 
+    @staticmethod
+    def get_stop_chat_type(obj: Conversation):
+        if obj.type == Conversation.TypeChoices.BOT_COV and obj.bot_id:
+            bot = Bot.objects.filter(id=obj.bot_id).first()
+            if bot and bot.del_flag:
+                return 'bot_deleted'
+        return None
+
     class Meta:
         model = Conversation
-        fields = ['id', 'title', 'user_id', 'bot_id', 'model', 'documents', 'collections', 'type', 'questions']
+        fields = [
+            'id', 'title', 'user_id', 'bot_id', 'model', 'documents', 'collections', 'type', 'questions',
+            'stop_chat_type'
+        ]
 
 
 class ConversationListSerializer(BaseModelSerializer):
@@ -261,12 +273,18 @@ def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
     bot = None
     if bot_id:
         bot = Bot.objects.filter(id=bot_id).first()
+    if bot_id and (not bot or bot.del_flag):
+        return []
+    is_sub = BotSubscribe.objects.filter(user_id=user_id, bot_id=bot_id).exists() if bot_id else False
     query_set, doc_lib_document_ids, sub_bot_document_ids, ref_ds = \
         CollectionDocumentListSerializer.get_collection_documents(
             user_id, collection_ids, 'personal&subscribe_full_text', bot)
+    if bot and (bot.del_flag or not is_sub):
+        doc_lib_document_ids = list(DocumentLibrary.objects.filter(
+            user_id=user_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
+        ).values_list('document_id', flat=True).all())
     full_text_documents = doc_lib_document_ids
     # 订阅专题会话 获取paper_ids
-    is_sub = BotSubscribe.objects.filter(user_id=user_id, bot_id=bot_id).exists()
     if bot and user_id != bot.user_id:
         documents = [d for d in documents if d['collection_type'] == 'public']
         if ref_ds and is_sub:
@@ -279,7 +297,7 @@ def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
                 rd['id'] for rd in ref_documents for d in org_documents
                 if rd['doc_id'] == d['ref_doc_id'] and d['full_text_accessible']
             ]
-    if bot and bot.type == Bot.TypeChoices.PUBLIC and is_sub:
+    if bot and not bot.del_flag and bot.type == Bot.TypeChoices.PUBLIC and is_sub:
         full_text_documents += sub_bot_document_ids
         full_text_documents += ref_text_accessible_ds
     for d in documents:

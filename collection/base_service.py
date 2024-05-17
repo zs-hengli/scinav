@@ -1,10 +1,10 @@
 from operator import itemgetter
 
+from bot.rag_service import Conversations as RagConversation
 from chat.serializers import chat_paper_ids
 from collection.models import Collection, CollectionDocument
 from core.utils.common import cmp_ignore_order
 from document.models import Document
-from bot.rag_service import Conversations as RagConversation
 
 
 def update_conversation_by_collection(user_id, conversation, collection_ids, model=None):

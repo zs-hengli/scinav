@@ -162,8 +162,6 @@ def _bot_subscribe_collection_list(user_id):
             bot_sub_collect[bot_id]['total'] -= len(personal_documents)
             # if bot.type == Bot.TypeChoices.PUBLIC:
             bot_sub_collect[bot_id]['total'] += len(ref_documents)
-            if bot.id == '1fab1cd8-07ef-4e30-b9c2-a046a7f5488a':
-                logger.debug(f'ddddddddd {bot.id} personal_documents: {personal_documents}, ref_documents: {ref_documents}')
             if bot.type == Bot.TypeChoices.PERSONAL:
                 # 关联
                 # 标签的个人文献应该在文献列表中显示，但是它会作为全量文献库文献存在。 排除其他影响文献数量颜色的因素，外面文献列表显示绿色

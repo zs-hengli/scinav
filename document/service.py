@@ -441,6 +441,7 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
     """
     is_all = True
     all_document_ids, ref_ds = [], []
+    bot = Bot.objects.filter(id=bot_id).first()
     if add_type == DocLibAddQuerySerializer.AddTypeChoices.DOCUMENT_SEARCH:
         search_result = search(user_id, search_content, 200, 1)
         if search_result:
@@ -454,7 +455,6 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
             user_id, [collection_id], 's2')
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_SUBSCRIBE_FULL_TEXT:
-        bot = Bot.objects.filter(id=bot_id).first()
         coll_documents, d1, d2, _ = CollectionDocumentListSerializer.get_collection_documents(
             user_id, [collection_id], 'subscribe_full_text', bot)
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
@@ -468,8 +468,10 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_ALL:
         coll_documents, d1, d2, ref_ds = CollectionDocumentListSerializer.get_collection_documents(
-            user_id, [collection_id], 'all')
+            user_id, [collection_id], 'all', bot)
         all_document_ids = [d['document_id'] for d in coll_documents.all()] if coll_documents else []
+        if ref_ds:
+            all_document_ids += ref_ds
     else:
         # get document_ids
         is_all = False
