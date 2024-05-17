@@ -82,11 +82,11 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
         elif list_type in ['s2', 'arxiv']:
             if bot.type == Collection.TypeChoices.PUBLIC:
                 ref_ds = Document.objects.filter(
-                    id__in=ref_ds, full_text_accessible=False).values_list('id', flat=True)
+                    id__in=ref_ds, full_text_accessible=False, del_flag=False).values_list('id', flat=True)
             ref_ds = list(set(ref_ds) - set(ref_doc_lib_ids))
         elif list_type in ['subscribe_full_text']:
             ref_ds = list(Document.objects.filter(
-                id__in=ref_ds, full_text_accessible=True).values_list('id', flat=True).all())
+                id__in=ref_ds, full_text_accessible=True, del_flag=False).values_list('id', flat=True).all())
             ref_ds = list(set(ref_ds) - set(ref_doc_lib_ids))
         doc_ids = ref_ds[start_num:(page_size * page_num - need_public_count)]
         need_public_count += len(doc_ids)
@@ -127,10 +127,10 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
         # 个人关联文献是否有全文
         if ref_ds:
             full_text_ref_documents = Document.objects.filter(
-                id__in=ref_ds, full_text_accessible=True).values_list('id', flat=True).all()
+                id__in=ref_ds, full_text_accessible=True, del_flag=False).values_list('id', flat=True).all()
             if bot.type == Bot.TypeChoices.PERSONAL:
                 full_text_ref_documents = DocumentLibrary.objects.filter(
-                    user_id=user_id, document_id__in=list(full_text_ref_documents),
+                    user_id=user_id, document_id__in=list(full_text_ref_documents), del_flag=False,
                     task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
                 ).values_list('document_id', flat=True).all()
             all_full_text_docs += list(full_text_ref_documents)
@@ -162,7 +162,7 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
                 full_text_ref_documents = []
                 if ref_ds:
                     full_text_ref_documents = Document.objects.filter(
-                        id__in=ref_ds, full_text_accessible=True).values_list('id', flat=True)
+                        id__in=ref_ds, full_text_accessible=True, del_flag=False).values_list('id', flat=True)
                 if d_id['id'] in doc_lib_document_ids:
                     res_data[index]['type'] = 'personal'
                 elif d_id['id'] in sub_bot_document_ids:
