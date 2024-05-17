@@ -527,7 +527,9 @@ def doc_lib_batch_operation_check(user_id, validated_data):
     list_type = validated_data.get('list_type')
     is_all = validated_data.get('is_all')
     if is_all:
-        if list_type == 'all':
+        if list_type == 'failed':
+            filter_query = Q(user_id=user_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.ERROR)
+        elif list_type == 'all':
             filter_query = Q(user_id=user_id, del_flag=False)
         elif list_type == 'in_progress':
             filter_query = Q(user_id=user_id, del_flag=False, task_status__in=[
@@ -589,7 +591,7 @@ def document_library_delete(user_id, ids, list_type):
             async_update_conversation_by_collection.apply_async(args=(coll_id,))
     effect_pub_coll_ids = CollectionDocument.objects.filter(
         collection_id__in=user_collection_ids, document_id__in=user_pub_doc_ids
-    ).values_list('collection_id', flat=True).distinct('collection_id')
+    ).values_list('collection_id', flat=True).distinct('collection_id').all()
     for coll_id in effect_pub_coll_ids:
         async_update_conversation_by_collection.apply_async(args=(coll_id,))
 

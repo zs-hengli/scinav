@@ -321,7 +321,7 @@ class DocLibCheckQuerySerializer(serializers.Serializer):
         required=False, allow_null=True, child=serializers.CharField(allow_null=True, allow_blank=False))
     is_all = serializers.BooleanField(required=False, default=False)
     list_type = serializers.ChoiceField(
-        required=False, choices=['all', 'in_progress', 'completed'], default='all')
+        required=False, choices=['all', 'in_progress', 'completed', 'failed'], default='all')
 
     def validate(self, attrs):
         if attrs.get('ids'):
