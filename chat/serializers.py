@@ -120,7 +120,7 @@ class ConversationUpdateSerializer(serializers.Serializer):
     model = serializers.ChoiceField(choices=['gpt-3.5-turbo', 'gpt-4o'], required=False, default=None)
 
     def validate(self, attrs):
-        if not attrs.get('collections') and not attrs.get('title') and not attrs.get('model'):
+        if attrs.get('collections') is None and not attrs.get('title') and not attrs.get('model'):
             raise serializers.ValidationError('collections, title, model are all empty')
         if attrs.get('title') and len(attrs['title']) > 128:
             attrs['title'] = attrs['title'][:128]

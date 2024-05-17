@@ -49,6 +49,16 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
             conversation.public_collection_ids = public_collection_ids
             conversation.collections = collection_ids
             conversation.save()
+    elif collection_ids is not None and collection_ids != conversation.collections:
+        paper_ids = []
+        update_data['paper_ids'] = paper_ids
+        update_data['public_collection_ids'] = []
+        conversation.paper_ids = paper_ids
+        conversation.public_collection_ids = []
+        conversation.collections = []
+        conversation.type = None
+        conversation.save()
+
     if model:
         update_data['llm_name'] = model
         conversation.model = model

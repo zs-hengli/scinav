@@ -107,7 +107,7 @@ def conversation_update(user_id, conversation_id, validated_data):
     vd = validated_data
     conversation = Conversation.objects.get(pk=conversation_id, user_id=user_id)
 
-    if vd.get('collections') or vd.get('model'):
+    if vd.get('collections') is not None or vd.get('model'):
         # update conversation
         conversation = update_conversation_by_collection(user_id, conversation, vd.get('collections'), vd.get('model'))
     if vd.get('title'):
