@@ -15,4 +15,5 @@ urlpatterns = [
     path('bots/<str:bot_id>/documents', views.BotDocuments.as_view()),
 
     path('bots/<str:bot_id>/publish', views.BotPublish.as_view()),
+    path('bots/<str:bot_id>/tools', views.BotsTools.as_view()),
 ]

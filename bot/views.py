@@ -8,9 +8,12 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from bot.base_service import bot_detail, bot_documents
-from bot.models import Bot, HotBot
-from bot.serializers import BotCreateSerializer, BotListQuerySerializer, BotDocumentsQuerySerializer
-from bot.service import (bot_create, bot_delete, bot_publish, bot_subscribe, bot_update, hot_bots, get_bot_list)
+from bot.models import Bot, HotBot, BotTools
+from bot.rag_service import Bot as RagBot
+from bot.serializers import BotCreateSerializer, BotListQuerySerializer, BotDocumentsQuerySerializer, \
+    BotToolsCreateQuerySerializer, BotToolsUpdateQuerySerializer, BotToolsDeleteQuerySerializer
+from bot.service import (bot_create, bot_delete, bot_publish, bot_subscribe, bot_update, hot_bots, get_bot_list,
+                         bot_tools_create, bot_tools_update)
 from document.tasks import async_add_user_operation_log
 from core.utils.exceptions import ValidationError
 from core.utils.views import extract_json, my_json_response
@@ -95,8 +98,17 @@ class Bots(APIView):
         serial = BotCreateSerializer(data=request_data)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
-
-        data = bot_create(serial.validated_data)
+        vd = serial.validated_data
+        logger.debug(f'dddddddddd1 validated_data: {vd}')
+        if vd.get('tools'):
+            tools_serial = BotToolsUpdateQuerySerializer(data=vd['tools'], many=True)
+            if not tools_serial.is_valid():
+                return my_json_response(
+                    tools_serial.errors, code=100001, msg=f'validate error, {list(tools_serial.errors.keys())}'
+                )
+            vd['tools'] = tools_serial.validated_data
+            logger.debug(f'dddddddddd2 validated_data: {vd}')
+        data = bot_create(vd)
         return my_json_response(data)
 
     @staticmethod
@@ -111,10 +123,17 @@ class Bots(APIView):
         serial = BotCreateSerializer(data=request_data)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
-        validated_data = serial.validated_data
-        del validated_data['type']  # update bot not update type
-        updated_bot, bot_collections, updated_attrs = serial.updated_attrs(bot, validated_data)
-        data = bot_update(updated_bot, bot_collections, updated_attrs, validated_data)
+        vd = serial.validated_data
+        if vd.get('tools'):
+            tools_serial = BotToolsUpdateQuerySerializer(data=vd['tools'], many=True)
+            if not tools_serial.is_valid():
+                return my_json_response(
+                    tools_serial.errors, code=100001, msg=f'validate error, {list(tools_serial.errors)}'
+                )
+            vd['tools'] = tools_serial.validated_data
+        del vd['type']  # update bot not update type
+        updated_bot, bot_collections, updated_attrs = serial.updated_attrs(bot, vd)
+        data = bot_update(updated_bot, bot_collections, updated_attrs, vd)
         return my_json_response(data)
 
     @staticmethod
@@ -123,6 +142,66 @@ class Bots(APIView):
         #     return my_json_response({}, code=100003, msg=_('bot is hot, can not delete'))
         bot_delete(bot_id)
         return my_json_response({'bot_id': bot_id})
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['POST', 'PUT', 'DELETE', ]), name='dispatch')
+class BotsTools(APIView):
+    @staticmethod
+    def post(request, bot_id, *args, **kwargs):
+        bot = Bot.objects.filter(pk=bot_id).first()
+        if not bot:
+            return my_json_response({}, code=100002, msg='bot_id is illegal')
+        request_data = request.data
+        serial = BotToolsCreateQuerySerializer(data=request_data)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        # check tool
+        validate_data = serial.validated_data
+        tools_res = RagBot.openapi_tools(
+            validate_data['name'], validate_data['url'], validate_data['openapi_json_path'],
+            validate_data['endpoints']
+        )
+        if not tools_res:
+            return my_json_response({}, code=110007, msg='AI工具校验失败，请检查AI工具信息')
+        _, data = bot_tools_create(request.user.id, bot_id, validate_data, checked=True)
+        return my_json_response(data)
+
+    @staticmethod
+    def put(request, bot_id, *args, **kwargs):
+        bot = Bot.objects.filter(pk=bot_id).first()
+        if not bot:
+            return my_json_response({}, code=100002, msg='bot_id is illegal')
+        request_data = request.data
+        bot_tool = BotTools.objects.filter(user_id=request.user.id, bot_id=bot_id, pk=request_data['id']).first()
+        if not bot_tool:
+            return my_json_response({}, code=100002, msg='tool_id is illegal')
+        serial = BotToolsUpdateQuerySerializer(data=request_data)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        # check tool
+        validate_data = serial.validated_data
+        tools_res = RagBot.openapi_tools(
+            validate_data['name'], validate_data['url'], validate_data['openapi_json_path'],
+            validate_data['endpoints']
+        )
+        if not tools_res:
+            return my_json_response({}, code=110007, msg='AI工具校验失败，请检查AI工具信息')
+        _, data = bot_tools_update(bot_tool, validate_data)
+        return my_json_response(data)
+
+    @staticmethod
+    def delete(request, bot_id, *args, **kwargs):
+        request_data = request.data
+        serial = BotToolsDeleteQuerySerializer(data=request_data)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        validated_data = serial.validated_data
+        tool = BotTools.objects.filter(user_id=request.user.id, bot_id=bot_id, pk=validated_data['id']).first()
+        if not tool:
+            return my_json_response({}, code=100002, msg='tools id is illegal')
+        tool.delete()
+        return my_json_response({'id': bot_id})
 
 
 @method_decorator([extract_json], name='dispatch')
@@ -137,9 +216,9 @@ class BotSubscribe(APIView):
             raise ValidationError(f'action is illegal must in {action_map}')
         bot = Bot.objects.filter(pk=bot_id).first()
         if not bot:
-            return my_json_response({}, code=100002, msg=_('bot_id is illegal'))
+            return my_json_response({}, code=100002, msg='bot_id is illegal')
         if bot.user_id == user_id:
-            return my_json_response({}, code=100003, msg=_('can not subscribe self bot'))
+            return my_json_response({}, code=100003, msg='can not subscribe self bot')
         bot_subscribe(user_id, bot_id, action)
         return my_json_response({'bot_id': bot_id})
 

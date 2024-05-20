@@ -4,7 +4,7 @@ from rest_framework import serializers
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from bot.models import Bot, BotCollection, HotBot
+from bot.models import Bot, BotCollection, HotBot, BotTools
 
 logger = logging.getLogger(__name__)
 
@@ -55,16 +55,18 @@ class BotCreateSerializer(serializers.Serializer):
                 collection_ids = [bc.collection_id for bc in bot_collections]
                 if set(v) != set(collection_ids):
                     attrs.append(k)
+            # elif k == 'tools':
+            #     attrs.append(k)
             elif getattr(instance, k) != v:
                 setattr(instance, k, v)
                 attrs.append(k)
-            # todo llm tools id updated
         return instance, bot_collections, attrs
 
 
 class BotDetailSerializer(BaseModelSerializer):
     prompt_spec = serializers.SerializerMethodField()
     collections = serializers.SerializerMethodField()
+    tools = serializers.SerializerMethodField()
 
     @staticmethod
     def get_prompt_spec(obj: Bot):
@@ -75,11 +77,26 @@ class BotDetailSerializer(BaseModelSerializer):
         bot_c = BotCollection.objects.filter(bot_id=obj.id, del_flag=False).all()
         return [bc.collection_id for bc in bot_c]
 
+    @staticmethod
+    def get_tools(obj: Bot):
+        if not obj.tools or not isinstance(obj.tools, list):
+            return None
+        tool_ids = [t['id'] for t in obj.tools if t.get('id')]
+        all_tools = BotTools.objects.filter(
+            bot_id__in=tool_ids, del_flag=False, checked=True, user_id=obj.user_id).all()
+        tools = []
+        tools_dict = {t.id: t for t in all_tools}
+        for t in obj.tools:
+            if t['id'] in tools_dict:
+                tools.append(tools_dict[t.id])
+        return BotToolsDetailSerializer(obj.tools, many=True).data
+
     class Meta:
         model = Bot
-
         fields = [
-            'id', 'user_id', 'author', 'title', 'description', 'prompt_spec', 'questions', 'collections', 'updated_at']
+            'id', 'user_id', 'author', 'title', 'description', 'prompt_spec', 'questions', 'collections',
+            'tools', 'updated_at'
+        ]
 
 
 class HotBotListSerializer(BaseModelSerializer):
@@ -164,3 +181,65 @@ class BotDocumentsQuerySerializer(serializers.Serializer):
             raise serializers.ValidationError(_('bot_id required'))
         return attrs
 
+
+class BotToolsCreateQuerySerializer(serializers.Serializer):
+    auth_type = serializers.ChoiceField(allow_null=True, choices=BotTools.AuthType, default=None)
+    name = serializers.CharField(max_length=128, trim_whitespace=False, allow_blank=True)
+    url = serializers.URLField(max_length=2048)
+    openapi_json_path = serializers.CharField(required=False, max_length=1024, default=None)
+    username_password_base64 = serializers.CharField(required=False, allow_null=True, default=None)
+    token = serializers.CharField(required=False, allow_null=True, default=None)
+    api_key = serializers.CharField(required=False, default=None)
+    custom_header = serializers.CharField(required=False, allow_null=True, max_length=128, default=None)
+    endpoints = serializers.JSONField(required=False, default=None)
+
+    def validate(self, attrs):
+        if attrs.get('name'):
+            attrs['name'] = attrs['name'][:128]
+        if attrs.get('openapi_json_path'):
+            attrs['openapi_json_path'] = attrs['openapi_json_path'][:1024]
+        attrs['endpoints'] = None
+        if attrs.get('auth_type'):
+            if attrs['auth_type'] == 'basic':
+                if not attrs.get('username_password_base64'):
+                    raise serializers.ValidationError(_('username_password_base64 required'))
+                attrs['endpoints'] = {
+                    'type': attrs['auth_type'],
+                    'username_and_passwd_b64': attrs['username_password_base64']
+                }
+            elif attrs['auth_type'] == 'bearer':
+                if not attrs.get('token'):
+                    raise serializers.ValidationError(_('token required'))
+                attrs['endpoints'] = {
+                    'type': attrs['auth_type'],
+                    'token': attrs['token']
+                }
+            else:
+                if not attrs.get('api_key'):
+                    raise serializers.ValidationError(_('api_key required'))
+                if not attrs.get('custom_header'):
+                    attrs['custom_header'] = 'X-API-KEY'
+                attrs['endpoints'] = {
+                    'type': attrs['auth_type'],
+                    'api_key': attrs['api_key'],
+                    'custom_header': attrs['custom_header']
+                }
+        return attrs
+
+
+class BotToolsUpdateQuerySerializer(BotToolsCreateQuerySerializer):
+    id = serializers.CharField(required=True, max_length=36)
+
+
+class BotToolsDetailSerializer(BaseModelSerializer):
+
+    class Meta:
+        model = BotTools
+        fields = [
+            'id', 'bot_id', 'name', 'url', 'openapi_json_path', 'auth_type',
+            'username_password_base64', 'token', 'api_key', 'custom_header',
+        ]
+
+
+class BotToolsDeleteQuerySerializer(serializers.Serializer):
+    id = serializers.CharField(required=True, max_length=36)

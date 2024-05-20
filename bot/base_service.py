@@ -189,6 +189,7 @@ def recreate_bot(bot: Bot, collections):
         bot.user_id,
         bot.prompt,
         bot.questions,
+        tools=bot.tools,
         paper_ids=collections_doc_ids(collections),
         public_collection_ids=public_collection_ids,
     )
