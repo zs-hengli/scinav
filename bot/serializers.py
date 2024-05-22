@@ -55,8 +55,6 @@ class BotCreateSerializer(serializers.Serializer):
                 collection_ids = [bc.collection_id for bc in bot_collections]
                 if set(v) != set(collection_ids):
                     attrs.append(k)
-            # elif k == 'tools':
-            #     attrs.append(k)
             elif getattr(instance, k) != v:
                 setattr(instance, k, v)
                 attrs.append(k)

@@ -5,6 +5,7 @@ from django.utils.translation import gettext_lazy as _
 from bot.models import Bot, BotCollection, BotSubscribe
 from bot.rag_service import Bot as RagBot
 from bot.serializers import BotDetailSerializer
+from chat.serializers import ConversationCreateBaseSerializer
 from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionDocumentListSerializer
 from core.utils.exceptions import InternalServerError
@@ -185,6 +186,17 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
 def recreate_bot(bot: Bot, collections):
     RagBot.delete(bot.agent_id)
     public_collection_ids = [c.id for c in collections if c.type == c.TypeChoices.PUBLIC]
+    papers_info = ConversationCreateBaseSerializer.get_papers_info(
+        user_id=bot.user_id, bot_id=bot.id, collection_ids=[c.id for c in collections], document_ids=[]
+    )
+    paper_ids = []
+    for p in papers_info:
+        paper_ids.append({
+            'collection_id': p['collection_id'],
+            'collection_type': p['collection_type'],
+            'doc_id': p['doc_id'],
+            'full_text_accessible': p['full_text_accessible']
+        })
     rag_ret = RagBot.create(
         bot.user_id,
         bot.prompt,

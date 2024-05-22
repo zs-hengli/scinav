@@ -2,7 +2,7 @@ import logging
 
 from django.core.cache import cache
 
-from collection.models import Collection
+from collection.models import Collection, CollectionDocument
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentRagCreateSerializer
 from bot.rag_service import Document as RagDocument
@@ -81,3 +81,19 @@ def search_result_delete_cache(user_id):
     if keys:
         return cache.delete_many(keys)
     return True
+
+
+def bot_documents(user_id, bot, collections=None):
+    if not collections:
+        collections = Collection.objects.filter(
+            bot_id=bot.id, del_flag=False, type=Collection.TypeChoices.PERSONAL).all()
+    collection_ids = [coll.id for coll in collections]
+    coll_docs = CollectionDocument.objects.filter(collection_id__in=collection_ids, del_flag=False).all()
+    document_ids = [d.document_id for d in coll_docs]
+    if user_id == bot.user_id:
+        return document_ids
+    documents = Document.objects.filter(id__in=document_ids, del_flag=False).all()
+    pub_documents = [d for d in documents if d.collection_type == Collection.TypeChoices.PUBLIC]
+    personal_documents = [d for d in documents if d.collection_type == Collection.TypeChoices.PERSONAL]
+    documents = DocumentLibrary.objects.filter(
+        user_id=user_id, collection_id__in=collection_ids, del_flag=False).values_list('document_id', flat=True).all()

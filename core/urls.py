@@ -24,4 +24,6 @@ urlpatterns = [
     path('api/v1/', include('chat.urls')),
     path('api/v1/', include('collection.urls')),
     path('api/v1/', include('document.urls')),
+    path('openapi/v1/', include('openapi.urls')),
+    path('api/v1/', include('openapi.urls')),
 ]

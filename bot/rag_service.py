@@ -418,7 +418,8 @@ class Conversations:
             question.save()
 
         yield json.dumps({
-            'event': 'conversation', 'id': conversation_id, 'question_id': str(question.id) if question else None
+            'event': 'conversation', 'name': None, 'run_id': None,
+            'id': conversation_id, 'question_id': str(question.id) if question else None
         }) + '\n'
         conversation.last_used_at = datetime.datetime.now()
         try:

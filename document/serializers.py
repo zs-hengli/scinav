@@ -19,6 +19,25 @@ class BaseModelSerializer(serializers.ModelSerializer):
     updated_at = serializers.DateTimeField(required=False, format="%Y-%m-%d %H:%M:%S")
 
 
+class SearchQuerySerializer(serializers.Serializer):
+    content = serializers.CharField(
+        required=True, max_length=1024,
+        help_text='The query content based on which the search is performed. <br>'
+                  'This could be `text`, `keywords`, or any other form of searchable content.')
+    page_size = serializers.IntegerField(
+        min_value=1, max_value=2000, required=False, default=10,
+        help_text='number of records per page'
+    )
+    page_num = serializers.IntegerField(
+        min_value=1, required=False, default=1,
+        help_text='page number begin with 1'
+    )
+    topn = serializers.IntegerField(
+        min_value=1, max_value=1000, required=False, default=100,
+        help_text='max records to return the search results'
+    )
+
+
 class DocumentApaListSerializer(serializers.ModelSerializer):
     doc_apa = serializers.SerializerMethodField()
 
@@ -243,15 +262,44 @@ class DocumentLibraryListQuerySerializer(serializers.Serializer):
 
 
 class DocumentLibraryPersonalSerializer(serializers.Serializer):
-    id = serializers.CharField(required=True, allow_null=True)
-    filename = serializers.CharField(required=True)
-    document_title = serializers.CharField(required=True, allow_blank=True)
-    document_id = serializers.CharField(required=True, allow_null=True)
-    pages = serializers.IntegerField(required=False, allow_null=True, default=None)
-    record_time = serializers.DateTimeField(required=True, format="%Y-%m-%d %H:%M:%S", allow_null=True)
-    type = serializers.CharField(required=False, default=Collection.TypeChoices.PUBLIC)
-    reference_type = serializers.CharField(required=False, allow_null=True, default=None)
-    status = serializers.CharField(required=False, default='-')
+    id = serializers.CharField(
+        required=True, allow_null=True,
+        help_text='The id of the personal document library',
+    )
+    filename = serializers.CharField(
+        required=True,
+        help_text='The filename of document uploaded by person',
+    )
+    document_title = serializers.CharField(
+        required=True, allow_blank=True,
+        help_text='The title of the personal document library related paper',
+    )
+    document_id = serializers.CharField(
+        required=True, allow_null=True,
+        help_text='The id of the personal document library related paper',
+    )
+    pages = serializers.IntegerField(
+        required=False, allow_null=True, default=None,
+        help_text='The number of pages of the personal document library related paper',
+    )
+    record_time = serializers.DateTimeField(
+        required=True, format="%Y-%m-%d %H:%M:%S", allow_null=True,
+        help_text='The time when the personal document library was added',
+    )
+    type = serializers.CharField(
+        required=False, default=Collection.TypeChoices.PERSONAL,
+        help_text='The type of the personal document library [`personal`, `public`] '
+                  'personal if add to personal library manual, public if the paper is arxiv',
+    )
+    reference_type = serializers.CharField(
+        required=False, allow_null=True, default=None,
+        help_text='The type of the personal document library reference in '
+                  '[`public`, `reference`, `reference&full_text_accessible`]',
+    )
+    status = serializers.CharField(
+        required=False, default='-',
+        help_text='The status of the personal document library in [`error`, `completed`, `in_progress`]',
+    )
 
 
 class DocumentLibrarySubscribeSerializer(DocumentLibraryPersonalSerializer):

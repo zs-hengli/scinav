@@ -33,6 +33,8 @@ class Conversation(models.Model):
     del_flag = models.BooleanField(default=False, db_default=False)
     last_used_at = models.DateTimeField(null=True, auto_now=True)
     is_named = models.BooleanField(default=False, db_default=False)
+    is_api = models.BooleanField(default=False, db_default=False)
+    source = models.CharField(null=True, blank=True, max_length=1024, default=None, db_default=None)
     updated_at = models.DateTimeField(null=True, auto_now=True)
     created_at = models.DateTimeField(null=True, auto_now_add=True)
 

@@ -68,9 +68,10 @@ class CollectionCreateSerializer(serializers.ModelSerializer):
                     doc_lib_title = DocumentLibrary.objects.filter(
                         document_id=d['id'], del_flag=False, filename__isnull=False
                     ).values_list('filename', flat=True).first()
-                    titles.append(doc_lib_title)
-                titles.append(d['title'])
-            attrs['document_titles'] = list(titles)
+                    if doc_lib_title: titles.append(doc_lib_title)
+                else:
+                    titles.append(d['title'])
+            attrs['document_titles'] = titles
 
         return attrs
 

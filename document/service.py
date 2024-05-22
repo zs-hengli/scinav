@@ -1,5 +1,4 @@
 import json
-import json
 import logging
 
 import boto3
@@ -18,8 +17,7 @@ from core.utils.common import str_hash
 from core.utils.exceptions import ValidationError
 from document.base_service import document_update_from_rag_ret, update_document_lib, search_result_delete_cache
 from document.models import Document, DocumentLibrary
-from document.serializers import DocumentRagUpdateSerializer, \
-    DocumentLibraryPersonalSerializer, DocLibAddQuerySerializer, \
+from document.serializers import DocumentLibraryPersonalSerializer, DocLibAddQuerySerializer, \
     DocumentLibraryListQuerySerializer, DocumentRagCreateSerializer
 from document.tasks import async_document_library_task, async_update_document, async_update_conversation_by_collection
 

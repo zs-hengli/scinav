@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'log_request_id',
     'corsheaders',
     'rest_framework',
+    'drf_spectacular',
     'django_celery_results',
     'django_celery_beat',
     'user',
@@ -51,6 +52,7 @@ INSTALLED_APPS = [
     'chat',
     'collection',
     'document',
+    'openapi',
 ]
 
 MIDDLEWARE = [
@@ -216,18 +218,45 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ],
     'DEFAULT_PARSER_CLASSES': (
         'core.utils.views.ServerSentEventRenderer',
         'rest_framework.parsers.JSONParser',
+        'rest_framework.parsers.FormParser',
+        'rest_framework.parsers.MultiPartParser',
+        'rest_framework.parsers.FileUploadParser',
         'rest_framework.renderers.BrowsableAPIRenderer',
     ),
 
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'core.utils.authentication.MyAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.BasicAuthentication',
-        # # 'rest_framework_jwt.authentication.JSONWebTokenAuthentication',
+        # 'rest_framework.authentication.SessionAuthentication',
+        # 'rest_framework.authentication.BasicAuthentication',
+        # 'rest_framework_jwt.authentication.JSONWebTokenAuthentication',
     ),
+
+
+    # throttle
+    'DEFAULT_THROTTLE_CLASSES': (
+        # 'rest_framework.throttling.AnonRateThrottle',
+        # 'rest_framework.throttling.UserRateThrottle',
+        # 'core.utils.throttling.UserRateThrottle',
+    ),
+    'DEFAULT_THROTTLE_RATES': {
+        'user_rate': '1/s',
+    },
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Science Navigator Open API',
+    'DESCRIPTION': 'Science Navigator Open API',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    "PREPROCESSING_HOOKS": ["core.openapi.preprocessing_filter_spec"],
+    # OTHER SETTINGS
 }
 
 # Internationalization

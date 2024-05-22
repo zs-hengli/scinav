@@ -162,7 +162,10 @@ def async_update_conversation_by_collection(self, collection_id):
             bot_collections = BotCollection.objects.filter(
                 bot_id=bot.id, del_flag=False).values_list('collection_id', flat=True).all()
             collections = Collection.objects.filter(id__in=bot_collections, del_flag=False).all()
+            old_agent_id = bot.agent_id
             recreate_bot(bot, collections)
+            bot.save()
+            Conversation.objects.filter(agent_id=old_agent_id).update(agent_id=bot.agent_id)
 
         conversations = Conversation.objects.filter(collections__contains=collection_id, del_flag=False).all()
         for conv in conversations:
