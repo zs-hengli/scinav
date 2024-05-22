@@ -281,12 +281,12 @@ def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
     query_set, doc_lib_document_ids, sub_bot_document_ids, ref_ds = \
         CollectionDocumentListSerializer.get_collection_documents(
             user_id, collection_ids, 'personal&subscribe_full_text', bot)
-    full_text_documents = [d['document_id'] for d in doc_lib_document_ids]
+    full_text_documents = doc_lib_document_ids
 
     # 订阅专题会话 获取 full_text_documents
     # 订阅了专题广场里面的非本人专题
     if bot and bot.type == Bot.TypeChoices.PUBLIC and is_sub and user_id != bot.user_id:
-        full_text_documents += [d['document_id'] for d in sub_bot_document_ids]
+        full_text_documents += sub_bot_document_ids
         documents = [d for d in documents if d['collection_type'] == 'public']
         if ref_ds and is_sub:
             ref_documents = Document.objects.filter(id__in=ref_ds).values(
