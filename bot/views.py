@@ -11,9 +11,10 @@ from bot.base_service import bot_detail, bot_documents
 from bot.models import Bot, HotBot, BotTools
 from bot.rag_service import Bot as RagBot
 from bot.serializers import BotCreateSerializer, BotListQuerySerializer, BotDocumentsQuerySerializer, \
-    BotToolsCreateQuerySerializer, BotToolsUpdateQuerySerializer, BotToolsDeleteQuerySerializer
+    BotToolsCreateQuerySerializer, BotToolsUpdateQuerySerializer, BotToolsDeleteQuerySerializer, BotDetailSerializer
 from bot.service import (bot_create, bot_delete, bot_publish, bot_subscribe, bot_update, hot_bots, get_bot_list,
-                         bot_tools_create, bot_tools_update)
+                         bot_tools_create, bot_tools_update, formate_bot_tools, del_invalid_bot_tools,
+                         bot_tools_add_bot_id)
 from document.tasks import async_add_user_operation_log
 from core.utils.exceptions import ValidationError
 from core.utils.views import extract_json, my_json_response
@@ -99,16 +100,18 @@ class Bots(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         vd = serial.validated_data
-        logger.debug(f'dddddddddd1 validated_data: {vd}')
+        tools = None
         if vd.get('tools'):
-            tools_serial = BotToolsUpdateQuerySerializer(data=vd['tools'], many=True)
-            if not tools_serial.is_valid():
-                return my_json_response(
-                    tools_serial.errors, code=100001, msg=f'validate error, {list(tools_serial.errors.keys())}'
-                )
-            vd['tools'] = tools_serial.validated_data
-            logger.debug(f'dddddddddd2 validated_data: {vd}')
-        data = bot_create(vd)
+            vd['tools'], tools = formate_bot_tools(vd['tools'])
+        bot = bot_create(vd)
+        tool_ids = []
+        if tools:
+            bot.tools, _ = bot_tools_add_bot_id(bot.id, tools)
+            tool_ids = [t['id'] for t in bot.tools]
+            bot.save()
+        del_invalid_bot_tools(bot.id, tool_ids)
+
+        data = BotDetailSerializer(bot).data
         return my_json_response(data)
 
     @staticmethod
@@ -124,13 +127,11 @@ class Bots(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         vd = serial.validated_data
+        tool_ids = []
         if vd.get('tools'):
-            tools_serial = BotToolsUpdateQuerySerializer(data=vd['tools'], many=True)
-            if not tools_serial.is_valid():
-                return my_json_response(
-                    tools_serial.errors, code=100001, msg=f'validate error, {list(tools_serial.errors)}'
-                )
-            vd['tools'] = tools_serial.validated_data
+            vd['tools'], _ = formate_bot_tools(vd['tools'])
+            tool_ids = [t['id'] for t in vd['tools']]
+        del_invalid_bot_tools(bot.id, tool_ids)
         del vd['type']  # update bot not update type
         updated_bot, bot_collections, updated_attrs = serial.updated_attrs(bot, vd)
         data = bot_update(updated_bot, bot_collections, updated_attrs, vd)
@@ -148,11 +149,13 @@ class Bots(APIView):
 @method_decorator(require_http_methods(['POST', 'PUT', 'DELETE', ]), name='dispatch')
 class BotsTools(APIView):
     @staticmethod
-    def post(request, bot_id, *args, **kwargs):
-        bot = Bot.objects.filter(pk=bot_id).first()
-        if not bot:
-            return my_json_response({}, code=100002, msg='bot_id is illegal')
+    def post(request, *args, **kwargs):
         request_data = request.data
+        bot_id = request_data.get('bot_id', None)
+        if bot_id:
+            bot = Bot.objects.filter(pk=bot_id).first()
+            if not bot:
+                return my_json_response({}, code=100002, msg='bot_id is illegal')
         serial = BotToolsCreateQuerySerializer(data=request_data)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
@@ -168,11 +171,13 @@ class BotsTools(APIView):
         return my_json_response(data)
 
     @staticmethod
-    def put(request, bot_id, *args, **kwargs):
-        bot = Bot.objects.filter(pk=bot_id).first()
-        if not bot:
-            return my_json_response({}, code=100002, msg='bot_id is illegal')
+    def put(request, *args, **kwargs):
         request_data = request.data
+        bot_id = request_data.get('bot_id', None)
+        if bot_id:
+            bot = Bot.objects.filter(pk=bot_id).first()
+            if not bot:
+                return my_json_response({}, code=100002, msg='bot_id is illegal')
         bot_tool = BotTools.objects.filter(user_id=request.user.id, bot_id=bot_id, pk=request_data['id']).first()
         if not bot_tool:
             return my_json_response({}, code=100002, msg='tool_id is illegal')
@@ -191,8 +196,13 @@ class BotsTools(APIView):
         return my_json_response(data)
 
     @staticmethod
-    def delete(request, bot_id, *args, **kwargs):
+    def delete(request, *args, **kwargs):
         request_data = request.data
+        bot_id = request_data.get('bot_id', None)
+        if bot_id:
+            bot = Bot.objects.filter(pk=bot_id).first()
+            if not bot:
+                return my_json_response({}, code=100002, msg='bot_id is illegal')
         serial = BotToolsDeleteQuerySerializer(data=request_data)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
@@ -200,7 +210,6 @@ class BotsTools(APIView):
         tool = BotTools.objects.filter(user_id=request.user.id, bot_id=bot_id, pk=validated_data['id']).first()
         if not tool:
             return my_json_response({}, code=100002, msg='tools id is illegal')
-        tool.delete()
         return my_json_response({'id': bot_id})
 
 

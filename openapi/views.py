@@ -7,8 +7,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from core.utils.views import extract_json, my_json_response
+from document.service import get_url_by_object_path
 from openapi.models import OpenapiKey
-from openapi.serializers_api import OpenapiKeyCreateQuerySerializer, OpenapiKeyUpdateQuerySerializer, \
+from openapi.serializers import OpenapiKeyCreateQuerySerializer, OpenapiKeyUpdateQuerySerializer, \
     OpenapiListQuerySerializer
 from openapi.service import create_openapi_key, update_openapi_key, delete_openapi_key, list_openapi_key
 
@@ -22,8 +23,10 @@ class Index(APIView):
 
     def get(self, request, *args, **kwargs):  # noqa
         logger.debug(f'kwargs: {kwargs}')
-        logger.debug(f"dddddddd request.token: {request.headers}")
         data = {'desc': 'openapi index'}
+        logger.debug(f"dddddddd request.token: {request.headers}")
+        object_path = 'scinav-personal-upload/6618f9172e18b95b4e73b496/0MeVYh-104291857.pdf'
+        data = get_url_by_object_path(request.user.id, object_path)
         return my_json_response(data)
 
 

@@ -68,16 +68,16 @@ def check_openapi_key(request):
         _, openapi_key_id, openapi_key_str = openapi_key.split('-')
         logger.debug(f'openapi_key: {openapi_key}')
         openapi_key_id = int(openapi_key_id)
-        openapi_key = OpenapiKey.objects.filter(pk=openapi_key_id).first()
-        if not openapi_key:
-            logger.info(f"not found openapi_key: {openapi_key_id}")
+        openapi = OpenapiKey.objects.filter(pk=openapi_key_id).first()
+        if not openapi:
+            logger.info(f"not found openapi_key: {openapi}")
             return None, False
-        user = MyUser.objects.filter(pk=openapi_key.user_id).first()
-        check_res = OpenapiKey.key_check(openapi_key.api_key, openapi_key)
+        user = MyUser.objects.filter(pk=openapi.user_id).first()
+        check_res = OpenapiKey.key_check(openapi.api_key, openapi_key)
         if not user or not check_res:
             logger.warning(f'Invalid access_token, request.headers: {request.headers}')
             raise exceptions.AuthenticationFailed(gettext_lazy('Invalid access_token.'))
-        return user, openapi_key.id
+        return user, openapi.id
     return None, False
 
 

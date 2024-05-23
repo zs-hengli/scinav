@@ -8,7 +8,7 @@ from bot.base_service import recreate_bot, collections_doc_ids
 from bot.models import Bot, BotCollection, BotSubscribe, HotBot, BotTools
 from bot.rag_service import Bot as RagBot
 from bot.serializers import (BotDetailSerializer, BotListAllSerializer, HotBotListSerializer, BotListChatMenuSerializer,
-                             MyBotListAllSerializer, BotToolsDetailSerializer)
+                             MyBotListAllSerializer, BotToolsDetailSerializer, BotToolsUpdateQuerySerializer)
 from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionDocumentListSerializer
 from core.utils.exceptions import InternalServerError, ValidationError
@@ -71,7 +71,7 @@ def bot_create(body):
             BotCollection.objects.create(**bot_c_data)
     else:
         raise InternalServerError('RAG create bot failed')
-    return BotDetailSerializer(bot).data
+    return bot
 
 
 # 修改专题
@@ -316,3 +316,24 @@ def bot_tools_update(tool: BotTools, validated_data: dict):
     serial = BotToolsDetailSerializer(tool)
     tool = serial.update(tool, validated_data)
     return tool, BotToolsDetailSerializer(tool).data
+
+
+def formate_bot_tools(query_tools):
+    tools = BotTools.objects.filter(pk__in=[t['id'] for t in query_tools], del_flag=False).all()
+    formate_tools = BotToolsUpdateQuerySerializer(tools, many=True).data
+    return formate_tools, tools
+
+
+def bot_tools_add_bot_id(bot_id, tools):
+    for tool in tools:
+        if not tool.bot_id:
+            tool.bot_id = bot_id
+            tool.save()
+    formate_tools = BotToolsUpdateQuerySerializer(tools, many=True).data
+    return formate_tools, tools
+
+
+
+def del_invalid_bot_tools(bot_id, valid_tool_ids):
+    filter_query = Q(bot_id=bot_id, del_flag=False) & ~Q(id__in=valid_tool_ids)
+    BotTools.objects.filter(filter_query).update(del_flag=True)

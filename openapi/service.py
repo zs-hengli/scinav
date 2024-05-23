@@ -1,11 +1,42 @@
+import io
 import logging
 
+import requests
+from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db.models import Q
 
+from document.service import presigned_url, document_personal_upload
 from openapi.models import OpenapiKey
-from openapi.serializers_api import OpenapiKeyDetailSerializer, OpenapiKeyCreateDetailSerializer
+from openapi.serializers import OpenapiKeyDetailSerializer, OpenapiKeyCreateDetailSerializer
 
 logger = logging.getLogger(__name__)
+
+
+def upload_paper(user_id, file: InMemoryUploadedFile):
+    ret = presigned_url(user_id, file.name)
+    url = ret['presigned_url']
+    object_path = ret['object_path']
+    headers = {
+        'Content-Type': 'application/octet-stream',
+        'x-ms-blob-type': 'BlockBlob',
+    }
+
+    res = requests.put(url, data=file.file, headers=headers)
+
+    if res.status_code != 201:
+        logger.warning(f'upload_paper res.content: {res.content}')
+        return 100000, 'upload paper failed', {}
+    doc_person_lib_data = {
+        'user_id': user_id,
+        'files': [{
+            'object_path': object_path,
+            'filename': file.name,
+        }],
+    }
+    logger.info(f'upload paper, info: {doc_person_lib_data}')
+    document_personal_upload(doc_person_lib_data)
+    return 0, '', {'object_path': object_path}
+
 
 
 def create_openapi_key(user_id, validated_data):

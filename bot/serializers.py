@@ -181,6 +181,7 @@ class BotDocumentsQuerySerializer(serializers.Serializer):
 
 
 class BotToolsCreateQuerySerializer(serializers.Serializer):
+    bot_id = serializers.CharField(required=False, allow_null=True, default=None)
     auth_type = serializers.ChoiceField(allow_null=True, choices=BotTools.AuthType, default=None)
     name = serializers.CharField(max_length=128, trim_whitespace=False, allow_blank=True)
     url = serializers.URLField(max_length=2048)
@@ -241,3 +242,4 @@ class BotToolsDetailSerializer(BaseModelSerializer):
 
 class BotToolsDeleteQuerySerializer(serializers.Serializer):
     id = serializers.CharField(required=True, max_length=36)
+    bot_id = serializers.CharField(required=False, allow_null=True, default=None)

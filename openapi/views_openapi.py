@@ -12,16 +12,18 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from bot.models import Bot
+from bot.service import bot_list_all, bot_list_my
 from chat.serializers import ChatQuerySerializer
 from chat.service import chat_query
 from core.utils.throttling import UserRateThrottle
 from core.utils.views import extract_json, my_json_response, streaming_response
-from document.serializers import SearchQuerySerializer, DocumentLibraryListQuerySerializer
-from document.service import search
+from document.serializers import SearchQuerySerializer
+from document.service import search, presigned_url, get_document_library_list
 from document.tasks import async_add_user_operation_log
-from openapi.serializers import ChatResponseSerializer, UploadFileResponseSerializer, SearchResponseSerializer, \
-    TopicPlazaRequestSerializer, TopicPlazaResponseSerializer, PersonalLibraryRequestSerializer, \
-    PersonalLibraryResponseSerializer
+from openapi.serializers_openapi import ChatResponseSerializer, UploadFileResponseSerializer, \
+    SearchResponseSerializer, TopicPlazaRequestSerializer, TopicPlazaResponseSerializer, \
+    PersonalLibraryRequestSerializer, PersonalLibraryResponseSerializer
+from openapi.service import upload_paper
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +160,7 @@ class Chat(APIView):
                 'event': 'on_error', 'error_code': 100002, 'error': 'bot not found', 'detail': {}}) + '\n'
             logger.error(f'error msg: {out_str}')
             return streaming_response(iter(out_str))
-        data = chat_query(request.user.id, validated_data)
+        data = chat_query(user_id, validated_data)
         return streaming_response(data)
 
 
@@ -182,26 +184,13 @@ class UploadPaper(APIView):
         },
     )
     def put(request, filename, *args, **kwargs):
-        parser_class = (FileUploadParser,)
-        data = {}
         user_id = request.user.id
         file: InMemoryUploadedFile = request.data.get('file')
         if not file:
-            return my_json_response(code=100001, msg='file is required')
-        logger.info(request.data.get('file'))
-        content_type = file.content_type
-        file_data = {
-            'name': file.name,
-            'content_type': content_type,
-            'size': file.size,
-            'user_id': user_id,
-            'filename': filename,
-            'content_type_extra': file.content_type_extra,
-            'file': file.file,
-        }
-        logger.debug(f'dddddddd: file_data: {file_data}')
-
-        return my_json_response(data)
+            return my_json_response(code=100001, msg='file not found')
+        # logger.debug(f'ddddddddd file: {file.name}, {file.file}')
+        code, msg, data = upload_paper(user_id, file)
+        return my_json_response(data, code, msg)
 
 
 @method_decorator([extract_json], name='dispatch')
@@ -220,8 +209,12 @@ class TopicPlaza(APIView):
         }
     )
     def get(request, *args, **kwargs):
-        data = {}
-
+        query = request.query_params.dict()
+        serial = TopicPlazaRequestSerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        vd = serial.validated_data
+        data = bot_list_all(request.user.id, vd['page_size'], vd['page_num'])
         return my_json_response(data)
 
 
@@ -240,8 +233,12 @@ class MyTopics(APIView):
         }
     )
     def get(request, *args, **kwargs):
-        data = {}
-
+        query = request.query_params.dict()
+        serial = TopicPlazaRequestSerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        vd = serial.validated_data
+        data = bot_list_my(request.user.id, vd['page_size'], vd['page_num'])
         return my_json_response(data)
 
 
@@ -260,6 +257,10 @@ class PersonalLibrary(APIView):
         }
     )
     def get(request, *args, **kwargs):
-        data = {}
-
+        query = request.query_params.dict()
+        serial = PersonalLibraryRequestSerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        vd = serial.validated_data
+        data = get_document_library_list(request.user.id, vd['list_type'], vd['page_size'], vd['page_num'])
         return my_json_response(data)
