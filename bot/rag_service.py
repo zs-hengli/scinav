@@ -9,6 +9,8 @@ from django.conf import settings
 from requests import RequestException
 
 from chat.models import Question, Conversation
+from openapi.base_service import record_openapi_log
+from openapi.models import OpenapiLog
 
 logger = logging.getLogger(__name__)
 
@@ -326,7 +328,7 @@ class Conversations:
         return stream
 
     @staticmethod
-    def query(user_id, conversation_id, content, question_id=None, streaming=True, response_format='events'):
+    def query(user_id, conversation_id, content, question_id=None, openapi_key_id=None):
         error_msg = '很抱歉，当前服务出现了异常，无法完成您的请求。请稍后再试，或者联系我们的技术支持团队获取帮助。谢谢您的理解和耐心等待。'
         url = RAG_HOST + '/api/v1/query/conversation'
         post_data = {
@@ -416,6 +418,12 @@ class Conversations:
             question.output_tokens = stream.get('statistics', {}).get('output_tokens', 0)
             if not question.is_stop: question.answer = ''.join(stream['chunk'])
             question.save()
+            if openapi_key_id:
+                model = question.model
+                if not model: model = 'gpt-3.5-turbo'
+                record_openapi_log(
+                    user_id, openapi_key_id, OpenapiLog.Api.CONVERSATION, OpenapiLog.Status.SUCCESS,
+                    model=model, obj_id1=conversation_id, obj_id2=question.id,)
 
         yield json.dumps({
             'event': 'conversation', 'name': None, 'run_id': None,

@@ -37,11 +37,6 @@ def custom_exception_handler(exc, context):
         'validation_errors': {},
         'request_id': exception_id,
     }
-    if (
-        context and context.get('request') and context['request'].path
-        and context['request'].path.endswith('api/v1/chat')
-    ):
-        return StreamingHttpResponse(iter(json.dumps(response_data)), content_type='text/event-stream')
 
     # try rest framework handler
     response = exception_handler(exc, context)
@@ -61,6 +56,11 @@ def custom_exception_handler(exc, context):
         response_data['validation_errors'] = exc_tb
         response = Response(status=rfd_status.HTTP_500_INTERNAL_SERVER_ERROR, data=response_data)
 
+    if (
+        context and context.get('request') and context['request'].path
+        and context['request'].path.endswith('api/v1/chat')
+    ):
+        return StreamingHttpResponse(iter(json.dumps(response_data)), content_type='text/event-stream')
     return response
 
 

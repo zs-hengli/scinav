@@ -16,7 +16,7 @@ from document.models import DocumentLibrary, Document
 logger = logging.getLogger(__name__)
 
 
-def conversation_create(user_id, validated_data):
+def conversation_create(user_id, validated_data, openapi_kay_id=None):
     vd = validated_data
     title = vd['content'][:128] if vd.get('content') else None
     # 判断 chat类型
@@ -49,6 +49,7 @@ def conversation_create(user_id, validated_data):
                 type=Collection.TypeChoices.PERSONAL,
                 total_personal=len(vd['documents']),
                 updated_at=datetime.datetime.now(),
+                is_api=True if openapi_kay_id else False,
             )
             c_doc_objs = []
             d_lib = DocumentLibrary.objects.filter(
@@ -183,7 +184,7 @@ def conversation_list(validated_data):
     user_id = validated_data['user_id']
     page_num = validated_data['page_num']
     page_size = validated_data['page_size']
-    query_set = Conversation.objects.filter(user_id=user_id, del_flag=False).values_list(
+    query_set = Conversation.objects.filter(user_id=user_id, del_flag=False, is_api=False).values_list(
         'id', 'title', 'last_used_at', named=True).order_by('-last_used_at')
     filter_count = query_set.count()
     start_num = page_size * (page_num - 1)
@@ -198,11 +199,11 @@ def conversation_list(validated_data):
 
 def conversation_menu_list(user_id, list_type='all'):
     if list_type == 'all':
-        query_set = Conversation.objects.filter(user_id=user_id, del_flag=False).values_list(
+        query_set = Conversation.objects.filter(user_id=user_id, del_flag=False, is_api=False).values_list(
             'id', 'title', 'last_used_at', 'bot_id', named=True).order_by('-last_used_at')
     else:  # list_type == 'no_bot'
         query_set = Conversation.objects.filter(
-            user_id=user_id, del_flag=False, bot_id__isnull=True).values_list(
+            user_id=user_id, del_flag=False, bot_id__isnull=True, is_api=False).values_list(
             'id', 'title', 'last_used_at', 'bot_id', named=True).order_by('-last_used_at')
 
     list_data = ConversationListSerializer(query_set.all(), many=True).data
@@ -247,9 +248,10 @@ def conversation_menu_list(user_id, list_type='all'):
     }
 
 
-def chat_query(user_id, validated_data):
+def chat_query(user_id, validated_data, openapi_key_id=None):
     if not validated_data.get('conversation_id'):
-        conversation_id = conversation_create(user_id, validated_data)
+        conversation_id = conversation_create(user_id, validated_data, openapi_key_id)
     else:
         conversation_id = validated_data['conversation_id']
-    return RagConversation.query(user_id, conversation_id, validated_data['content'], validated_data.get('question_id'))
+    return RagConversation.query(
+        user_id, conversation_id, validated_data['content'], validated_data.get('question_id'), openapi_key_id)

@@ -10,8 +10,9 @@ from core.utils.views import extract_json, my_json_response
 from document.service import get_url_by_object_path
 from openapi.models import OpenapiKey
 from openapi.serializers import OpenapiKeyCreateQuerySerializer, OpenapiKeyUpdateQuerySerializer, \
-    OpenapiListQuerySerializer
-from openapi.service import create_openapi_key, update_openapi_key, delete_openapi_key, list_openapi_key
+    OpenapiListQuerySerializer, UsageBaseSerializer, UsageChatQuerySerializer
+from openapi.service import create_openapi_key, update_openapi_key, delete_openapi_key, list_openapi_key, \
+    usage_document_extract, usage_conversation
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +25,6 @@ class Index(APIView):
     def get(self, request, *args, **kwargs):  # noqa
         logger.debug(f'kwargs: {kwargs}')
         data = {'desc': 'openapi index'}
-        logger.debug(f"dddddddd request.token: {request.headers}")
-        object_path = 'scinav-personal-upload/6618f9172e18b95b4e73b496/0MeVYh-104291857.pdf'
-        data = get_url_by_object_path(request.user.id, object_path)
         return my_json_response(data)
 
 
@@ -41,7 +39,7 @@ class ApiKey(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, 100001, msg=f'validate error, {list(serial.errors.keys())}')
         vd = serial.validated_data
-        data = list_openapi_key(request.user.id, vd['page_size'], vd['page_num'])
+        data = list_openapi_key(request.user.id, vd['page_size'], vd['page_num'], vd['is_all'])
         return my_json_response(data)
 
     @staticmethod
@@ -74,3 +72,29 @@ class ApiKey(APIView):
             return my_json_response({}, 100001, msg='openapi key not found')
         delete_openapi_key(openapi_key)
         return my_json_response({'id': openapi_id})
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+class DocumentExtractUsage(APIView):
+    @staticmethod
+    def get(request, *args, **kwargs):
+        query = request.query_params.dict()
+        serial = UsageBaseSerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, 100001, msg=f'validate error, {list(serial.errors.keys())}')
+        data = usage_document_extract(request.user.id, serial.validated_data)
+        return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+class ConversationUsage(APIView):
+    @staticmethod
+    def get(request, *args, **kwargs):
+        query = request.query_params.dict()
+        serial = UsageChatQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, 100001, msg=f'validate error, {list(serial.errors.keys())}')
+        data = usage_conversation(request.user.id, serial.validated_data)
+        return my_json_response(data)

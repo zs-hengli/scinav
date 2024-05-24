@@ -238,8 +238,9 @@ class DocumentsPersonal(APIView):
         serial = DocumentUploadQuerySerializer(data=query)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg='invalid post data')
-        data = document_personal_upload(serial.validated_data)
-        return my_json_response(data)
+        validated_data = serial.validated_data
+        document_personal_upload(validated_data)
+        return my_json_response(validated_data)
 
 
 @method_decorator([extract_json], name='dispatch')

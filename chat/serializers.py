@@ -24,7 +24,7 @@ class ConversationCreateBaseSerializer(serializers.Serializer):
     documents = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
     collections = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
     bot_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, min_length=32, max_length=36)
-    model = serializers.ChoiceField(choices=['gpt-3.5-turbo', 'gpt-4o'], required=False, default=None)
+    model = serializers.ChoiceField(choices=Conversation.LLMModel, required=False, default=None)
 
     def validate(self, attrs):
         if attrs.get('conversation_id'):
@@ -111,7 +111,7 @@ class ConversationUpdateSerializer(serializers.Serializer):
     title = serializers.CharField(required=False, min_length=1, max_length=128, allow_blank=True, trim_whitespace=False)
     collections = serializers.ListField(
         required=False, child=serializers.CharField(min_length=1), allow_null=True)
-    model = serializers.ChoiceField(choices=['gpt-3.5-turbo', 'gpt-4o'], required=False, default=None)
+    model = serializers.ChoiceField(choices=Conversation.LLMModel, required=False, default=None)
 
     def validate(self, attrs):
         if attrs.get('collections') is None and not attrs.get('title') and not attrs.get('model'):

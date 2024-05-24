@@ -1,5 +1,6 @@
-from django.db import models
+import logging
 
+from django.db import models, connection
 from django.utils.translation import gettext_lazy as _
 
 from core.utils.common import str_hash
@@ -7,7 +8,21 @@ from core.utils.utils import random_str
 from user.models import MyUser
 
 
-# Create your models here.
+logger = logging.getLogger(__name__)
+
+
+def my_custom_sql(sql, params=None, ret_dict=True):
+    with connection.cursor() as cursor:
+        cursor.execute(sql, params)
+        if ret_dict:
+            return dict_fetchall(cursor)
+        rows = cursor.fetchall()
+    return rows
+
+
+def dict_fetchall(cursor):
+    columns = [col[0] for col in cursor.description]
+    return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 
 class OpenapiKey(models.Model):
@@ -61,6 +76,7 @@ class OpenapiLog(models.Model):
     """
     openapi日志
     """
+
     class Status(models.IntegerChoices):
         UNKNOWN = 0
         SUCCESS = 1
@@ -80,7 +96,7 @@ class OpenapiLog(models.Model):
     openapi_key = models.ForeignKey(
         OpenapiKey, db_constraint=False, on_delete=models.DO_NOTHING, null=True
     )
-    model = models.CharField(max_length=256, null=False, blank=True, default='', db_default='')
+    model = models.CharField(max_length=256, null=True, default=None, db_default=None)
     api = models.IntegerField(choices=Api, db_index=True)
     obj_id1 = models.CharField(null=True, db_index=True, max_length=40, default=None, db_default=None)
     obj_id2 = models.CharField(null=True, db_index=True, max_length=40, default=None, db_default=None)
@@ -88,6 +104,38 @@ class OpenapiLog(models.Model):
     status = models.IntegerField(choices=Status, default=Status.UNKNOWN, db_default=Status.UNKNOWN)
     updated_at = models.DateTimeField(null=True, auto_now=True)
     created_at = models.DateTimeField(null=False, db_index=True, auto_now_add=True)
+
+    @staticmethod
+    def static_by_month(user_id, api: int, min_date, openapi_key_id: int, model=None):
+        sql = OpenapiLog.get_static_sql(user_id, api, min_date, openapi_key_id, model, 'YYYY/MM')
+        return my_custom_sql(sql)
+
+    @staticmethod
+    def static_by_day(user_id, api: int, min_date, openapi_key_id: int, model=None):
+        sql = OpenapiLog.get_static_sql(user_id, api, min_date, openapi_key_id, model, 'YYYY/MM/DD')
+        logger.debug(f'static_by_day sql: {sql}')
+        return my_custom_sql(sql)
+
+    @staticmethod
+    def get_static_sql(user_id, api: int, min_date, openapi_key_id: int, model=None, date_format=None):
+        status = OpenapiLog.Status.SUCCESS
+        if (model and model != 'all') or api != OpenapiLog.Api.CONVERSATION:
+            sql = f"SELECT to_char(created_at::DATE, '{date_format}') as date, count(*) as count FROM openapi_log"
+        else:
+            sql = f"SELECT model, to_char(created_at::DATE, '{date_format}') as date, count(*) as count FROM openapi_log"
+
+        # where
+        sql += f" WHERE user_id='{user_id}' and created_at>'{min_date}' and api={api} and status={status}"
+        if openapi_key_id and openapi_key_id != 'all':
+            sql += f" and openapi_key_id={openapi_key_id}"
+        if model and model != 'all':
+            sql += f" and model='{model}'"
+
+        if (model and model != 'all') or api != OpenapiLog.Api.CONVERSATION:
+            sql += f" group by date order by date"
+        else:
+            sql += f" group by date, model order by date, model"
+        return sql
 
     class Meta:
         db_table = 'openapi_log'

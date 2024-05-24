@@ -1,13 +1,10 @@
-import json
 import logging
 import os
 import time
 
 import binascii
-from django.core.cache import cache
 # from django.core.cache import cache
 from django.utils.translation import gettext_lazy
-from drf_spectacular.extensions import OpenApiAuthenticationExtension
 from rest_framework import exceptions
 from rest_framework.authentication import BaseAuthentication
 
@@ -61,14 +58,13 @@ def check_openapi_key(request):
     openapi_key = request.headers.get('Openapi-Key')
     my_sk = 'sk-' + '0' * 9 + '1'
     if openapi_key == my_sk:
-        openapi_key = 'sk-0000000001-aYQ9WtMPCyXqrBOUNFAVmcp5EdJZ36gleLKvxjuRnI4b1h8T'
         user = MyUser.objects.filter(pk='af35a6ea-d9db-442c-8fd1-88a69846424e').first()
         return user, 1
     if openapi_key:
         _, openapi_key_id, openapi_key_str = openapi_key.split('-')
         logger.debug(f'openapi_key: {openapi_key}')
         openapi_key_id = int(openapi_key_id)
-        openapi = OpenapiKey.objects.filter(pk=openapi_key_id).first()
+        openapi = OpenapiKey.objects.filter(pk=openapi_key_id, del_flag=False).first()
         if not openapi:
             logger.info(f"not found openapi_key: {openapi}")
             return None, False

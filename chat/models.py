@@ -18,6 +18,11 @@ class Conversation(models.Model):
         MIX_COV = 'mix', _('mix')
         SIMPLE_COV = 'simple', _('simple')
 
+    class LLMModel(models.TextChoices):
+        GPT_3_5_TURBO = 'gpt-3.5-turbo', _('gpt-3.5-turbo')
+        # GPT_4 = 'gpt-4', _('gpt-4')
+        GPT_4O = 'gpt-4o', _('gpt-4o')
+
     id = models.CharField(max_length=36, primary_key=True, default=uuid.uuid4)
     title = models.CharField(null=True, blank=True, max_length=200, default=None, db_default=None)
     user = models.ForeignKey(

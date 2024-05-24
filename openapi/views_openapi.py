@@ -20,10 +20,12 @@ from core.utils.views import extract_json, my_json_response, streaming_response
 from document.serializers import SearchQuerySerializer
 from document.service import search, presigned_url, get_document_library_list
 from document.tasks import async_add_user_operation_log
+from openapi.base_service import record_openapi_log
+from openapi.models import OpenapiLog
 from openapi.serializers_openapi import ChatResponseSerializer, UploadFileResponseSerializer, \
     SearchResponseSerializer, TopicPlazaRequestSerializer, TopicPlazaResponseSerializer, \
     PersonalLibraryRequestSerializer, PersonalLibraryResponseSerializer
-from openapi.service import upload_paper
+from openapi.service import upload_paper, get_request_openapi_key_id
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +87,7 @@ class Search(APIView):
         responses={200: SearchResponseSerializer},
     )
     def post(request, *args, **kwargs):
+        openapi_key_id = get_request_openapi_key_id(request)
         user_id = request.user.id
         query = request.data
         serial = SearchQuerySerializer(data=query)
@@ -101,6 +104,7 @@ class Search(APIView):
             'operation_content': post_data['content'],
             'source': 'api'
         })
+        # record_openapi_log(user_id, openapi_key_id, OpenapiLog.Api.SEARCH, OpenapiLog.Status.SUCCESS)
         return my_json_response(data)
 
 
@@ -142,6 +146,7 @@ class Chat(APIView):
         }
     )
     def post(request, *args, **kwargs):
+        openapi_key_id = get_request_openapi_key_id(request)
         user_id = request.user.id
         query = request.data
         serial = ChatQuerySerializer(data=query)
@@ -160,7 +165,7 @@ class Chat(APIView):
                 'event': 'on_error', 'error_code': 100002, 'error': 'bot not found', 'detail': {}}) + '\n'
             logger.error(f'error msg: {out_str}')
             return streaming_response(iter(out_str))
-        data = chat_query(user_id, validated_data)
+        data = chat_query(user_id, validated_data, openapi_key_id)
         return streaming_response(data)
 
 
@@ -184,12 +189,17 @@ class UploadPaper(APIView):
         },
     )
     def put(request, filename, *args, **kwargs):
+        openapi_key_id = get_request_openapi_key_id(request)
         user_id = request.user.id
         file: InMemoryUploadedFile = request.data.get('file')
         if not file:
             return my_json_response(code=100001, msg='file not found')
         # logger.debug(f'ddddddddd file: {file.name}, {file.file}')
         code, msg, data = upload_paper(user_id, file)
+
+        record_openapi_log(
+            user_id, openapi_key_id, OpenapiLog.Api.UPLOAD_PAPER, OpenapiLog.Status.SUCCESS, obj_id1=data['task_id']
+        )
         return my_json_response(data, code, msg)
 
 
@@ -209,6 +219,7 @@ class TopicPlaza(APIView):
         }
     )
     def get(request, *args, **kwargs):
+        openapi_key_id = get_request_openapi_key_id(request)
         query = request.query_params.dict()
         serial = TopicPlazaRequestSerializer(data=query)
         if not serial.is_valid():
@@ -233,6 +244,7 @@ class MyTopics(APIView):
         }
     )
     def get(request, *args, **kwargs):
+        openapi_key_id = get_request_openapi_key_id(request)
         query = request.query_params.dict()
         serial = TopicPlazaRequestSerializer(data=query)
         if not serial.is_valid():
@@ -257,6 +269,7 @@ class PersonalLibrary(APIView):
         }
     )
     def get(request, *args, **kwargs):
+        openapi_key_id = get_request_openapi_key_id(request)
         query = request.query_params.dict()
         serial = PersonalLibraryRequestSerializer(data=query)
         if not serial.is_valid():

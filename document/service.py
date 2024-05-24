@@ -399,6 +399,7 @@ def update_exist_documents():
 def document_personal_upload(validated_data):
     vd = validated_data
     files = vd.get('files')
+    instances = []
     for file in files:
         doc_lib_data = {
             'user_id': vd['user_id'],
@@ -427,7 +428,8 @@ def document_personal_upload(validated_data):
             if instance.task_status == DocumentLibrary.TaskStatusChoices.ERROR:
                 instance.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message'], }
             instance.save()
-    return vd
+            instances.append(instance)
+    return instances
 
 
 def document_library_add(user_id, document_ids, collection_id, bot_id, add_type, search_content):
