@@ -3,6 +3,7 @@ import io
 import logging
 
 import requests
+from dateutil.relativedelta import relativedelta
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db.models import Q
 
@@ -76,11 +77,21 @@ def delete_openapi_key(openapi_key: OpenapiKey):
     openapi_key.save()
 
 
-def list_openapi_key(user_id, page_size, page_num, is_all=False):
+def list_openapi_key(user_id, page_size, page_num, is_all=False, is_used=None):
     if is_all:
         filter_query = Q(user_id=user_id)
     else:
         filter_query = Q(user_id=user_id, del_flag=False)
+    if is_used is not None:
+        temp_Q = Q(id__in=OpenapiLog.objects.filter(
+            user_id=user_id,
+            api__in=[OpenapiLog.Api.UPLOAD_PAPER, OpenapiLog.Api.CONVERSATION],
+            created_at__gt=datetime.datetime.now() - relativedelta(year=1)
+        ).values_list('openapi_key_id', flat=True))
+        if is_used:
+            filter_query &= temp_Q
+        else:
+            filter_query &= ~temp_Q
     start_num = page_size * (page_num - 1)
     query_set = OpenapiKey.objects.filter(filter_query).order_by('-created_at')
     openapi_keys = query_set[start_num:start_num + page_size]

@@ -39,7 +39,7 @@ class ApiKey(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, 100001, msg=f'validate error, {list(serial.errors.keys())}')
         vd = serial.validated_data
-        data = list_openapi_key(request.user.id, vd['page_size'], vd['page_num'], vd['is_all'])
+        data = list_openapi_key(request.user.id, vd['page_size'], vd['page_num'], vd['is_all'], vd['is_used'])
         return my_json_response(data)
 
     @staticmethod
