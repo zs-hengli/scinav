@@ -1,3 +1,4 @@
+import json
 import logging
 
 from django.utils.decorators import method_decorator
@@ -67,7 +68,6 @@ class Conversations(APIView):
     @staticmethod
     def post(request, *args, **kwargs):
         query_data = request.data
-        query_data['user_id'] = request.user.id
         serial = ConversationCreateSerializer(data=query_data)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
@@ -77,7 +77,7 @@ class Conversations(APIView):
             and not Bot.objects.filter(id=validated_data['bot_id'], del_flag=False).exists()
         ):
             return my_json_response({}, code=100002, msg='bot not found')
-        conversation_id = conversation_create(serial.validated_data)
+        conversation_id = conversation_create(request.user.id, serial.validated_data)
         return my_json_response({'conversation_id': conversation_id})
 
     @staticmethod
@@ -108,17 +108,23 @@ class Chat(APIView):
     @staticmethod
     def post(request, *args, **kwargs):
         query_data = request.data
-        query_data['user_id'] = request.user.id
         serial = ChatQuerySerializer(data=query_data)
         if not serial.is_valid():
-            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+            out_str = json.dumps({
+                'event': 'on_error', 'error_code': 100001,
+                'error': f'validate error, {list(serial.errors.keys())}', 'detail': serial.errors}) + '\n'
+            logger.error(f'error msg: {out_str}')
+            return streaming_response(iter(out_str))
         validated_data = serial.validated_data
         if (
             validated_data.get('bot_id')
             and not Bot.objects.filter(id=validated_data['bot_id'], del_flag=False).exists()
         ):
-            return my_json_response({}, code=100002, msg='bot not found')
-        data = chat_query(validated_data)
+            out_str = json.dumps({
+                'event': 'on_error', 'error_code': 100002, 'error': 'bot not found', 'detail': {}}) + '\n'
+            logger.error(f'error msg: {out_str}')
+            return streaming_response(iter(out_str))
+        data = chat_query(request.user.id, validated_data)
         return streaming_response(data)
 
 

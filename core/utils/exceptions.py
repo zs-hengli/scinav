@@ -2,12 +2,14 @@
 Please see the included NOTICE for copyright information and LICENSE for a copy of the license.
 """
 import datetime
+import json
 import logging
 import sys
 import traceback as tb
 import uuid
 
 from django.conf import settings
+from django.http import StreamingHttpResponse
 from django.utils.encoding import force_str
 from rest_framework import status as rfd_status
 from rest_framework.exceptions import APIException
@@ -35,6 +37,7 @@ def custom_exception_handler(exc, context):
         'validation_errors': {},
         'request_id': exception_id,
     }
+
     # try rest framework handler
     response = exception_handler(exc, context)
     if response is not None:
@@ -45,14 +48,7 @@ def custom_exception_handler(exc, context):
             if isinstance(response.data, dict) \
             else {'non_field_errors': response.data}
         response.data = response_data
-
-    # non-standard exception
     else:
-        # if sentry_sdk_loaded:
-        #     # pass exception to sentry
-        #     set_tag('exception_id', exception_id)
-        #     capture_exception(exc)
-
         exc_tb = tb.format_exc()
         logger.debug(exc_tb)
         if not settings.DEBUG_MODAL_EXCEPTIONS:
@@ -60,6 +56,11 @@ def custom_exception_handler(exc, context):
         response_data['validation_errors'] = exc_tb
         response = Response(status=rfd_status.HTTP_500_INTERNAL_SERVER_ERROR, data=response_data)
 
+    if (
+        context and context.get('request') and context['request'].path
+        and context['request'].path.endswith('api/v1/chat')
+    ):
+        return StreamingHttpResponse(iter(json.dumps(response_data)), content_type='text/event-stream')
     return response
 
 

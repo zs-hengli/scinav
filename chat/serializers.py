@@ -21,11 +21,10 @@ class BaseModelSerializer(serializers.ModelSerializer):
 
 
 class ConversationCreateBaseSerializer(serializers.Serializer):
-    user_id = serializers.CharField(required=True, max_length=36)
     documents = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
     collections = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
     bot_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, min_length=32, max_length=36)
-    model = serializers.ChoiceField(choices=['gpt-3.5-turbo', 'gpt-4o'], required=False, default=None)
+    model = serializers.ChoiceField(choices=Conversation.LLMModel, required=False, default=None)
 
     def validate(self, attrs):
         if attrs.get('conversation_id'):
@@ -43,31 +42,26 @@ class ConversationCreateBaseSerializer(serializers.Serializer):
             public_colls = [c.id for c in collections if c.type == Collection.TypeChoices.PUBLIC]
             personal_colls = [c.id for c in collections if c.type == Collection.TypeChoices.PERSONAL]
             attrs['public_collection_ids'] = public_colls
-            collection_docs = CollectionDocument.objects.filter(collection_id__in=personal_colls, del_flag=False).all()
-            document_ids += [doc.document_id for doc in collection_docs]
-            document_ids = list(set(document_ids))
-        attrs['papers_info'] = []
-        if document_ids:
-            documents = Document.objects.filter(id__in=document_ids).values(
-                'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
-                'ref_collection_id', 'ref_doc_id', 'object_path',
-            ).all()
-            attrs['document_titles'] = []
             if not is_bot:
-                for d in documents:
-                    if d['id'] in attrs.get('documents', []):
-                        title = d['title']
-                        if not title:
-                            filename = DocumentLibrary.objects.filter(
-                                document_id=d['id'], filename__isnull=False).values_list('filename', flat=True).first()
-                            title = os.path.splitext(filename)[0]
-                        attrs['document_titles'].append(title)
-            attrs['papers_info'] = chat_paper_ids(
-                attrs['user_id'], documents,
-                collection_ids=attrs.get('collections'),
-                bot_id=attrs.get('bot_id'),
-            )
+                collection_docs = CollectionDocument.objects.filter(
+                    collection_id__in=personal_colls, del_flag=False).all()
+                document_ids += [doc.document_id for doc in collection_docs]
+                document_ids = list(set(document_ids))
+        attrs['all_document_ids'] = document_ids
         return attrs
+
+    @staticmethod
+    def get_papers_info(user_id, bot_id, collection_ids, document_ids):
+        documents = Document.objects.filter(id__in=document_ids).values(
+            'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
+            'ref_collection_id', 'ref_doc_id', 'object_path',
+        ).all()
+        return chat_paper_ids(
+            user_id, documents,
+            collection_ids=collection_ids,
+            bot_id=bot_id,
+        )
+
 
     @staticmethod
     def get_chat_type(validated_data):
@@ -117,7 +111,7 @@ class ConversationUpdateSerializer(serializers.Serializer):
     title = serializers.CharField(required=False, min_length=1, max_length=128, allow_blank=True, trim_whitespace=False)
     collections = serializers.ListField(
         required=False, child=serializers.CharField(min_length=1), allow_null=True)
-    model = serializers.ChoiceField(choices=['gpt-3.5-turbo', 'gpt-4o'], required=False, default=None)
+    model = serializers.ChoiceField(choices=Conversation.LLMModel, required=False, default=None)
 
     def validate(self, attrs):
         if attrs.get('collections') is None and not attrs.get('title') and not attrs.get('model'):
@@ -269,23 +263,30 @@ class ConversationsMenuQuerySerializer(serializers.Serializer):
 
 
 def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
-    ret_data, org_documents, ref_text_accessible_ds = [], documents, []
+    ret_data, org_documents, ref_text_accessible_ds, is_sub = [], documents, [], False
     bot = None
     if bot_id:
         bot = Bot.objects.filter(id=bot_id).first()
-    if bot_id and (not bot or bot.del_flag):
-        return []
-    is_sub = BotSubscribe.objects.filter(user_id=user_id, bot_id=bot_id).exists() if bot_id else False
+        if not bot: return []
+        if bot.user_id == user_id or BotSubscribe.objects.filter(user_id=user_id, bot_id=bot_id).exists():
+            is_sub = True
+        if not documents:
+            document_ids = CollectionDocument.objects.filter(collection_id=collection_ids, del_flag=False).values_list(
+                'document_id', flat=True)
+            documents = Document.objects.filter(id__in=document_ids.all()).values(
+                'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
+                'ref_collection_id', 'ref_doc_id', 'object_path',
+            ).all()
+
     query_set, doc_lib_document_ids, sub_bot_document_ids, ref_ds = \
         CollectionDocumentListSerializer.get_collection_documents(
             user_id, collection_ids, 'personal&subscribe_full_text', bot)
-    if bot and (bot.del_flag or not is_sub):
-        doc_lib_document_ids = list(DocumentLibrary.objects.filter(
-            user_id=user_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
-        ).values_list('document_id', flat=True).all())
     full_text_documents = doc_lib_document_ids
-    # 订阅专题会话 获取paper_ids
-    if bot and user_id != bot.user_id:
+
+    # 订阅专题会话 获取 full_text_documents
+    # 订阅了专题广场里面的非本人专题
+    if bot and bot.type == Bot.TypeChoices.PUBLIC and is_sub and user_id != bot.user_id:
+        full_text_documents += sub_bot_document_ids
         documents = [d for d in documents if d['collection_type'] == 'public']
         if ref_ds and is_sub:
             ref_documents = Document.objects.filter(id__in=ref_ds).values(
@@ -297,9 +298,8 @@ def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
                 rd['id'] for rd in ref_documents for d in org_documents
                 if rd['doc_id'] == d['ref_doc_id'] and d['full_text_accessible']
             ]
-    if bot and not bot.del_flag and bot.type == Bot.TypeChoices.PUBLIC and is_sub:
-        full_text_documents += sub_bot_document_ids
-        full_text_documents += ref_text_accessible_ds
+            full_text_documents += ref_text_accessible_ds
+
     for d in documents:
         ret_data.append({
             'collection_type': d['collection_type'],

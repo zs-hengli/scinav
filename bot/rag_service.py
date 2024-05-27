@@ -9,6 +9,8 @@ from django.conf import settings
 from requests import RequestException
 
 from chat.models import Question, Conversation
+from openapi.base_service import record_openapi_log
+from openapi.models import OpenapiLog
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +18,7 @@ RAG_HOST = settings.RAG_HOST
 RAG_API_KEY = settings.RAG_API_KEY
 
 
-def rag_requests(url, json=None, method='POST', headers=None, timeout=20, stream=None):
+def rag_requests(url, json=None, method='POST', headers=None, timeout=20, stream=None, raise_for_status=True):
     if headers is None:
         headers = {}
     request_id = settings.REQUEST_ID[:24] + str(uuid.uuid4())[24:] if settings.REQUEST_ID else str(uuid.uuid4())
@@ -37,7 +39,8 @@ def rag_requests(url, json=None, method='POST', headers=None, timeout=20, stream
     except Exception as e:
         logger.error(e)
         raise RequestException(f"{url}, {e}")
-    resp.raise_for_status()  # 自动处理非200响应
+    if raise_for_status:
+        resp.raise_for_status()  # 自动处理非200响应
     return resp
 
 
@@ -48,7 +51,7 @@ class Bot:
         prompt=None,
         preset_questions=None,
         # llm=None,
-        # tools=None,
+        tools=None,
         paper_ids=None,
         public_collection_ids=None
     ):
@@ -61,6 +64,20 @@ class Bot:
         if prompt and prompt['spec']['system_prompt']: post_data['prompt'] = prompt
         if paper_ids: post_data['paper_ids'] = paper_ids
         if public_collection_ids: post_data['public_collection_ids'] = public_collection_ids
+        if tools:
+            new_tools = []
+            for tool in tools:
+                tmp = {
+                    'type': 'OpenAPIToolset',
+                    'spec': {
+                        'name': tool['name'],
+                        'url': tool['url'],
+                        'openapi_json_path': tool['openapi_json_path'],
+                        'authentication': tool['endpoints'],
+                    }
+                }
+                new_tools.append(tmp)
+            post_data['tools'] = new_tools
         resp = rag_requests(url, json=post_data, method='POST')
         logger.info(f'url: {url}, response: {resp.text}')
         resp = resp.json()
@@ -72,6 +89,21 @@ class Bot:
         resp = rag_requests(url, method='DELETE')
         logger.info(f'url: {url}, response: {resp.text}')
         return resp
+
+    @staticmethod
+    def openapi_tools(name, openapi_url, openapi_json_path, authentication):
+        url = RAG_HOST + '/api/v1/agents/tools/openapi-tool'
+        post_data = {
+            'name': name,
+            'url': openapi_url,
+            'openapi_json_path': openapi_json_path,
+            'authentication': authentication,
+        }
+        resp = rag_requests(url, json=post_data, method='POST', raise_for_status=False)
+        logger.info(f'url: {url}, response: {resp.text}')
+        if resp.status_code != 200:
+            return False
+        return True
 
 
 class Collection:
@@ -296,7 +328,7 @@ class Conversations:
         return stream
 
     @staticmethod
-    def query(user_id, conversation_id, content, question_id=None, streaming=True, response_format='events'):
+    def query(user_id, conversation_id, content, question_id=None, openapi_key_id=None):
         error_msg = '很抱歉，当前服务出现了异常，无法完成您的请求。请稍后再试，或者联系我们的技术支持团队获取帮助。谢谢您的理解和耐心等待。'
         url = RAG_HOST + '/api/v1/query/conversation'
         post_data = {
@@ -386,9 +418,16 @@ class Conversations:
             question.output_tokens = stream.get('statistics', {}).get('output_tokens', 0)
             if not question.is_stop: question.answer = ''.join(stream['chunk'])
             question.save()
+            if openapi_key_id:
+                model = question.model
+                if not model: model = 'gpt-3.5-turbo'
+                record_openapi_log(
+                    user_id, openapi_key_id, OpenapiLog.Api.CONVERSATION, OpenapiLog.Status.SUCCESS,
+                    model=model, obj_id1=conversation_id, obj_id2=question.id,)
 
         yield json.dumps({
-            'event': 'conversation', 'id': conversation_id, 'question_id': str(question.id) if question else None
+            'event': 'conversation', 'name': None, 'run_id': None,
+            'id': conversation_id, 'question_id': str(question.id) if question else None
         }) + '\n'
         conversation.last_used_at = datetime.datetime.now()
         try:

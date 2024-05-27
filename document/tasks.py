@@ -14,6 +14,8 @@ from collection.serializers import bot_subscribe_personal_document_num
 from document.base_service import document_update_from_rag_ret, reference_doc_to_document, \
     reference_doc_to_document_library, search_result_delete_cache
 from document.models import DocumentLibrary, Document
+from openapi.base_service import update_openapi_log_upload_status
+from openapi.models import OpenapiLog
 from user.models import UserOperationLog
 
 logger = logging.getLogger('celery')
@@ -69,10 +71,12 @@ def async_document_library_task(self, task_id=None):
                     Document.objects.filter(pk=i.document_id).update(state='error')
                 i.task_status = task_status
                 i.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message']}
+                update_openapi_log_upload_status(task_id, OpenapiLog.Status.FAILED)
             else:  # COMPLETED CANCELLED
                 i.task_status = task_status
                 if rag_ret.get('paper'):
                     rag_ret['paper']['status'] = task_status
+                update_openapi_log_upload_status(task_id, OpenapiLog.Status.SUCCESS)
                 try:
                     document = document_update_from_rag_ret(rag_ret['paper']) if rag_ret['paper'] else None
                     i.document = document
@@ -162,7 +166,10 @@ def async_update_conversation_by_collection(self, collection_id):
             bot_collections = BotCollection.objects.filter(
                 bot_id=bot.id, del_flag=False).values_list('collection_id', flat=True).all()
             collections = Collection.objects.filter(id__in=bot_collections, del_flag=False).all()
+            old_agent_id = bot.agent_id
             recreate_bot(bot, collections)
+            bot.save()
+            Conversation.objects.filter(agent_id=old_agent_id).update(agent_id=bot.agent_id)
 
         conversations = Conversation.objects.filter(collections__contains=collection_id, del_flag=False).all()
         for conv in conversations:

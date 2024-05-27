@@ -83,9 +83,40 @@ class BotSubscribe(models.Model):
     bot = models.ForeignKey(
         Bot, on_delete=models.CASCADE, null=True, db_column='bot_id', related_name='bot_subscribe')
     del_flag = models.BooleanField(default=False, db_default=False)
-    updated_at = models.DateTimeField(null=True, auto_now=True)
+    updated_at = models.DateTimeField(null=True,    auto_now=True)
     created_at = models.DateTimeField(null=True, auto_now_add=True)
 
     class Meta:
         db_table = 'bot_subscribe'
         verbose_name = 'bot_subscribe'
+
+
+class BotTools(models.Model):
+    class AuthType(models.TextChoices):
+        Basic = 'basic', _('basic'),
+        BEARER = 'bearer', _('bearer'),
+        API_KEY = 'api_key', _('api_key'),
+    id = models.CharField(max_length=36, primary_key=True, default=uuid.uuid4)
+    user = models.ForeignKey(
+        'user.MyUser', db_constraint=False, on_delete=models.DO_NOTHING, null=True, db_column='user_id')
+    bot = models.ForeignKey(
+        Bot, db_constraint=False, on_delete=models.DO_NOTHING, null=True, db_column='bot_id',
+        related_name='bot_tools')
+    name = models.CharField(blank=True)
+    url = models.CharField(null=True, blank=True)
+    openapi_json_path = models.CharField(null=True, blank=True)
+    auth_type = models.CharField(null=True, choices=AuthType, default=None, db_default=None)
+    username_password_base64 = models.CharField(null=True, blank=True)
+    token = models.CharField(null=True, blank=True)
+    api_key = models.CharField(null=True, blank=True)
+    custom_header = models.CharField(null=True, blank=True)
+    endpoints = models.JSONField(null=True)
+    description = models.TextField(null=True, blank=True)
+    checked = models.BooleanField(default=False, db_default=False)
+    del_flag = models.BooleanField(default=False, db_default=False)
+    updated_at = models.DateTimeField(null=True,    auto_now=True)
+    created_at = models.DateTimeField(null=True, auto_now_add=True)
+
+    class Meta:
+        db_table = 'bot_tools'
+        verbose_name = 'bot_tools'

@@ -29,8 +29,7 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
         document_ids = list(set(document_ids))
         if document_ids:
             documents = Document.objects.filter(id__in=document_ids).values(
-                'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
-                'ref_collection_id', 'ref_doc_id', 'object_path',
+                'id', 'collection_type', 'collection_id', 'doc_id'
             ).all()
             papers_info = chat_paper_ids(
                 user_id, documents, collection_ids=personal_collection_ids, bot_id=conversation.bot_id
