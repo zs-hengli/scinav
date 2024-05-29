@@ -50,39 +50,32 @@ def async_document_library_task(self, task_id=None):
             try:
                 rag_ret = RagDocument.get_ingest_task(i.task_id)
             except Exception as e:
-                logger.error(f'async_document_library_task {i.task_id}, {e}')
-                i.task_status = DocumentLibrary.TaskStatusChoices.ERROR
-                i.error = {'error_code': '500', 'error_message': str(e)}
-                i.save()
+                logger.error(f'async_document_library_task get_ingest_task error {i.task_id}, {e}')
                 continue
             task_status = rag_ret['task_status']
             logger.info(f'async_document_library_task {i.task_id}, {task_status}')
-            if task_status in [
-                DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
-                DocumentLibrary.TaskStatusChoices.QUEUEING,
-                DocumentLibrary.TaskStatusChoices.TO_BE_CANCELLED
-            ]:
-                if i.task_status == task_status:
-                    continue
-                else:
-                    i.task_status = task_status
-            elif task_status == DocumentLibrary.TaskStatusChoices.ERROR:
+
+            if task_status == DocumentLibrary.TaskStatusChoices.ERROR:
                 if i.document_id:
                     Document.objects.filter(pk=i.document_id).update(state='error')
-                i.task_status = task_status
                 i.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message']}
                 update_openapi_log_upload_status(task_id, OpenapiLog.Status.FAILED)
-            else:  # COMPLETED CANCELLED
-                i.task_status = task_status
+            elif task_status == DocumentLibrary.TaskStatusChoices.CANCELLED:
+                update_openapi_log_upload_status(task_id, OpenapiLog.Status.FAILED)
+            elif task_status == DocumentLibrary.TaskStatusChoices.COMPLETED:
                 if rag_ret.get('paper'):
-                    rag_ret['paper']['status'] = task_status
+                    rag_ret['paper']['state'] = task_status
                 update_openapi_log_upload_status(task_id, OpenapiLog.Status.SUCCESS)
                 try:
                     document = document_update_from_rag_ret(rag_ret['paper']) if rag_ret['paper'] else None
                     i.document = document
                     reference_doc_to_document(document)
                 except Exception as e:
-                    logger.error(f'async_document_library_task {i.task_id}, {e}')
+                    logger.error(f'async_document_library_task {task_status} {i.task_id}, {e}')
+            else:  # QUEUEING IN_PROGRESS TO_BE_CANCELLED
+                if i.task_status == task_status:
+                    continue
+            i.task_status = task_status
             i.save()
             if i.task_status == DocumentLibrary.TaskStatusChoices.COMPLETED and i.task_type == 'personal':
                 search_result_delete_cache(i.user_id)

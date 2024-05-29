@@ -92,7 +92,7 @@ class BotDetailSerializer(BaseModelSerializer):
     class Meta:
         model = Bot
         fields = [
-            'id', 'user_id', 'author', 'title', 'description', 'prompt_spec', 'questions', 'collections',
+            'id', 'user_id', 'author', 'title', 'description', 'prompt_spec', 'questions', 'collections', 'type',
             'tools', 'updated_at'
         ]
 

@@ -159,7 +159,7 @@ class ConversationListSerializer(BaseModelSerializer):
 class ChatQuerySerializer(ConversationCreateBaseSerializer):
     conversation_id = serializers.CharField(required=False, min_length=32, max_length=36)
     question_id = serializers.CharField(required=False, min_length=32, max_length=36)
-    content = serializers.CharField(required=True, min_length=1, max_length=1024)
+    content = serializers.CharField(required=True, min_length=1, max_length=4096)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
@@ -271,8 +271,8 @@ def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
         if bot.user_id == user_id or BotSubscribe.objects.filter(user_id=user_id, bot_id=bot_id).exists():
             is_sub = True
         if not documents:
-            document_ids = CollectionDocument.objects.filter(collection_id=collection_ids, del_flag=False).values_list(
-                'document_id', flat=True)
+            document_ids = CollectionDocument.objects.filter(
+                collection_id__in=collection_ids, del_flag=False).values_list('document_id', flat=True)
             documents = Document.objects.filter(id__in=document_ids.all()).values(
                 'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
                 'ref_collection_id', 'ref_doc_id', 'object_path',
@@ -309,3 +309,4 @@ def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
             'full_text_accessible': d['id'] in full_text_documents
         })
     return ret_data
+

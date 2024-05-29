@@ -117,7 +117,6 @@ def search(user_id, content, page_size=10, page_num=1, topn=100):
             'authors': data['authors'],
             'pub_date': data['pub_date'],
             'citation_count': data['citation_count'],
-            'reference_count': data['reference_count'],
             'doc_id': data['doc_id'],
             'collection_id': str(data['collection_id']),
             'type': collection_tag,

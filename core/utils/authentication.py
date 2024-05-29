@@ -43,7 +43,8 @@ def check_token(request):
         if user_info and user_info.get('sub') and time.time() < user_info['exp']:
             if user := MyUser.objects.filter(id=user_info['sub']).first():
                 # todo update user_info
-                pass
+                if user.email != user_info['email'] or user.phone != user_info['phone_number']:
+                    user = save_auth_user_info(user_info)
             else:
                 user = save_auth_user_info(user_info)
             return user, token

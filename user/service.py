@@ -13,7 +13,7 @@ def save_auth_user_info(user_info):
         'is_staff': 1
     }
     user, _ = MyUser.objects.update_or_create(
-        create_defaults=info,
+        defaults=info,
         id=info['id']
     )
     return user
