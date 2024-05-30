@@ -273,7 +273,11 @@ def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
         if not documents:
             document_ids = CollectionDocument.objects.filter(
                 collection_id__in=collection_ids, del_flag=False).values_list('document_id', flat=True)
-            documents = Document.objects.filter(id__in=document_ids.all()).values(
+            if bot.user_id != user_id:
+                filter_query = Q(id__in=document_ids.all(), collection_type=Document.TypeChoices.PUBLIC)
+            else:
+                filter_query = Q(id__in=document_ids.all())
+            documents = Document.objects.filter(filter_query).values(
                 'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
                 'ref_collection_id', 'ref_doc_id', 'object_path',
             ).all()
@@ -284,8 +288,7 @@ def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
     full_text_documents = doc_lib_document_ids
 
     # 订阅专题会话 获取 full_text_documents
-    # 订阅了专题广场里面的非本人专题
-    if bot and bot.type == Bot.TypeChoices.PUBLIC and is_sub and user_id != bot.user_id:
+    if bot and is_sub and user_id != bot.user_id:
         full_text_documents += sub_bot_document_ids
         documents = [d for d in documents if d['collection_type'] == 'public']
         if ref_ds and is_sub:
@@ -294,10 +297,17 @@ def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
                 'ref_collection_id', 'ref_doc_id', 'object_path',
             ).all()
             documents += ref_documents
-            ref_text_accessible_ds = [
-                rd['id'] for rd in ref_documents for d in org_documents
-                if rd['doc_id'] == d['ref_doc_id'] and d['full_text_accessible']
-            ]
+            # 订阅了专题广场里面的非本人专题
+            if bot.type == Bot.TypeChoices.PUBLIC:
+                ref_text_accessible_ds = [
+                    rd['id'] for rd in ref_documents for d in org_documents
+                    if rd['doc_id'] == d['ref_doc_id'] and d['full_text_accessible']
+                ]
+            # 订阅了非专题广场里面的非本人专题
+            else:
+                ref_text_accessible_ds = [
+                    rd['id'] for rd in ref_documents if rd['id'] in doc_lib_document_ids
+                ]
             full_text_documents += ref_text_accessible_ds
 
     for d in documents:

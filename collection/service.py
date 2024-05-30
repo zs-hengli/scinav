@@ -184,8 +184,8 @@ def _bot_subscribe_collection_list(user_id):
                     public_documents - set(my_doc_lib_doc_ids)
                 )
                 sub_bot_infos[bot_id] = {'is_all_in_document_library': False if diff_set else True}
-            elif ref_documents and Document.objects.filter(id__in=ref_documents, full_text_accessible=False).exists():
-                sub_bot_infos[bot_id] = {'is_all_in_document_library': False}
+            # elif ref_documents and Document.objects.filter(id__in=ref_documents, full_text_accessible=False).exists():
+            #     sub_bot_infos[bot_id] = {'is_all_in_document_library': False}
             else:
                 sub_bot_infos[bot_id] = {'is_all_in_document_library': True}
     # 排序 updated_at 倒序
