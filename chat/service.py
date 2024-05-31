@@ -1,13 +1,16 @@
 import datetime
 import logging
 
+from django.db.models import Q
+
 from dateutil.relativedelta import relativedelta
 from operator import itemgetter
 
 from bot.models import Bot
 from bot.rag_service import Conversations as RagConversation
-from chat.models import Conversation
-from chat.serializers import ConversationCreateSerializer, ConversationDetailSerializer, ConversationListSerializer
+from chat.models import Conversation, Question
+from chat.serializers import ConversationCreateSerializer, ConversationDetailSerializer, ConversationListSerializer, \
+    QuestionConvDetailSerializer
 from collection.base_service import update_conversation_by_collection
 from collection.models import Collection, CollectionDocument
 from core.utils.common import cmp_ignore_order
@@ -178,6 +181,17 @@ def conversation_detail(conversation_id):
     collections = [c['id'] for c in collections]
     conversation.collections = collections
     return ConversationDetailSerializer(conversation).data
+
+
+def question_list(conversation_id, page_num, page_size):
+    filter_query = Q(conversation_id=conversation_id, del_flag=False) & ~Q(answer='') & Q(answer__isnull=False)
+    query_set = Question.objects.filter(filter_query).order_by('-updated_at')
+    total = query_set.count()
+    questions = query_set[(page_num - 1) * page_size: page_num * page_size]
+    return {
+        'list': QuestionConvDetailSerializer(questions, many=True).data[::-1],
+        'total': total,
+    }
 
 
 def conversation_list(validated_data):

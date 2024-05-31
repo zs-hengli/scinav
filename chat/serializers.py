@@ -129,8 +129,8 @@ class ConversationDetailSerializer(BaseModelSerializer):
     @staticmethod
     def get_questions(obj: Conversation):
         filter_query = Q(del_flag=False) & ~Q(answer='') & Q(answer__isnull=False)
-        questions = obj.question.filter(filter_query).order_by('updated_at').all()
-        return QuestionConvDetailSerializer(questions, many=True).data
+        query_set = obj.question.filter(filter_query).order_by('-updated_at')
+        return QuestionConvDetailSerializer(query_set[0:10], many=True).data[::-1]
 
     @staticmethod
     def get_stop_chat_type(obj: Conversation):
@@ -175,6 +175,11 @@ class ChatQuerySerializer(ConversationCreateBaseSerializer):
             if not Conversation.objects.filter(id=attrs['conversation_id']).exists():
                 raise serializers.ValidationError(f"conversation_id: {attrs['conversation_id']} is not exists")
         return attrs
+
+
+class QuestionListQuerySerializer(serializers.Serializer):
+    page_num = serializers.IntegerField(required=False, default=1)
+    page_size = serializers.IntegerField(required=False, default=10)
 
 
 class QuestionReferenceSerializer(serializers.Serializer):

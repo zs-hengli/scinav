@@ -10,9 +10,10 @@ from rest_framework.views import APIView
 from bot.models import Bot
 from chat.models import Conversation
 from chat.serializers import ConversationCreateSerializer, ConversationUpdateSerializer, ChatQuerySerializer, \
-    QuestionAnswerSerializer, ConversationsMenuQuerySerializer, QuestionUpdateAnswerQuerySerializer
+    QuestionAnswerSerializer, ConversationsMenuQuerySerializer, QuestionUpdateAnswerQuerySerializer, \
+    QuestionListQuerySerializer
 from chat.service import chat_query, conversation_create, conversation_detail, conversation_list, conversation_update, \
-    conversation_menu_list
+    conversation_menu_list, question_list
 from core.utils.views import extract_json, my_json_response, streaming_response, ServerSentEventRenderer
 
 logger = logging.getLogger(__name__)
@@ -98,6 +99,23 @@ class ConversationsMenu(APIView):
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         vd = serial.validated_data
         data = conversation_menu_list(request.user.id, vd['list_type'])
+        return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+class Questions(APIView):
+    @staticmethod
+    def get(request, conversation_id, *args, **kwargs):
+        query = request.query_params
+        serial = QuestionListQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        conversation = Conversation.objects.filter(id=conversation_id, user_id=request.user.id).first()
+        if not conversation:
+            return my_json_response({}, code=100002, msg='conversation not found')
+        vd = serial.validated_data
+        data = question_list(conversation_id, vd['page_num'], vd['page_size'])
         return my_json_response(data)
 
 
