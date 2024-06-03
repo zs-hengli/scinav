@@ -4,7 +4,7 @@ import logging
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
-from bot.base_service import recreate_bot, collections_doc_ids
+from bot.base_service import recreate_bot, collections_doc_ids, mine_bot_document_ids
 from bot.models import Bot, BotCollection, BotSubscribe, HotBot, BotTools
 from bot.rag_service import Bot as RagBot
 from bot.serializers import (BotDetailSerializer, BotListAllSerializer, HotBotListSerializer, BotListChatMenuSerializer,
@@ -13,7 +13,7 @@ from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionDocumentListSerializer
 from core.utils.exceptions import InternalServerError, ValidationError
 from document.base_service import update_document_lib
-from document.models import Document
+from document.models import Document, DocumentLibrary
 from document.tasks import async_schedule_publish_bot_task
 
 logger = logging.getLogger(__name__)
@@ -253,6 +253,22 @@ def bot_subscribe(user_id, bot_id, action='subscribe'):
     BotSubscribe.objects.update_or_create(data, user_id=user_id, bot_id=bot_id)
 
 
+def bot_user_full_text_public_document_ids(bot_id=None, bot: Bot = None):
+    """
+    专题创建者拥有全文权限的公共库文献id
+    """
+    if not bot:
+        bot = Bot.objects.get(pk=bot_id)
+    bot_document_ids = mine_bot_document_ids(bot_id)
+    bot_document_lib_ids = DocumentLibrary.objects.filter(
+        user_id=bot.user_id,
+        del_flag=False,
+        task_type='public',
+        task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
+        ).values_list('document_id', flat=True).all()
+    return list(set(bot_document_ids) & set(bot_document_lib_ids))
+
+
 def bot_publish(bot_id, action=Bot.TypeChoices.PUBLIC):
     bot = Bot.objects.filter(pk=bot_id).first()
     if not bot:
@@ -331,7 +347,6 @@ def bot_tools_add_bot_id(bot_id, tools):
             tool.save()
     formate_tools = BotToolsUpdateQuerySerializer(tools, many=True).data
     return formate_tools, tools
-
 
 
 def del_invalid_bot_tools(bot_id, valid_tool_ids):

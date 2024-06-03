@@ -231,3 +231,10 @@ def collections_doc_ids(collections: list[Collection]):
         'collection_type': c_doc.document.collection_type,
         'doc_id': c_doc.document.doc_id} for c_doc in c_docs
     ]
+
+
+def mine_bot_document_ids(bot_id):
+    bot_collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False)
+    collection_ids = [bc.collection_id for bc in bot_collections if bc.collection_id not in ['s2', 'arxiv']]
+    c_docs = CollectionDocument.objects.filter(collection_id__in=collection_ids).all()
+    return [c_doc.document_id for c_doc in c_docs]
