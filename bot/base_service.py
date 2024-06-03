@@ -234,7 +234,8 @@ def collections_doc_ids(collections: list[Collection]):
 
 
 def mine_bot_document_ids(bot_id):
-    bot_collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False)
+    bot_collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False).all()
     collection_ids = [bc.collection_id for bc in bot_collections if bc.collection_id not in ['s2', 'arxiv']]
-    c_docs = CollectionDocument.objects.filter(collection_id__in=collection_ids).all()
-    return [c_doc.document_id for c_doc in c_docs]
+    c_docs = CollectionDocument.objects.filter(
+        collection_id__in=collection_ids, del_flag=False).values_list('document_id', flat=True).all()
+    return list(c_docs)

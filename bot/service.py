@@ -259,6 +259,7 @@ def bot_user_full_text_public_document_ids(bot_id=None, bot: Bot = None):
     """
     if not bot:
         bot = Bot.objects.get(pk=bot_id)
+    bot_id = bot.id
     bot_document_ids = mine_bot_document_ids(bot_id)
     bot_document_lib_ids = DocumentLibrary.objects.filter(
         user_id=bot.user_id,
