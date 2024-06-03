@@ -268,7 +268,9 @@ def bot_user_full_text_document_ids(bot_id=None, bot: Bot = None):
         # task_type='public',
         task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
         ).values_list('document_id', flat=True).all()
-    return list(bot_document_lib_ids)
+    document_ids = Document.objects.filter(
+        id__in=bot_document_lib_ids, full_text_accessible=True, del_flag=False).values_list('id', flat=True).all()
+    return list(document_ids)
 
 
 def bot_publish(bot_id, action=Bot.TypeChoices.PUBLIC):
