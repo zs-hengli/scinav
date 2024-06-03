@@ -35,7 +35,7 @@ class ConversationCreateBaseSerializer(serializers.Serializer):
         is_bot = False
         if attrs.get('bot_id'):
             is_bot = True
-            collections = BotCollection.objects.filter(bot_id=attrs['bot_id']).values('collection_id').all()
+            collections = BotCollection.objects.filter(bot_id=attrs['bot_id'], del_flag=False).values('collection_id').all()
             attrs['collections'] = [c['collection_id'] for c in collections]
         if attrs.get('collections'):
             collections = Collection.objects.filter(id__in=attrs['collections']).all()

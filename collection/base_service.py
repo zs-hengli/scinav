@@ -55,6 +55,7 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
                     if len(collection_ids) == 1 else Conversation.TypeChoices.COLLECTIONS_COV
                 )
             conversation.save()
+            RagConversation.update(**update_data)
     elif collection_ids is not None and collection_ids != conversation.collections:
         paper_ids = []
         update_data['paper_ids'] = paper_ids
@@ -64,10 +65,10 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
         conversation.collections = []
         conversation.type = None
         conversation.save()
+        RagConversation.update(**update_data)
 
     if model:
         update_data['llm_name'] = model
         conversation.model = model
         conversation.save()
-    RagConversation.update(**update_data)
     return conversation
