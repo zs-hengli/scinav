@@ -253,7 +253,7 @@ def bot_subscribe(user_id, bot_id, action='subscribe'):
     BotSubscribe.objects.update_or_create(data, user_id=user_id, bot_id=bot_id)
 
 
-def bot_user_full_text_public_document_ids(bot_id=None, bot: Bot = None):
+def bot_user_full_text_document_ids(bot_id=None, bot: Bot = None):
     """
     专题创建者拥有全文权限的公共库文献id
     """
@@ -264,10 +264,11 @@ def bot_user_full_text_public_document_ids(bot_id=None, bot: Bot = None):
     bot_document_lib_ids = DocumentLibrary.objects.filter(
         user_id=bot.user_id,
         del_flag=False,
-        task_type='public',
+        document_id__in=set(bot_document_ids),
+        # task_type='public',
         task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
         ).values_list('document_id', flat=True).all()
-    return list(set(bot_document_ids) & set(bot_document_lib_ids))
+    return list(bot_document_lib_ids)
 
 
 def bot_publish(bot_id, action=Bot.TypeChoices.PUBLIC):

@@ -14,7 +14,7 @@ from bot.serializers import BotCreateSerializer, BotListQuerySerializer, BotDocu
     BotToolsCreateQuerySerializer, BotToolsUpdateQuerySerializer, BotToolsDeleteQuerySerializer, BotDetailSerializer
 from bot.service import (bot_create, bot_delete, bot_publish, bot_subscribe, bot_update, hot_bots, get_bot_list,
                          bot_tools_create, bot_tools_update, formate_bot_tools, del_invalid_bot_tools,
-                         bot_tools_add_bot_id, bot_user_full_text_public_document_ids)
+                         bot_tools_add_bot_id, bot_user_full_text_document_ids)
 from document.tasks import async_add_user_operation_log
 from core.utils.exceptions import ValidationError
 from core.utils.views import extract_json, my_json_response
@@ -230,7 +230,7 @@ class BotSubscribe(APIView):
             return my_json_response({}, code=100003, msg='can not subscribe self bot')
         bot_subscribe(user_id, bot_id, action)
         # 专题拥有者有专题文章的全文访问权限的公共库document_ids
-        documents_ids = bot_user_full_text_public_document_ids(bot=bot)
+        documents_ids = bot_user_full_text_document_ids(bot=bot)
         return my_json_response({
             'bot_id': bot_id,
             'bot_user_has_full_text_documents': True if documents_ids else False
