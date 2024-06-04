@@ -92,7 +92,7 @@ class Search(APIView):
         extensions={'x-code-samples': [
             {'lang': 'curl', 'label': 'cURL',
              'source': '''curl -X GET \\
-    "http://$OPENAPI_HOST/openapi/v1/papers/search?content=LLM&limit=100" \\
+    "$OPENAPI_BASE_URL/openapi/v1/papers/search?content=LLM&limit=100" \\
     --header 'X-API-KEY: ••••••'
 \n'''},
             {'lang': 'python', 'label': 'Python', 'source': '''import os
@@ -101,8 +101,8 @@ import requests
 headers = {
   'X-API-KEY': '••••••'
 }
-openapi_host = os.environ.get('OPENAPI_HOST', 'openapi-host')
-url = f"http://{openapi_host}/openapi/v1/papers/search?content=LLM&limit=100"
+openapi_base_url = os.environ.get('OPENAPI_BASE_URL', 'openapi-base-url')
+url = f"{openapi_base_url}/openapi/v1/papers/search?content=LLM&limit=100"
 
 response = requests.get(url, headers=headers)
 
@@ -147,7 +147,7 @@ class PersonalLibrary(APIView):
         extensions={'x-code-samples': [
             {'lang': 'curl', 'label': 'cURL',
              'source': '''curl -X GET \\
-    "http://$OPENAPI_HOST/openapi/v1/personal/library?status=completed&limit=100" \\
+    "$OPENAPI_BASE_URL/openapi/v1/personal/library?status=completed&limit=100" \\
     --header 'X-API-KEY: ••••••'
 '''
              },
@@ -157,8 +157,8 @@ import requests
 headers = {
   'X-API-KEY': '••••••'
 }
-openapi_host = os.environ.get('OPENAPI_HOST', 'openapi-host')
-url = f"http://{openapi_host}/openapi/v1/personal/library?status=completed&limit=100"
+openapi_base_url = os.environ.get('OPENAPI_BASE_URL', 'openapi-base-url')
+url = f"{openapi_base_url}/openapi/v1/personal/library?status=completed&limit=100"
 
 response = requests.get(url, headers=headers)
 
@@ -223,7 +223,7 @@ class UploadPaper(APIView):
         extensions={'x-code-samples': [
             {'lang': 'curl', 'label': 'cURL', 'source': '''curl --request PUT \\
     -T '<path>/xxx.pdf' \\
-    "http://$OPENAPI_HOST/openapi/v1/papers/upload/xxx.pdf" \\
+    "$OPENAPI_BASE_URL/openapi/v1/papers/upload/xxx.pdf" \\
     --header 'Content-Type: application/octet-stream' \\
     --header 'X-API-KEY: ••••••'\n
 '''},
@@ -235,8 +235,8 @@ headers = {
   'X-API-KEY': '••••••'
 }
 file_path = '<path>/xxx.pdf'
-openapi_host = os.environ.get('OPENAPI_HOST', 'openapi-host')
-url = f"http://{openapi_host}/openapi/v1/papers/upload/xxx.pdf"
+openapi_base_url = os.environ.get('OPENAPI_BASE_URL', 'openapi-base-url')
+url = f"{openapi_base_url}/openapi/v1/papers/upload/xxx.pdf"
 with open(file_path, "rb") as file:
     response = requests.put(url, headers=headers, data=file)
 
@@ -284,7 +284,7 @@ class TopicPlaza(APIView):
         extensions={'x-code-samples': [
             {'lang': 'curl', 'label': 'cURL',
              'source': '''curl -X GET \\
-    "http://$OPENAPI_HOST/openapi/v1/topics/plaza?limit=100" \\
+    "$OPENAPI_BASE_URL/openapi/v1/topics/plaza?limit=100" \\
     --header 'X-API-KEY: ••••••'
 '''
              },
@@ -294,8 +294,8 @@ import requests
 headers = {
   'X-API-KEY': '••••••'
 }
-openapi_host = os.environ.get('OPENAPI_HOST', 'openapi-host')
-url = f"http://{openapi_host}/openapi/v1/topics/plaza?limit=100"
+openapi_base_url = os.environ.get('OPENAPI_BASE_URL', 'openapi-base-url')
+url = f"{openapi_base_url}/openapi/v1/topics/plaza?limit=100"
 
 response = requests.get(url, headers=headers)
 
@@ -332,7 +332,7 @@ class MineTopics(APIView):
         extensions={'x-code-samples': [
             {'lang': 'curl', 'label': 'cURL',
              'source': '''curl -X GET \\
-    "http://$OPENAPI_HOST/openapi/v1/topics/mine?limit=100" \\
+    "$OPENAPI_BASE_URL/openapi/v1/topics/mine?limit=100" \\
     --header 'X-API-KEY: ••••••'
 '''
              },
@@ -342,8 +342,8 @@ import requests
 headers = {
   'X-API-KEY': '••••••'
 }
-openapi_host = os.environ.get('OPENAPI_HOST', 'openapi-host')
-url = f"http://{openapi_host}/openapi/v1/topics/mine?limit=100"
+openapi_base_url = os.environ.get('OPENAPI_BASE_URL', 'openapi-base-url')
+url = f"{openapi_base_url}/openapi/v1/topics/mine?limit=100"
 
 response = requests.get(url, headers=headers)
 
@@ -380,7 +380,7 @@ class MineCollection(APIView):
         extensions={'x-code-samples': [
             {'lang': 'curl', 'label': 'cURL',
              'source': '''curl -X GET \\
-    "http://$OPENAPI_HOST/openapi/v1/collections/mine?limit=100" \\
+    "$OPENAPI_BASE_URL/openapi/v1/collections/mine?limit=100" \\
     --header 'X-API-KEY: ••••••'
 '''
              },
@@ -390,8 +390,8 @@ import requests
 headers = {
   'X-API-KEY': '••••••'
 }
-openapi_host = os.environ.get('OPENAPI_HOST', 'openapi-host')
-url = f"http://{openapi_host}/openapi/v1/collections/mine?limit=100"
+openapi_base_url = os.environ.get('OPENAPI_BASE_URL', 'openapi-base-url')
+url = f"{openapi_base_url}/openapi/v1/collections/mine?limit=100"
 
 response = requests.get(url, headers=headers)
 
@@ -457,7 +457,7 @@ class Chat(APIView):
         },
         extensions={'x-code-samples': [
             {'lang': 'curl', 'label': 'cURL', 'source': '''curl --request POST \\
-    "http://$OPENAPI_HOST/openapi/v1/chat" \\
+    "$OPENAPI_BASE_URL/openapi/v1/chat" \\
     --header 'Content-Type: application/json' \\
     --header 'X-API-KEY: ••••••' \\
     --data '{
@@ -479,8 +479,8 @@ headers = {
   'Content-Type': 'application/json',
   'X-API-KEY': '••••••'
 }
-openapi_host = os.environ.get('OPENAPI_HOST', 'openapi-host')
-url = f"http://{openapi_host}/openapi/v1/chat"
+openapi_base_url = os.environ.get('OPENAPI_BASE_URL', 'openapi-base-url')
+url = f"{openapi_base_url}/openapi/v1/chat"
 
 response = requests.post(url, headers=headers, data=payload, stream=True)
 for line in response.iter_lines():

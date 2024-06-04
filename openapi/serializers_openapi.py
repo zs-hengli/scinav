@@ -1,4 +1,5 @@
 import logging
+from typing import Optional, List
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -244,16 +245,28 @@ class CollectionListRequestSerializer(serializers.Serializer):
         OpenApiExample('Example', value={
             "id": "f5d5f9ad-bdbc-4489-95fb-74867377c74e",
             "name": "collection name",
+            "paper_ids": ["f59f83fd-a52e-4aa0-a8c9-0237f0de55e5", "ba8e29e9-63a1-4300-b934-ab01b32e127e"]
         })
     ]
 )
 class CollectionListSerializer(serializers.Serializer):
     id = serializers.CharField(help_text='The unique id of the collection.')
     name = serializers.CharField(source='title', help_text='The name of the collection.')
+    paper_ids = serializers.SerializerMethodField(
+        required=False, help_text='The list of paper ids in the collection.',
+    )
+
+    @staticmethod
+    def get_paper_ids(obj: Collection) -> Optional[List[str]]:
+        if obj.type == Collection.TypeChoices.PERSONAL:
+            return list(CollectionDocument.objects.filter(
+                collection_id=obj.id, del_flag=False).values_list('document_id', flat=True).all())
+        else:
+            return None
 
     class Meta:
         model = Collection
-        fields = ['id', 'name']
+        fields = ['id', 'name', 'paper_ids']
 
 
 @extend_schema_serializer(
