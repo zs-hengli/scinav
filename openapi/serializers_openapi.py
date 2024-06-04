@@ -284,8 +284,14 @@ class DocumentLibraryPersonalSerializer(serializers.Serializer):
 
 
 class PaperKnowledgeSerializer(serializers.Serializer):
-    paper_ids = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
-    collection_ids = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
+    paper_ids = serializers.ListField(
+        required=False, child=serializers.CharField(min_length=1), allow_empty=True,
+        help_text='The list of paper ids to be processed by large language model.'
+    )
+    collection_ids = serializers.ListField(
+        required=False, child=serializers.CharField(min_length=1), allow_empty=True,
+        help_text='The list of collection ids to be processed by large language model.'
+    )
 
 
 @extend_schema_serializer(
@@ -304,14 +310,25 @@ class PaperKnowledgeSerializer(serializers.Serializer):
     ]
 )
 class ChatQuerySerializer(serializers.Serializer):
-    content = serializers.CharField(required=True, min_length=1, max_length=4096)
+    content = serializers.CharField(
+        required=True, min_length=1, max_length=4096,
+        help_text='The content of the question to be processed by large language model.'
+    )
     conversation_id = serializers.CharField(
         required=True, min_length=32, max_length=36,
         help_text='Unique identifier of the conversation. You can pass in a non-existent conversation id to create a '
                   'conversation, or leave it blank and the api will automatically generate one.')
-    topic_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, min_length=32, max_length=36)
-    paper_knowledge = PaperKnowledgeSerializer(required=False)
-    question_id = serializers.CharField(required=False, min_length=32, max_length=36)
+    topic_id = serializers.CharField(
+        required=False, allow_null=True, allow_blank=True, min_length=32, max_length=36,
+        help_text='The id of the topic. If the topic_id is passed in, the paper_knowledge will be ignored.'
+    )
+    paper_knowledge = PaperKnowledgeSerializer(
+        required=False, help_text='The paper knowledge of the question to be processed by large language model.')
+    question_id = serializers.CharField(
+        required=False, min_length=32, max_length=36,
+        help_text='The id of the question. If the question_id is passed in, the paper_knowledge and topic_id will be '
+                  'ignored.'
+    )
     model = serializers.ChoiceField(
         choices=Conversation.LLMModel, required=False, default=None,
         help_text='Specify large language model name'
@@ -393,7 +410,9 @@ The output of the Runnable that generated the event.
     )
     id = serializers.CharField(required=False, help_text='The ID of the conversation when event is conversation.')
     question_id = serializers.CharField(
-        required=False, help_text='The ID of the conversation question when event is conversation.'
+        required=False,
+        help_text='The ID of the conversation question when event is conversation. When multiple questions are asked '
+                  'in the same conversation, generate multiple questions and answers.'
     )
     metadata = serializers.JSONField(
         required=False, allow_null=True,
