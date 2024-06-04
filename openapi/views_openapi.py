@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.utils.decorators import method_decorator
@@ -28,6 +29,8 @@ from openapi.service import upload_paper, get_request_openapi_key_id
 from openapi.service_openapi import search, collection_list_mine
 
 logger = logging.getLogger(__name__)
+
+OPENAPI_BASE_URL = os.environ.get('OPENAPI_BASE_URL', '$OPENAPI_BASE_URL')
 
 
 @method_decorator([extract_json], name='dispatch')
@@ -91,8 +94,8 @@ class Search(APIView):
         },
         extensions={'x-code-samples': [
             {'lang': 'curl', 'label': 'cURL',
-             'source': '''curl -X GET \\
-    "$OPENAPI_BASE_URL/openapi/v1/papers/search?content=LLM&limit=100" \\
+             'source': f'''curl -X GET \\
+    "{OPENAPI_BASE_URL}/openapi/v1/papers/search?content=LLM&limit=100" \\
     --header 'X-API-KEY: ••••••'
 \n'''},
             {'lang': 'python', 'label': 'Python', 'source': '''import os
@@ -146,8 +149,8 @@ class PersonalLibrary(APIView):
         },
         extensions={'x-code-samples': [
             {'lang': 'curl', 'label': 'cURL',
-             'source': '''curl -X GET \\
-    "$OPENAPI_BASE_URL/openapi/v1/personal/library?status=completed&limit=100" \\
+             'source': f'''curl -X GET \\
+    "{OPENAPI_BASE_URL}/openapi/v1/personal/library?status=completed&limit=100" \\
     --header 'X-API-KEY: ••••••'
 '''
              },
@@ -221,9 +224,9 @@ class UploadPaper(APIView):
             (400, 'application/json'): OpenApiResponse(ExceptionResponseSerializer),
         },
         extensions={'x-code-samples': [
-            {'lang': 'curl', 'label': 'cURL', 'source': '''curl --request PUT \\
+            {'lang': 'curl', 'label': 'cURL', 'source': f'''curl --request PUT \\
     -T '<path>/xxx.pdf' \\
-    "$OPENAPI_BASE_URL/openapi/v1/papers/upload/xxx.pdf" \\
+    "{OPENAPI_BASE_URL}/openapi/v1/papers/upload/xxx.pdf" \\
     --header 'Content-Type: application/octet-stream' \\
     --header 'X-API-KEY: ••••••'\n
 '''},
@@ -283,8 +286,8 @@ class TopicPlaza(APIView):
         },
         extensions={'x-code-samples': [
             {'lang': 'curl', 'label': 'cURL',
-             'source': '''curl -X GET \\
-    "$OPENAPI_BASE_URL/openapi/v1/topics/plaza?limit=100" \\
+             'source': f'''curl -X GET \\
+    "{OPENAPI_BASE_URL}/openapi/v1/topics/plaza?limit=100" \\
     --header 'X-API-KEY: ••••••'
 '''
              },
@@ -331,8 +334,8 @@ class MineTopics(APIView):
         },
         extensions={'x-code-samples': [
             {'lang': 'curl', 'label': 'cURL',
-             'source': '''curl -X GET \\
-    "$OPENAPI_BASE_URL/openapi/v1/topics/mine?limit=100" \\
+             'source': f'''curl -X GET \\
+    "{OPENAPI_BASE_URL}/openapi/v1/topics/mine?limit=100" \\
     --header 'X-API-KEY: ••••••'
 '''
              },
@@ -379,8 +382,8 @@ class MineCollection(APIView):
         },
         extensions={'x-code-samples': [
             {'lang': 'curl', 'label': 'cURL',
-             'source': '''curl -X GET \\
-    "$OPENAPI_BASE_URL/openapi/v1/collections/mine?limit=100" \\
+             'source': f'''curl -X GET \\
+    "{OPENAPI_BASE_URL}/openapi/v1/collections/mine?limit=100" \\
     --header 'X-API-KEY: ••••••'
 '''
              },
@@ -456,15 +459,15 @@ class Chat(APIView):
             (400, 'application/json'): OpenApiResponse(ExceptionResponseSerializer),
         },
         extensions={'x-code-samples': [
-            {'lang': 'curl', 'label': 'cURL', 'source': '''curl --request POST \\
-    "$OPENAPI_BASE_URL/openapi/v1/chat" \\
+            {'lang': 'curl', 'label': 'cURL', 'source': f'''curl --request POST \\
+    "{OPENAPI_BASE_URL}/openapi/v1/chat" \\
     --header 'Content-Type: application/json' \\
     --header 'X-API-KEY: ••••••' \\
-    --data '{
+    --data '{{
         "content": "what is LLM",
         "conversation_id": "d02df0c9-9df2-4d3b-9c32-2cc3ab27f726",
         "topic_id": "367a4c84-8738-444b-856d-90e6196c6fe6"
-    }' 
+    }}' 
 \n'''},
             {'lang': 'python', 'label': 'Python', 'source': '''import os
 import requests
