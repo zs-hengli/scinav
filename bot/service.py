@@ -123,7 +123,7 @@ def get_bot_list(validated_data):
     if validated_data['list_type'] == 'all':
         bot_list = bot_list_all(vd['user_id'], vd['page_size'], vd['page_num'])
     elif validated_data['list_type'] == 'my':
-        bot_list = bot_list_my(vd['user_id'], vd['page_size'], vd['page_num'])
+        bot_list = bot_list_mine(vd['user_id'], vd['page_size'], vd['page_num'])
     elif validated_data['list_type'] == 'subscribe':
         bot_list = bot_list_subscribe(vd['user_id'], vd['page_size'], vd['page_num'])
     elif validated_data['list_type'] == 'chat_menu':
@@ -171,7 +171,7 @@ def bot_list_subscribe(user_id, page_size=10, page_num=1):
     }
 
 
-def bot_list_my(user_id, page_size=10, page_num=1):
+def bot_list_mine(user_id, page_size=10, page_num=1):
     query_set = Bot.objects.filter(user_id=user_id, del_flag=False).order_by('-created_at')
     filter_count = query_set.count()
     start_num = page_size * (page_num - 1)

@@ -1,10 +1,12 @@
 import logging
 
+from django.db.models import Q
 from bot.rag_service import Document as Rag_Document
 from collection.models import Collection
 from document.serializers import DocumentRagCreateSerializer
 from document.service import get_documents_by_rag, get_reference_formats
 from document.tasks import async_update_document
+from openapi.serializers_openapi import CollectionListSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -55,3 +57,12 @@ def search(user_id, content, topn=100):
         })
     async_update_document.apply_async(args=[document_ids])
     return ret_data
+
+
+def collection_list_mine(user_id, page_size=10, page_num=1, keyword=None):
+    filter_query = Q(user_id=user_id, del_flag=False)
+    if keyword:
+        filter_query &= Q(title__icontains=keyword)
+    collections = Collection.objects.filter(filter_query).order_by('-updated_at')
+    query_set = collections[page_size*(page_num-1):page_size*page_num]
+    return CollectionListSerializer(query_set, many=True).data

@@ -100,14 +100,13 @@ class SearchDocumentResultSerializer(serializers.Serializer):
         required=False, child=serializers.CharField(max_length=128), help_text='List of paper authors.')
     pub_date = serializers.DateField(required=False, help_text='Publication date, formatted as `YYYY-MM-DD`.')
     citation_count = serializers.IntegerField(required=False, help_text='Number of citation', allow_null=True)
-    reference_count = serializers.IntegerField(required=False, help_text='Number of references', allow_null=True)
     source = PaperIdSerializer(required=False, help_text='Paper source identifier.')
     # collection_title = serializers.CharField(required=False, max_length=255, help_text='Title of the paper\'s source.')
     venue = serializers.CharField(
         required=False, max_length=32, help_text='the paper published at.(a journal or conference)', allow_null=True)
     doi = serializers.CharField(required=False, max_length=256, help_text='the paper doi', allow_null=True)
     categories = serializers.ListField(
-        required=False, child=serializers.CharField(max_length=128), help_text='List of paper authors.'
+        required=False, child=serializers.CharField(max_length=128), help_text='List of the paper relevant subject.'
     )
     reference_formats = serializers.JSONField(
         required=False, help_text='a Dictionary of formate references for the paper. key enum:[GB/T,MLA,APA,BibTex]')
@@ -176,9 +175,8 @@ class UploadFileResponseSerializer(serializers.Serializer):
 class TopicListRequestSerializer(serializers.Serializer):
     limit = serializers.IntegerField(
         min_value=1, max_value=2000, required=False, default=100,
-        help_text='max records to return the search results'
+        help_text='max records to return'
     )
-
 
 @extend_schema_serializer(
     examples=[
@@ -219,12 +217,43 @@ class PersonalLibraryRequestSerializer(serializers.Serializer):
         FAILED = 'failed', _('paper parse failed')
     limit = serializers.IntegerField(
         min_value=1, max_value=2000, required=False, default=100,
-        help_text='max records to return the search results'
+        help_text='max records to return'
     )
     status = serializers.ChoiceField(
         required=False, choices=ListTypeChoices, default=ListTypeChoices.ALL,
         help_text='The status of the list.'
     )
+
+
+@extend_schema_serializer(
+    examples=[
+        OpenApiExample('Example', value={
+            'limit': 100,
+        })
+    ]
+)
+class CollectionListRequestSerializer(serializers.Serializer):
+    limit = serializers.IntegerField(
+        min_value=1, max_value=2000, required=False, default=100,
+        help_text='max records to return'
+    )
+
+
+@extend_schema_serializer(
+    examples=[
+        OpenApiExample('Example', value={
+            "id": "f5d5f9ad-bdbc-4489-95fb-74867377c74e",
+            "name": "collection name",
+        })
+    ]
+)
+class CollectionListSerializer(serializers.Serializer):
+    id = serializers.CharField(help_text='The unique id of the collection.')
+    name = serializers.CharField(source='title', help_text='The name of the collection.')
+
+    class Meta:
+        model = Collection
+        fields = ['id', 'name']
 
 
 @extend_schema_serializer(
@@ -312,26 +341,27 @@ class PaperKnowledgeSerializer(serializers.Serializer):
 class ChatQuerySerializer(serializers.Serializer):
     content = serializers.CharField(
         required=True, min_length=1, max_length=4096,
-        help_text='The content of the question to be processed by large language model.'
+        help_text='The `content` of the question to be processed by large language model.'
     )
     conversation_id = serializers.CharField(
         required=True, min_length=32, max_length=36,
-        help_text='Unique identifier of the conversation. You can pass in a non-existent conversation id to create a '
-                  'conversation, or leave it blank and the api will automatically generate one.')
+        help_text='Unique identifier of the conversation. You can pass in a non-existent `conversation_id` to create a '
+                  'conversation')
     topic_id = serializers.CharField(
         required=False, allow_null=True, allow_blank=True, min_length=32, max_length=36,
-        help_text='The id of the topic. If the topic_id is passed in, the paper_knowledge will be ignored.'
+        help_text='The id of the topic. If the `topic_id` is passed in, the `paper_knowledge` will be ignored.'
     )
     paper_knowledge = PaperKnowledgeSerializer(
-        required=False, help_text='The paper knowledge of the question to be processed by large language model.')
+        required=False, help_text='The paper knowledge of the conversation to be processed by large language model.')
     question_id = serializers.CharField(
         required=False, min_length=32, max_length=36,
-        help_text='The id of the question. If the question_id is passed in, the paper_knowledge and topic_id will be '
-                  'ignored.'
+        help_text='Unique identifier of one round of dialogue with the `conversation_id`. '
+                  'If the `question_id` is passed in, the `paper_knowledge` and `topic_id` will be ignored.'
     )
     model = serializers.ChoiceField(
         choices=Conversation.LLMModel, required=False, default=None,
-        help_text='Specify large language model name'
+        help_text='Specify large language `model` name. gpt-4o is currently open for access, but in the future, '
+                  'it will be restricted to advanced users only.'
     )
 
     def validate(self, attrs):

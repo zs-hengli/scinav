@@ -253,23 +253,29 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Science Navigator Open API',
     'DESCRIPTION': 'Science Navigator Open API' + '''
+- Get API KEY
+    - Click on the **Science Navigator API** button on the homepage.
+    - On the API Key page, click the **Create a new API Key** button.
+    - Input an API Key name and click **Create API Key**.
+    - Save the API key in a secure location. 
+    
 - Responses status_code=422 error_code:
-    - 403 Authentication credentials were not provided or illegal.
-    - 429 Request exceeds rate limit.
+    - `403` Authentication credentials were not provided or illegal.
+    - `429` Request exceeds rate limit.
+    - `100000` Internal system error. Please contact the administrator.
+    - `100001` Parameter validation failed.
+    - `100002` Requested resource does not exist.
+    - `120001` We apologize, but the current service is experiencing an issue and cannot complete your request. Please try again later or contact our technical support team for assistance. Thank you for your understanding and patience.
     
-    - 100000 Internal system error. Please contact the administrator.
-    - 100001 Parameter validation failed.
-    - 100002 Requested resource does not exist.
-    
-    - 120001 We apologize, but the current service is experiencing an issue and cannot complete your request. Please try again later or contact our technical support team for assistance. Thank you for your understanding and patience.
 ''',
-    'VERSION': '1.0.0',
+    'VERSION': '0.1.0',
     'SERVE_INCLUDE_SCHEMA': False,
     "PREPROCESSING_HOOKS": ["core.openapi.preprocessing_filter_spec"],
     'TAGS': [
         {'name': 'Papers', 'description': ''},
         {'name': 'PersonalLibrary', 'description': ''},
         {'name': 'Topics', 'description': ''},
+        {'name': 'Collections', 'description': ''},
         {'name': 'Chat', 'description': ''},
     ]
     # OTHER SETTINGS

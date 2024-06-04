@@ -104,7 +104,7 @@ def openapi_response(data, status=200, set_cookie=None):
     return response
 
 
-def openapi_exception_response(error_code, error_msg, status=422, detail=None, set_cookie=None):
+def openapi_exception_response(error_code, error_msg, status=400, detail=None, set_cookie=None):
     data = {
         'error_code': error_code,
         'error_message': error_msg,
