@@ -7,25 +7,25 @@ from django.views.decorators.http import require_http_methods
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample, OpenApiResponse, OpenApiSchemaBase
 from rest_framework.decorators import throttle_classes, permission_classes
-from rest_framework.parsers import FileUploadParser
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from bot.models import Bot
 from bot.service import bot_list_all, bot_list_my
-from chat.serializers import ChatQuerySerializer
 from chat.service import chat_query
 from core.utils.throttling import UserRateThrottle
-from core.utils.views import extract_json, my_json_response, streaming_response
-from document.serializers import SearchQuerySerializer
-from document.service import search, presigned_url, get_document_library_list
+from core.utils.views import extract_json, streaming_response, openapi_response, \
+    openapi_exception_response
+from document.service import get_document_library_list
 from document.tasks import async_add_user_operation_log
 from openapi.base_service import record_openapi_log
 from openapi.models import OpenapiLog
 from openapi.serializers_openapi import ChatResponseSerializer, UploadFileResponseSerializer, \
-    SearchResponseSerializer, TopicPlazaRequestSerializer, TopicPlazaResponseSerializer, \
-    PersonalLibraryRequestSerializer, PersonalLibraryResponseSerializer
+    TopicListRequestSerializer, PersonalLibraryRequestSerializer, SearchDocumentResultSerializer, ChatQuerySerializer, \
+    DocumentLibraryPersonalSerializer
+from openapi.serializers_openapi import SearchQuerySerializer, ExceptionResponseSerializer, TopicListSerializer
 from openapi.service import upload_paper, get_request_openapi_key_id
+from openapi.service_openapi import search
 
 logger = logging.getLogger(__name__)
 
@@ -68,11 +68,12 @@ class Index(APIView):
         logger.debug(f'kwargs: {kwargs}')
         logger.debug(f"dddddddd request.token: {request.headers}")
         data = {'desc': 'openapi index'}
-        return my_json_response(data)
+        return openapi_response(None)
+        # return openapi_exception_response(100000, '系统内部错误 请联系管理员', status=400)
 
 
 @method_decorator([extract_json], name='dispatch')
-@method_decorator(require_http_methods(['POST']), name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
 @throttle_classes([UserRateThrottle])
 class Search(APIView):
     """
@@ -80,32 +81,276 @@ class Search(APIView):
     """
     @staticmethod
     @extend_schema(
-        operation_id='Search_Papers',
+        operation_id='Search Papers',
         description='search papers',
         tags=['Papers'],
-        request={'application/json':SearchQuerySerializer},
-        responses={200: SearchResponseSerializer},
+        parameters=[SearchQuerySerializer],
+        responses={
+            (200, 'application/json'): OpenApiResponse(SearchDocumentResultSerializer(many=True)),
+            (422, 'application/json'): OpenApiResponse(ExceptionResponseSerializer),
+        },
+        extensions={'x-code-samples': [
+            {'lang': 'curl', 'label': 'cURL',
+             'source': '''curl -X GET \\
+    'http://localhost:8300/openapi/v1/papers/search?content=LLM&limit=100' \\
+    --header 'X-API-KEY: ••••••'
+\n'''},
+            {'lang': 'python', 'label': 'Python', 'source': '''import requests
+
+headers = {
+  'X-API-KEY': '••••••'
+}
+url = "http://localhost:8300/openapi/v1/papers/search?content=LLM&limit=100"
+
+response = requests.get(url, headers=headers)
+
+print(response.text)
+\n'''},
+        ]},
     )
-    def post(request, *args, **kwargs):
-        openapi_key_id = get_request_openapi_key_id(request)
+    def get(request, *args, **kwargs):
+        # openapi_key_id = get_request_openapi_key_id(request)
         user_id = request.user.id
-        query = request.data
+        query = request.query_params.dict()
         serial = SearchQuerySerializer(data=query)
         if not serial.is_valid():
-            return my_json_response(
-                code=100001, msg=f'validate error, {list(serial.errors.keys())}', data=serial.errors)
-        post_data = serial.validated_data
-        data = search(
-            user_id, post_data['content'], post_data['page_size'], post_data['page_num'], topn=post_data['topn']
-        )
+            error_msg = f'validate error, {list(serial.errors.keys())}'
+            return openapi_exception_response(100001, error_msg, status=422)
+        vd = serial.validated_data
+        data = search(user_id, vd['content'], vd['limit'])
         async_add_user_operation_log.apply_async(kwargs={
             'user_id': user_id,
             'operation_type': 'search',
-            'operation_content': post_data['content'],
+            'operation_content': vd['content'],
             'source': 'api'
         })
         # record_openapi_log(user_id, openapi_key_id, OpenapiLog.Api.SEARCH, OpenapiLog.Status.SUCCESS)
-        return my_json_response(data)
+        return openapi_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['PUT']), name='dispatch')
+@throttle_classes([UserRateThrottle])
+class UploadPaper(APIView):
+    @staticmethod
+    @extend_schema(
+        operation_id='Upload Paper Pdf',
+        description='Upload paper pdf to personal library.',
+        tags=['Papers'],
+        parameters=[
+            OpenApiParameter(
+                name='filename',
+                location=OpenApiParameter.PATH,
+                type=OpenApiTypes.STR,
+                description='The filename of the paper pdf file.',
+            ),
+        ],
+        request={
+            'application/octet-stream': {
+                'format': 'binary',
+                'description': 'paper pdf file binary',
+            }
+        },
+        responses={
+            (200, 'application/json'): OpenApiResponse(UploadFileResponseSerializer),
+            (422, 'application/json'): OpenApiResponse(ExceptionResponseSerializer),
+        },
+        extensions={'x-code-samples': [
+            {'lang': 'curl', 'label': 'cURL', 'source': '''curl --request PUT \\
+    -T '<path>/xxx.pdf' \\
+    'http://<host>/openapi/v1/papers/upload/xxx.pdf' \\
+    --header 'Content-Type: application/octet-stream' \\
+    --header 'X-API-KEY: ••••••'\n
+'''},
+            {'lang': 'python', 'label': 'Python', 'source': '''import requests
+
+headers = {
+  'Content-Type': 'application/octet-stream',
+  'X-API-KEY': '••••••'
+}
+file_path = '<path>/xxx.pdf'
+url = "http://<host>/openapi/v1/papers/upload/xxx.pdf"
+with open(file_path, "rb") as file:
+    response = requests.put(url, headers=headers, data=file)
+
+print(response.text)
+\n'''}
+        ]},
+    )
+    def put(request, filename, *args, **kwargs):
+        openapi_key_id = get_request_openapi_key_id(request)
+        user_id = request.user.id
+        file: InMemoryUploadedFile = request.data.get('file')
+        if not file.name.endswith('.pdf'):
+            error_msg = 'filename is invalid, must end with .pdf'
+            return openapi_exception_response(100001, error_msg, status=422)
+
+        if not file:
+            error_msg = 'file not found'
+            return openapi_exception_response(100001, error_msg, status=422)
+        # logger.debug(f'ddddddddd file: {file.name}, {file.file}')
+        code, msg, data = upload_paper(user_id, file)
+
+        record_openapi_log(
+            user_id, openapi_key_id, OpenapiLog.Api.UPLOAD_PAPER, OpenapiLog.Status.SUCCESS, obj_id1=data['task_id']
+        )
+        if code != 0:
+            return openapi_exception_response(code, msg, status=422)
+        return openapi_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+@throttle_classes([UserRateThrottle])
+class PersonalLibrary(APIView):
+    @staticmethod
+    @extend_schema(
+        operation_id='List Personal Library',
+        description='list personal library, list order by updated_at desc',
+        tags=['PersonalLibrary'],
+        parameters=[PersonalLibraryRequestSerializer],
+        responses={
+            (200, 'application/json'): OpenApiResponse(DocumentLibraryPersonalSerializer(many=True),),
+            (422, 'application/json'): OpenApiResponse(ExceptionResponseSerializer),
+        },
+        extensions={'x-code-samples': [
+            {'lang': 'curl', 'label': 'cURL',
+             'source': '''curl -X GET \\
+    'http://<host>/openapi/v1/personal/library?status=completed&limit=100' \\
+    --header 'X-API-KEY: ••••••'
+'''
+             },
+            {'lang': 'python', 'label': 'Python', 'source': '''import requests
+            
+headers = {
+  'X-API-KEY': '••••••'
+}
+url = "http://<host>/openapi/v1/personal/library?status=completed&limit=100"
+
+response = requests.get(url, headers=headers)
+
+print(response.text)
+\n'''
+             }
+        ]},
+    )
+    def get(request, *args, **kwargs):
+        openapi_key_id = get_request_openapi_key_id(request)
+        query = request.query_params.dict()
+        serial = PersonalLibraryRequestSerializer(data=query)
+        if not serial.is_valid():
+            error_msg = f'validate error, {list(serial.errors.keys())}'
+            return openapi_exception_response(100001, error_msg, status=422)
+        vd = serial.validated_data
+        data = get_document_library_list(request.user.id, vd['status'], vd['limit'])
+        ret_data = []
+        if data and data['list']:
+            for item in data['list']:
+                ret_data.append({
+                    'id': item['id'],
+                    'filename': item['filename'],
+                    'paper_title': item['document_title'],
+                    'paper_id': item['document_id'],
+                    'pages': item['pages'],
+                    'status': item['status'],
+                    'reference_type': item['reference_type'],
+                    'record_time': item['record_time'],
+                    'type': item['type'],
+                })
+        return openapi_response(ret_data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+@throttle_classes([UserRateThrottle])
+class TopicPlaza(APIView):
+    @staticmethod
+    @extend_schema(
+        operation_id='List Topic Plaza',
+        description='List Topic Plaza',
+        tags=['Topics'],
+        parameters=[TopicListRequestSerializer],
+        # request={''},
+        responses={
+            (200, 'application/json'): OpenApiResponse(TopicListSerializer,),
+            (422, 'application/json'): OpenApiResponse(ExceptionResponseSerializer),
+        },
+        extensions={'x-code-samples': [
+            {'lang': 'curl', 'label': 'cURL',
+             'source': '''curl -X GET \\
+    'http://<host>/openapi/v1/topics/plaza?limit=100' \\
+    --header 'X-API-KEY: ••••••'
+'''
+             },
+            {'lang': 'python', 'label': 'Python', 'source': '''import requests
+            
+headers = {
+  'X-API-KEY': '••••••'
+}
+url = "http://<host>/openapi/v1/topics/plaza?limit=100"
+
+response = requests.get(url, headers=headers)
+
+print(response.text)
+\n'''}
+        ]},
+    )
+    def get(request, *args, **kwargs):
+        openapi_key_id = get_request_openapi_key_id(request)
+        query = request.query_params.dict()
+        serial = TopicListRequestSerializer(data=query)
+        if not serial.is_valid():
+            error_msg = f'validate error, {list(serial.errors.keys())}'
+            return openapi_exception_response(100001, error_msg, status=422)
+        vd = serial.validated_data
+        data = bot_list_all(request.user.id, vd['limit'])
+        return openapi_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+@throttle_classes([UserRateThrottle])
+class MyTopics(APIView):
+    @staticmethod
+    @extend_schema(
+        operation_id='List My Topics',
+        description='List My Topics',
+        tags=['Topics'],
+        parameters=[TopicListRequestSerializer],
+        responses={
+            (200, 'application/json'): OpenApiResponse(TopicListSerializer,),
+            (422, 'application/json'): OpenApiResponse(ExceptionResponseSerializer),
+        },
+        extensions={'x-code-samples': [
+            {'lang': 'curl', 'label': 'cURL',
+             'source': '''curl -X GET \\
+    'http://<host>/openapi/v1/topics/my?limit=100' \\
+    --header 'X-API-KEY: ••••••'
+'''
+             },
+            {'lang': 'python', 'label': 'Python', 'source': '''import requests
+            
+headers = {
+  'X-API-KEY': '••••••'
+}
+url = "http://<host>/openapi/v1/topics/my?limit=100"
+
+response = requests.get(url, headers=headers)
+
+print(response.text)
+\n'''}
+        ]},
+    )
+    def get(request, *args, **kwargs):
+        openapi_key_id = get_request_openapi_key_id(request)
+        query = request.query_params.dict()
+        serial = TopicListRequestSerializer(data=query)
+        if not serial.is_valid():
+            error_msg = f'validate error, {list(serial.errors.keys())}'
+            return openapi_exception_response(100001, error_msg, status=422)
+        vd = serial.validated_data
+        data = bot_list_my(request.user.id, vd['limit'])
+        return openapi_response(data['list'])
 
 
 @method_decorator([extract_json], name='dispatch')
@@ -142,8 +387,40 @@ class Chat(APIView):
 ''',
                     ),
                 ],
-            )
-        }
+            ),
+            (422, 'application/json'): OpenApiResponse(ExceptionResponseSerializer),
+        },
+        extensions={'x-code-samples': [
+            {'lang': 'curl', 'label': 'cURL', 'source': '''curl --request POST \\
+    'http://<host>/openapi/v1/chat' \\
+    --header 'Content-Type: application/json' \\
+    --header 'X-API-KEY: ••••••' \\
+    --data '{
+        "content": "what is LLM",
+        "conversation_id": "d02df0c9-9df2-4d3b-9c32-2cc3ab27f726",
+        "topic_id": "367a4c84-8738-444b-856d-90e6196c6fe6"
+    }' 
+\n'''},
+            {'lang': 'python', 'label': 'Python', 'source': '''import requests
+import json
+
+url = "http://<host>/openapi/v1/chat"
+
+payload = json.dumps({
+  "content": "what is LLM",
+  "conversation_id": "d02df0c9-9df2-4d3b-9c32-2cc3ab27f726",
+  "topic_id": "367a4c84-8738-444b-856d-90e6196c6fe6"
+})
+headers = {
+  'Content-Type': 'application/json',
+  'X-API-KEY': '••••••'
+}
+
+response = requests.post(url, headers=headers, data=payload, stream=True)
+for line in response.iter_lines():
+    print(line)
+\n'''}
+        ]},
     )
     def post(request, *args, **kwargs):
         openapi_key_id = get_request_openapi_key_id(request)
@@ -156,124 +433,18 @@ class Chat(APIView):
                 'error': f'validate error, {list(serial.errors.keys())}', 'detail': serial.errors}) + '\n'
             logger.error(f'error msg: {out_str}')
             return streaming_response(iter(out_str))
-        validated_data = serial.validated_data
-        if (
-            validated_data.get('bot_id')
-            and not Bot.objects.filter(id=validated_data['bot_id'], del_flag=False).exists()
-        ):
+        vd = serial.validated_data
+        if vd.get('topic_id'): vd['bot_id'] = vd['topic_id']
+        if vd.get('paper_knowledge') and vd['paper_knowledge'].get('collection_ids'):
+            vd['collections'] = vd['paper_knowledge']['collection_ids']
+        if vd.get('paper_knowledge') and vd['paper_knowledge'].get('paper_ids'):
+            vd['documents'] = vd['paper_knowledge']['paper_ids']
+
+        if vd.get('topic_id') and not Bot.objects.filter(id=vd['topic_id'], del_flag=False).exists():
             out_str = json.dumps({
-                'event': 'on_error', 'error_code': 100002, 'error': 'bot not found', 'detail': {}}) + '\n'
+                'event': 'on_error', 'error_code': 100002, 'error': 'topic not found', 'detail': {}}) + '\n'
             logger.error(f'error msg: {out_str}')
             return streaming_response(iter(out_str))
-        data = chat_query(user_id, validated_data, openapi_key_id)
+
+        data = chat_query(user_id, vd, openapi_key_id)
         return streaming_response(data)
-
-
-@method_decorator([extract_json], name='dispatch')
-@method_decorator(require_http_methods(['PUT']), name='dispatch')
-@throttle_classes([UserRateThrottle])
-class UploadPaper(APIView):
-    @staticmethod
-    @extend_schema(
-        operation_id='Upload_Paper',
-        description='Upload paper to personal library.',
-        tags=['Papers'],
-        request={
-            'application/octet-stream': {
-                'format': 'binary',
-                'description': 'paper file binary',
-            }
-        },
-        responses={
-            (200, 'application/json'): UploadFileResponseSerializer
-        },
-    )
-    def put(request, filename, *args, **kwargs):
-        openapi_key_id = get_request_openapi_key_id(request)
-        user_id = request.user.id
-        file: InMemoryUploadedFile = request.data.get('file')
-        if not file:
-            return my_json_response(code=100001, msg='file not found')
-        # logger.debug(f'ddddddddd file: {file.name}, {file.file}')
-        code, msg, data = upload_paper(user_id, file)
-
-        record_openapi_log(
-            user_id, openapi_key_id, OpenapiLog.Api.UPLOAD_PAPER, OpenapiLog.Status.SUCCESS, obj_id1=data['task_id']
-        )
-        return my_json_response(data, code, msg)
-
-
-@method_decorator([extract_json], name='dispatch')
-@method_decorator(require_http_methods(['GET']), name='dispatch')
-@throttle_classes([UserRateThrottle])
-class TopicPlaza(APIView):
-    @staticmethod
-    @extend_schema(
-        operation_id='List_Topic_Plaza',
-        description='List Topic Plaza',
-        tags=['Topics'],
-        parameters=[TopicPlazaRequestSerializer],
-        # request={''},
-        responses={
-            (200, 'application/json'): OpenApiResponse(TopicPlazaResponseSerializer,)
-        }
-    )
-    def get(request, *args, **kwargs):
-        openapi_key_id = get_request_openapi_key_id(request)
-        query = request.query_params.dict()
-        serial = TopicPlazaRequestSerializer(data=query)
-        if not serial.is_valid():
-            return my_json_response(code=100001, msg=f'validate error, {list(serial.errors.keys())}')
-        vd = serial.validated_data
-        data = bot_list_all(request.user.id, vd['page_size'], vd['page_num'])
-        return my_json_response(data)
-
-
-@method_decorator([extract_json], name='dispatch')
-@method_decorator(require_http_methods(['GET']), name='dispatch')
-@throttle_classes([UserRateThrottle])
-class MyTopics(APIView):
-    @staticmethod
-    @extend_schema(
-        operation_id='List_My_Topics',
-        description='List My Topics',
-        tags=['Topics'],
-        parameters=[TopicPlazaRequestSerializer],
-        responses={
-            (200, 'application/json'): OpenApiResponse(TopicPlazaResponseSerializer,)
-        }
-    )
-    def get(request, *args, **kwargs):
-        openapi_key_id = get_request_openapi_key_id(request)
-        query = request.query_params.dict()
-        serial = TopicPlazaRequestSerializer(data=query)
-        if not serial.is_valid():
-            return my_json_response(code=100001, msg=f'validate error, {list(serial.errors.keys())}')
-        vd = serial.validated_data
-        data = bot_list_my(request.user.id, vd['page_size'], vd['page_num'])
-        return my_json_response(data)
-
-
-@method_decorator([extract_json], name='dispatch')
-@method_decorator(require_http_methods(['GET']), name='dispatch')
-@throttle_classes([UserRateThrottle])
-class PersonalLibrary(APIView):
-    @staticmethod
-    @extend_schema(
-        operation_id='List_Personal_Library',
-        description='List Personal Library',
-        tags=['PersonalLibrary'],
-        parameters=[PersonalLibraryRequestSerializer],
-        responses={
-            (200, 'application/json'): OpenApiResponse(PersonalLibraryResponseSerializer,)
-        }
-    )
-    def get(request, *args, **kwargs):
-        openapi_key_id = get_request_openapi_key_id(request)
-        query = request.query_params.dict()
-        serial = PersonalLibraryRequestSerializer(data=query)
-        if not serial.is_valid():
-            return my_json_response(code=100001, msg=f'validate error, {list(serial.errors.keys())}')
-        vd = serial.validated_data
-        data = get_document_library_list(request.user.id, vd['list_type'], vd['page_size'], vd['page_num'])
-        return my_json_response(data)

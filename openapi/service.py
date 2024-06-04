@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def get_request_openapi_key_id(request):
     headers = request.headers
-    openapi_key = headers.get('Openapi-Key', '')
+    openapi_key = headers.get('X-API-KEY', '')
     _, openapi_key_id, openapi_key_str = openapi_key.split('-')
     return int(openapi_key_id)
 

@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import time
 
 import binascii
@@ -29,10 +30,6 @@ class MyAuthentication(BaseAuthentication):
             if user:
                 return user, None
 
-        # todo user login
-        # token_str = '618ddd2c4e0eda29cf74b7eb8563ba957b3227de'
-        # return MyUser.objects.get(username='admin'), token_str
-
 
 def check_token(request):
     token = request.headers.get('Authorization')
@@ -42,7 +39,6 @@ def check_token(request):
         logger.debug(f'user_info: {user_info}')
         if user_info and user_info.get('sub') and time.time() < user_info['exp']:
             if user := MyUser.objects.filter(id=user_info['sub']).first():
-                # todo update user_info
                 if user.email != user_info['email'] or user.phone != user_info['phone_number']:
                     user = save_auth_user_info(user_info)
             else:
@@ -56,18 +52,18 @@ def check_token(request):
 
 
 def check_openapi_key(request):
-    openapi_key = request.headers.get('Openapi-Key')
-    my_sk = 'sk-' + '0' * 9 + '1'
-    if openapi_key == my_sk:
-        user = MyUser.objects.filter(pk='af35a6ea-d9db-442c-8fd1-88a69846424e').first()
-        return user, 1
+    openapi_key = request.headers.get('X-API-KEY')
     if openapi_key:
-        _, openapi_key_id, openapi_key_str = openapi_key.split('-')
+        patt = '-'
+        if re.compile(patt).findall(openapi_key).count(patt) != 2:
+            logger.info(f"openapi_key format error: {openapi_key}")
+            return None, False
+        _, openapi_key_id, openapi_key_str = openapi_key.split(patt)
         logger.debug(f'openapi_key: {openapi_key}')
         openapi_key_id = int(openapi_key_id)
         openapi = OpenapiKey.objects.filter(pk=openapi_key_id, del_flag=False).first()
         if not openapi:
-            logger.info(f"not found openapi_key: {openapi}")
+            logger.info(f"not found openapi_key record by api_key: {openapi_key}")
             return None, False
         user = MyUser.objects.filter(pk=openapi.user_id).first()
         check_res = OpenapiKey.key_check(openapi.api_key, openapi_key)
@@ -75,6 +71,8 @@ def check_openapi_key(request):
             logger.warning(f'Invalid access_token, request.headers: {request.headers}')
             raise exceptions.AuthenticationFailed(gettext_lazy('Invalid access_token.'))
         return user, openapi.id
+    else:
+        logger.info(f'no X-API-KEY in headers, headers: {request.headers}')
     return None, False
 
 

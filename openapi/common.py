@@ -9,6 +9,6 @@ class MyAuthenticationScheme(OpenApiAuthenticationExtension):
         return {
             "type": "apiKey",
             "in": "header",
-            "name": "OpenAPI-Key",
+            "name": "X-API-KEY",
             "description": "Value should be formatted: `<key>`"
         }

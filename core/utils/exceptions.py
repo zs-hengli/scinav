@@ -44,9 +44,10 @@ def custom_exception_handler(exc, context):
         response_data['code'] = exc.status if getattr(exc, 'status', None) else exc.status_code
         if 'detail' in response.data and 'code' in response.data:
             response_data['msg'] = f"{response.data['code']}: {response.data['detail']}"
-        response_data['validation_errors'] = response.data \
-            if isinstance(response.data, dict) \
+        response_data['validation_errors'] = (
+            response.data if isinstance(response.data, dict)
             else {'non_field_errors': response.data}
+        )
         response.data = response_data
     else:
         exc_tb = tb.format_exc()
@@ -61,6 +62,17 @@ def custom_exception_handler(exc, context):
         and context['request'].path.endswith('api/v1/chat')
     ):
         return StreamingHttpResponse(iter(json.dumps(response_data)), content_type='text/event-stream')
+    elif (
+        context and context.get('request') and context['request'].path
+        and context['request'].path.startswith('/openapi/v1')
+    ):
+        new_response_date = {
+            'error_code': response_data['code'],
+            'error_message': response_data['msg'],
+            'request_id': response_data['request_id'],
+            'details': response_data['validation_errors'],
+        }
+        response.data = new_response_date
     return response
 
 

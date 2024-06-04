@@ -1,13 +1,12 @@
 import logging
 import os
 
-from django.conf import settings
 from django.db import models
-from rest_framework import serializers
 from django.utils.translation import gettext_lazy as _
+from drf_spectacular.utils import extend_schema_serializer, OpenApiExample
+from rest_framework import serializers
 
 from bot.rag_service import Document as RagDocument
-
 from collection.models import Collection
 from document.models import Document
 
@@ -17,25 +16,6 @@ logger = logging.getLogger(__name__)
 class BaseModelSerializer(serializers.ModelSerializer):
     created_at = serializers.DateTimeField(required=False, format="%Y-%m-%d %H:%M:%S")
     updated_at = serializers.DateTimeField(required=False, format="%Y-%m-%d %H:%M:%S")
-
-
-class SearchQuerySerializer(serializers.Serializer):
-    content = serializers.CharField(
-        required=True, max_length=1024,
-        help_text='The query content based on which the search is performed. <br>'
-                  'This could be `text`, `keywords`, or any other form of searchable content.')
-    page_size = serializers.IntegerField(
-        min_value=1, max_value=2000, required=False, default=10,
-        help_text='number of records per page'
-    )
-    page_num = serializers.IntegerField(
-        min_value=1, required=False, default=1,
-        help_text='page number begin with 1'
-    )
-    topn = serializers.IntegerField(
-        min_value=1, max_value=1000, required=False, default=100,
-        help_text='max records to return the search results'
-    )
 
 
 class DocumentApaListSerializer(serializers.ModelSerializer):
@@ -278,13 +258,13 @@ class DocumentLibraryPersonalSerializer(serializers.Serializer):
         required=True, allow_null=True,
         help_text='The id of the personal document library related paper',
     )
-    pages = serializers.IntegerField(
-        required=False, allow_null=True, default=None,
-        help_text='The number of pages of the personal document library related paper',
-    )
     record_time = serializers.DateTimeField(
         required=True, format="%Y-%m-%d %H:%M:%S", allow_null=True,
         help_text='The time when the personal document library was added',
+    )
+    pages = serializers.IntegerField(
+        required=False, allow_null=True, default=None,
+        help_text='The number of pages of the personal document library related paper',
     )
     type = serializers.CharField(
         required=False, default=Collection.TypeChoices.PERSONAL,
@@ -297,7 +277,7 @@ class DocumentLibraryPersonalSerializer(serializers.Serializer):
                   '[`public`, `reference`, `reference&full_text_accessible`]',
     )
     status = serializers.CharField(
-        required=False, default='-',
+        required=False, default=None,
         help_text='The status of the personal document library in [`error`, `completed`, `in_progress`]',
     )
 

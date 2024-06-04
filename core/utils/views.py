@@ -94,6 +94,29 @@ def my_json_response(data=None, code=0, msg='', status=200, set_cookie=None):
     return response
 
 
+def openapi_response(data, status=200, set_cookie=None):
+    logger.info(f'openapi response data: {data}')
+    if not data:
+        response = HttpResponse(status=200)
+    else:
+        response = JsonResponse(data, status=status, safe=False)
+    if set_cookie: response.set_cookie(**set_cookie)
+    return response
+
+
+def openapi_exception_response(error_code, error_msg, status=422, detail=None, set_cookie=None):
+    data = {
+        'error_code': error_code,
+        'error_message': error_msg,
+        'request_id': datetime.datetime.now().strftime("%Y%m%d%H%M%S") + str(uuid.uuid4())[:8],
+        'details': detail,
+    }
+    logger.info(f'openapi response data: {data}')
+    response = JsonResponse(data, status=status)
+    if set_cookie: response.set_cookie(**set_cookie)
+    return response
+
+
 def streaming_response(data_iter):
     # return StreamingHttpResponse(data_iter, content_type='application/octet-stream')
     response = StreamingHttpResponse(data_iter, content_type='text/event-stream')
