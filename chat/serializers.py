@@ -27,7 +27,9 @@ class ConversationCreateBaseSerializer(serializers.Serializer):
     model = serializers.ChoiceField(choices=Conversation.LLMModel, required=False, default=None)
 
     def validate(self, attrs):
+        attrs['has_conversation'] = False
         if attrs.get('conversation_id'):
+            attrs['has_conversation'] = True
             return attrs
         document_ids = []
         if attrs.get('documents'):

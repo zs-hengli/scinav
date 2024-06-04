@@ -244,9 +244,10 @@ class Document:
 
 class Conversations:
     @staticmethod
-    def create(user_id, agent_id=None, paper_ids=None, public_collection_ids=None, llm_name=None):
+    def create(user_id, conversation_id, agent_id=None, paper_ids=None, public_collection_ids=None, llm_name=None):
         url = RAG_HOST + '/api/v1/conversations'
         post_data = {
+            'id': conversation_id,
             'user_id': user_id,
             'agent_id': agent_id,
             'paper_ids': paper_ids,
@@ -439,3 +440,27 @@ class Conversations:
         if not conversation.is_named:
             conversation.title = content[:128]
         conversation.save()
+
+
+class Authors:
+
+    @staticmethod
+    def search_authors(name, limit=10):
+        url = RAG_HOST + f'/api/v1/authors/search?name={name}&limit={limit}'
+        resp = rag_requests(url, method='GET')
+        logger.info(f'url: {url}, response: {resp.text}')
+        return resp
+
+    @staticmethod
+    def get_authors(author_id):
+        url = RAG_HOST + f'/api/v1/authors/{author_id}'
+        resp = rag_requests(url, method='GET')
+        logger.info(f'url: {url}, response: {resp.text}')
+        return resp
+
+    @staticmethod
+    def get_author_papers(author_id):
+        url = RAG_HOST + f'/api/v1/authors/{author_id}/papers'
+        resp = rag_requests(url, method='GET')
+        logger.info(f'url: {url}, response: {resp.text}')
+        return resp

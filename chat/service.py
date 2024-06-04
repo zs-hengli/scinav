@@ -86,13 +86,15 @@ def conversation_create(user_id, validated_data, openapi_kay_id=None):
             'doc_id': p['doc_id'],
             'full_text_accessible': p['full_text_accessible']
         })
-    conv = RagConversation.create(
-        user_id=user_id,
-        agent_id=agent_id,
-        paper_ids=paper_ids,
-        public_collection_ids=public_collection_ids,
-        llm_name=vd['model'],
-    )
+    rag_conv_create_data = {
+        'conversation_id': vd.get('conversation_id'),
+        'user_id': user_id,
+        'agent_id': agent_id,
+        'paper_ids': paper_ids,
+        'public_collection_ids': public_collection_ids,
+        'llm_name': vd['model'],
+    }
+    conv = RagConversation.create(**rag_conv_create_data)
     conversation = Conversation.objects.create(
         id=conv['id'],
         title="未命名-" + datetime.datetime.now().strftime("%Y%m%d%H%M%S") if title is None else title,
@@ -263,7 +265,7 @@ def conversation_menu_list(user_id, list_type='all'):
 
 
 def chat_query(user_id, validated_data, openapi_key_id=None):
-    if not validated_data.get('conversation_id'):
+    if not validated_data.get('has_conversation'):
         conversation_id = conversation_create(user_id, validated_data, openapi_key_id)
     else:
         conversation_id = validated_data['conversation_id']

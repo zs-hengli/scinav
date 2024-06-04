@@ -305,15 +305,24 @@ class PaperKnowledgeSerializer(serializers.Serializer):
 )
 class ChatQuerySerializer(serializers.Serializer):
     content = serializers.CharField(required=True, min_length=1, max_length=4096)
-    conversation_id = serializers.CharField(required=True, min_length=32, max_length=36)
+    conversation_id = serializers.CharField(
+        required=True, min_length=32, max_length=36,
+        help_text='Unique identifier of the conversation. You can pass in a non-existent conversation id to create a '
+                  'conversation, or leave it blank and the api will automatically generate one.')
     topic_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, min_length=32, max_length=36)
     paper_knowledge = PaperKnowledgeSerializer(required=False)
     question_id = serializers.CharField(required=False, min_length=32, max_length=36)
-    model = serializers.ChoiceField(choices=Conversation.LLMModel, required=False, default=None)
+    model = serializers.ChoiceField(
+        choices=Conversation.LLMModel, required=False, default=None,
+        help_text='Specify large language model name'
+    )
 
     def validate(self, attrs):
-        if attrs.get('conversation_id') and Conversation.objects.filter(id=attrs['conversation_id']).exists():
-            return attrs
+        attrs['has_conversation'] = False
+        if attrs.get('conversation_id'):
+            if Conversation.objects.filter(id=attrs['conversation_id']).exists():
+                attrs['has_conversation'] = True
+                return attrs
         paper_ids = []
         if attrs.get('paper_knowledge') and attrs['paper_knowledge'].get('paper_ids'):
             paper_ids = attrs['paper_knowledge']['paper_ids']
@@ -336,12 +345,12 @@ class ChatQuerySerializer(serializers.Serializer):
         attrs['all_document_ids'] = paper_ids
 
         if (
-            not attrs.get('conversation_id')
-            and not attrs.get('paper_knowledge', {}).get('paper_ids')
+            not attrs.get('paper_knowledge', {}).get('paper_ids')
             and not attrs.get('paper_knowledge', {}).get('collection_ids')
             and not attrs.get('topic_id')
         ):
-            raise serializers.ValidationError('conversation_id, topic_id and paper_knowledge are all empty')
+            raise serializers.ValidationError(
+                'topic_id、 paper_knowledge.paper_ids and paper_knowledge.collection_ids are all empty')
         return attrs
 
 
