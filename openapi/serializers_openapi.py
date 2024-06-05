@@ -380,7 +380,12 @@ class ChatQuerySerializer(serializers.Serializer):
     def validate(self, attrs):
         attrs['has_conversation'] = False
         if attrs.get('conversation_id'):
-            if Conversation.objects.filter(id=attrs['conversation_id']).exists():
+            conversation = Conversation.objects.filter(id=attrs['conversation_id']).first()
+            if conversation and not conversation.is_api:
+                raise serializers.ValidationError(
+                    'The conversation_id is not created by api, Please generate a new conversation_id, '
+                    'API chat and web chat cannot use the same conversation_id.', 120002)
+            if conversation:
                 attrs['has_conversation'] = True
                 return attrs
         paper_ids = []
