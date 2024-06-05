@@ -259,7 +259,7 @@ SPECTACULAR_SETTINGS = {
     - Input an API Key name and click **Create API Key**.
     - Save the API key in a secure location. 
     
-- Responses status_code=422 error_code:
+- Responses when the HTTP `status_code` is not 200 will include an `error_code`::
     - `403` Authentication credentials were not provided or illegal.
     - `429` Request exceeds rate limit.
     - `100000` Internal system error. Please contact the administrator.

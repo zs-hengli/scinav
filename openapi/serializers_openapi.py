@@ -347,7 +347,7 @@ class PaperKnowledgeSerializer(serializers.Serializer):
             },
             'conversation_id': 'a7d51983-1828-4ccf-9808-d0a2aeb3e18c',
             'question_id': 'b0b8987b-a981-49e9-947b-f28476286c05',
-            'model': 'gpt-3.5-turbo',
+            'model': 'gpt-4o',
         })
     ]
 )
@@ -372,9 +372,9 @@ class ChatQuerySerializer(serializers.Serializer):
                   'If the `question_id` is passed in, the `paper_knowledge` and `topic_id` will be ignored.'
     )
     model = serializers.ChoiceField(
-        choices=Conversation.LLMModel, required=False, default=None,
-        help_text='Specify large language `model` name. gpt-4o is currently open for access, but in the future, '
-                  'it will be restricted to advanced users only.'
+        choices=Conversation.LLMModel, required=False, default=Conversation.LLMModel.GPT_4O,
+        help_text='Specify large language `model` name. Currently, only `gpt-4o` is available'
+        # gpt-4o is currently open for access, but in the future, it will be restricted to advanced users only.
     )
 
     def validate(self, attrs):

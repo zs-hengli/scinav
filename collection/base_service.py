@@ -71,4 +71,5 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
         update_data['llm_name'] = model
         conversation.model = model
         conversation.save()
+        RagConversation.update(**update_data)
     return conversation

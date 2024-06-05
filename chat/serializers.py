@@ -24,7 +24,7 @@ class ConversationCreateBaseSerializer(serializers.Serializer):
     documents = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
     collections = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
     bot_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, min_length=32, max_length=36)
-    model = serializers.ChoiceField(choices=Conversation.LLMModel, required=False, default=None)
+    model = serializers.ChoiceField(choices=Conversation.LLMModel, required=False, default=Conversation.LLMModel.GPT_4O)
 
     def validate(self, attrs):
         attrs['has_conversation'] = False

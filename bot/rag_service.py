@@ -421,7 +421,7 @@ class Conversations:
             question.save()
             if openapi_key_id:
                 model = question.model
-                if not model: model = 'gpt-3.5-turbo'
+                if not model: model = 'gpt-4o'
                 record_openapi_log(
                     user_id, openapi_key_id, OpenapiLog.Api.CONVERSATION, OpenapiLog.Status.SUCCESS,
                     model=model, obj_id1=conversation_id, obj_id2=question.id,)
@@ -449,13 +449,15 @@ class Authors:
         url = RAG_HOST + f'/api/v1/authors/search?name={name}&limit={limit}'
         resp = rag_requests(url, method='GET')
         logger.info(f'url: {url}, response: {resp.text}')
+        resp = resp.json()
         return resp
 
     @staticmethod
-    def get_authors(author_id):
+    def get_author(author_id):
         url = RAG_HOST + f'/api/v1/authors/{author_id}'
         resp = rag_requests(url, method='GET')
         logger.info(f'url: {url}, response: {resp.text}')
+        resp = resp.json()
         return resp
 
     @staticmethod
@@ -463,4 +465,5 @@ class Authors:
         url = RAG_HOST + f'/api/v1/authors/{author_id}/papers'
         resp = rag_requests(url, method='GET')
         logger.info(f'url: {url}, response: {resp.text}')
+        resp = resp.json()
         return resp
