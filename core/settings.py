@@ -266,6 +266,7 @@ SPECTACULAR_SETTINGS = {
     - `100001` Parameter validation failed.
     - `100002` Requested resource does not exist.
     - `120001` We apologize, but the current service is experiencing an issue and cannot complete your request. Please try again later or contact our technical support team for assistance. Thank you for your understanding and patience.
+    - `120002` API chat and web chat cannot use the same conversation_id.
     
 ''',
     'VERSION': '0.1.0',

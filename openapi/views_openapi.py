@@ -8,6 +8,7 @@ from django.views.decorators.http import require_http_methods
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample, OpenApiResponse, OpenApiSchemaBase
 from rest_framework.decorators import throttle_classes, permission_classes
+from rest_framework.exceptions import ErrorDetail
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
@@ -505,8 +506,12 @@ for line in response.iter_lines():
         query = request.data
         serial = ChatQuerySerializer(data=query)
         if not serial.is_valid():
+            error_code = 100001
+            error_detail: ErrorDetail = serial.errors.get('non_field_errors')
+            if error_detail and error_detail[0].code != 'invalid':
+                error_code = error_detail[0].code
             out_str = json.dumps({
-                'event': 'on_error', 'error_code': 100001,
+                'event': 'on_error', 'error_code': error_code,
                 'error': f'validate error, {list(serial.errors.keys())}', 'detail': serial.errors}) + '\n'
             logger.error(f'error msg: {out_str}')
             return streaming_response(iter(out_str))

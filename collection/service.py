@@ -502,9 +502,9 @@ def collections_create_bot_check(user_id, collection_ids=None, bot_id=None):
         filter_query = None
         for rd in ref_docs:
             if not filter_query:
-                filter_query = Q(doc_id=rd[0], collection_id=rd[1], object_path=None)
+                filter_query = Q(doc_id=rd[0], collection_id=rd[1], object_path=None, full_text_accessible=False)
             else:
-                filter_query |= Q(doc_id=rd[0], collection_id=rd[1], object_path=None)
+                filter_query |= Q(doc_id=rd[0], collection_id=rd[1], object_path=None, full_text_accessible=False)
         if Document.objects.filter(filter_query).exists():
             return 110005, '您当前专题中包含未关联到公共库或公共库中无法获取全文的个人上传文件，订阅该专题的其他用户将无法针对该文献进行智能对话或智能对话中部分功能无法使用。'
     return 0, ''

@@ -11,19 +11,6 @@ from openapi.serializers_openapi import CollectionListSerializer
 logger = logging.getLogger(__name__)
 
 
-ExceptionResponseSchemaDescription = '''
-- Responses status_code=422 error_code:
-    - 403 Authentication credentials were not provided or illegal.
-    - 429 Request exceeds rate limit.
-    
-    - 100000 Internal system error. Please contact the administrator.
-    - 100001 Parameter validation failed.
-    - 100002 Requested resource does not exist.
-    
-    - 120001 We apologize, but the current service is experiencing an issue and cannot complete your request. Please try again later or contact our technical support team for assistance. Thank you for your understanding and patience.
-'''
-
-
 def search(user_id, content, topn=100):
     rag_ret = Rag_Document.search(user_id, content, limit=topn)
     rag_ret = DocumentRagCreateSerializer(rag_ret, many=True).data

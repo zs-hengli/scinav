@@ -359,7 +359,7 @@ class ChatQuerySerializer(serializers.Serializer):
     conversation_id = serializers.CharField(
         required=True, min_length=32, max_length=36,
         help_text='Unique identifier of the conversation. You can pass in a non-existent `conversation_id` to create a '
-                  'conversation')
+                  'conversation. Do not copy the `conversation_id` from web existed conversation.')
     topic_id = serializers.CharField(
         required=False, allow_null=True, allow_blank=True, min_length=32, max_length=36,
         help_text='The id of the topic. If the `topic_id` is passed in, the `paper_knowledge` will be ignored.'
