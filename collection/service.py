@@ -16,7 +16,7 @@ from collection.serializers import CollectionPublicSerializer, CollectionListSer
 from core.utils.common import str_hash
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentApaListSerializer, CollectionDocumentListCollectionSerializer
-from document.service import search_result_from_cache
+from document.service import search_result_from_cache, search, author_documents
 from document.tasks import async_ref_document_to_document_library, async_update_conversation_by_collection
 
 logger = logging.getLogger(__name__)
@@ -243,6 +243,34 @@ def collection_document_add(validated_data):
         async_ref_document_to_document_library.apply_async(args=[document_ids])
     async_update_conversation_by_collection.apply_async(args=[vd['collection_id']])
     return instances
+
+
+def get_search_documents_4_all_selected(user_id, document_ids, content=None, author_id=None, page_size=1000, page_num=1):
+    if not content and not author_id:
+        return []
+    if content:
+        documents = search(user_id, content, page_size, page_num)
+    else:
+        documents = author_documents(user_id, author_id, page_size, page_num)
+    documents_dict = {d['id']: d for d in documents['list']}
+    if document_ids:
+        for d_id in document_ids:
+            documents_dict.pop(d_id)
+    return list(documents_dict.values())
+
+
+def get_documents_titles(document_ids):
+    documents = Document.objects.filter(id__in=document_ids).values("title", "id").all()
+    titles = []
+    for d in documents:
+        if not d['title']:
+            doc_lib_title = DocumentLibrary.objects.filter(
+                document_id=d['id'], del_flag=False, filename__isnull=False
+            ).values_list('filename', flat=True).first()
+            if doc_lib_title: titles.append(doc_lib_title)
+        else:
+            titles.append(d['title'])
+    return titles
 
 
 def collection_document_delete(validated_data):

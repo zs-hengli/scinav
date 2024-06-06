@@ -18,6 +18,28 @@ class BaseModelSerializer(serializers.ModelSerializer):
     updated_at = serializers.DateTimeField(required=False, format="%Y-%m-%d %H:%M:%S")
 
 
+class AuthorsSearchQuerySerializer(serializers.Serializer):
+    content = serializers.CharField(required=True, max_length=4096, allow_blank=True, trim_whitespace=False)
+    page_size = serializers.IntegerField(default=10)
+    page_num = serializers.IntegerField(default=1)
+    topn = serializers.IntegerField(default=100)
+
+
+class AuthorsDetailSerializer(serializers.Serializer):
+    id = serializers.IntegerField(required=True)
+    name = serializers.CharField(required=True, max_length=512)
+    aliases = serializers.ListField(required=True, child=serializers.CharField(required=False, max_length=512))
+    affiliations = serializers.ListField(required=True, child=serializers.CharField(required=False, max_length=512))
+    paper_count = serializers.IntegerField(required=True)
+    citation_count = serializers.IntegerField(required=True)
+    h_index = serializers.IntegerField(required=True)
+
+
+class AuthorsDocumentsQuerySerializer(serializers.Serializer):
+    page_size = serializers.IntegerField(default=10)
+    page_num = serializers.IntegerField(default=1)
+
+
 class DocumentApaListSerializer(serializers.ModelSerializer):
     doc_apa = serializers.SerializerMethodField()
 
@@ -298,6 +320,7 @@ class DocLibAddQuerySerializer(serializers.Serializer):
         COLLECTION_DOCUMENT_LIBRARY = 'collection_document_library'
         COLLECTION_ALL = 'collection_all'
         DOCUMENT_SEARCH = 'document_search'
+        AUTHOR_SEARCH = 'author_search'
 
     document_ids = serializers.ListField(
         required=False, child=serializers.CharField(allow_null=False, allow_blank=False), default=None)
@@ -305,6 +328,7 @@ class DocLibAddQuerySerializer(serializers.Serializer):
     bot_id = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
     add_type = serializers.ChoiceField(required=False, choices=AddTypeChoices, default=None)
     search_content = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
+    author_id = serializers.IntegerField(required=False, allow_null=True, default=None)
 
     def validate(self, attrs):
         if (
@@ -312,11 +336,13 @@ class DocLibAddQuerySerializer(serializers.Serializer):
             and not attrs.get('collection_id') and not attrs.get('bot_id')
         ):
             raise serializers.ValidationError('document_ids or collection_id or bot_id is required')
+
         if attrs.get('collection_id') and attrs.get('bot_id'):
             raise serializers.ValidationError('collection_id and bot_id cannot be set at the same time')
+
         if (
-            attrs.get('add_type') and not attrs.get('collection_id')
-            and not attrs.get('bot_id') and not attrs.get('search_content')
+            attrs.get('add_type') and not attrs.get('collection_id') and not attrs.get('bot_id')
+            and not attrs.get('search_content') and not attrs.get('author_id')
         ):
             raise serializers.ValidationError('collection_id or bot_id or search_content is required')
 

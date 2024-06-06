@@ -16,11 +16,11 @@ from document.serializers import DocumentDetailSerializer, GenPresignedUrlQueryS
     DocumentUploadQuerySerializer, \
     DocumentLibraryListQuerySerializer, DocumentRagUpdateSerializer, DocLibUpdateNameQuerySerializer, \
     DocLibAddQuerySerializer, DocLibDeleteQuerySerializer, DocLibCheckQuerySerializer, DocumentRagCreateSerializer, \
-    ImportPapersToCollectionSerializer
+    ImportPapersToCollectionSerializer, AuthorsSearchQuerySerializer, AuthorsDocumentsQuerySerializer
 from document.service import search, presigned_url, document_personal_upload, \
     get_document_library_list, document_library_add, document_library_delete, doc_lib_batch_operation_check, \
     get_url_by_object_path, get_reference_formats, update_exist_documents, import_papers_to_collection, \
-    document_update_from_rag
+    document_update_from_rag, search_authors, author_detail, author_documents
 from document.tasks import async_add_user_operation_log
 
 logger = logging.getLogger(__name__)
@@ -73,6 +73,46 @@ class Search(APIView):
             'operation_type': 'search',
             'operation_content': body['content'],
         })
+        return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+class Authors(APIView):
+
+    def get(self, request, author_id, *args, **kwargs):  # noqa
+        user_id = request.user.id
+        data = author_detail(user_id, author_id)
+        return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['POST']), name='dispatch')
+class AuthorsSearch(APIView):
+
+    def post(self, request, *args, **kwargs):  # noqa
+        body = request.data
+        user_id = request.user.id
+        serial = AuthorsSearchQuerySerializer(data=body)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        vd = serial.validated_data
+        data = search_authors(
+            user_id, vd['content'], vd['page_size'], vd['page_num'], topn=vd['topn'])
+        return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+class AuthorsDocuments(APIView):
+    def get(self, request, author_id, *args, **kwargs):  # noqa
+        user_id = request.user.id
+        query = request.GET
+        serial = AuthorsDocumentsQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        vd = serial.validated_data
+        data = author_documents(user_id, author_id, vd['page_size'], vd['page_num'])
         return my_json_response(data)
 
 
@@ -182,7 +222,8 @@ class DocumentsLibrary(APIView):
             return my_json_response(serial.errors, code=100001, msg='invalid post data')
         vd = serial.validated_data
         document_library_add(
-            request.user.id, vd['document_ids'], vd['collection_id'], vd['bot_id'], vd['add_type'], vd['search_content']
+            request.user.id, vd['document_ids'], vd['collection_id'], vd['bot_id'], vd['add_type'],
+            vd['search_content'], vd['author_id']
         )
         return my_json_response({})
 

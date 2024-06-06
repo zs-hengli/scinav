@@ -10,7 +10,7 @@ from django.utils.translation import gettext_lazy as _
 
 from bot.models import BotSubscribe, Bot, BotCollection
 from bot.rag_service import Document as RagDocument
-from bot.rag_service import Document as Rag_Document
+from bot.rag_service import Authors as RagAuthors
 from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionDocumentListSerializer
 from core.utils.common import str_hash
@@ -18,8 +18,9 @@ from core.utils.exceptions import ValidationError
 from document.base_service import document_update_from_rag_ret, update_document_lib, search_result_delete_cache
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentLibraryPersonalSerializer, DocLibAddQuerySerializer, \
-    DocumentLibraryListQuerySerializer, DocumentRagCreateSerializer
-from document.tasks import async_document_library_task, async_update_document, async_update_conversation_by_collection
+    DocumentLibraryListQuerySerializer, DocumentRagCreateSerializer, AuthorsDetailSerializer
+from document.tasks import async_document_library_task, async_update_document, async_update_conversation_by_collection, \
+    update_document_library_task
 
 logger = logging.getLogger(__name__)
 
@@ -71,25 +72,19 @@ def gen_s3_presigned_post(bucket: str, path: str) -> dict:
 
 
 def presigned_url(user_id, filename):
-    return Rag_Document.presigned_url(user_id, settings.OSS_PUBLIC_KEY, 'put_object', filename=filename)
+    return RagDocument.presigned_url(user_id, settings.OSS_PUBLIC_KEY, 'put_object', filename=filename)
 
 
 def get_url_by_object_path(user_id, object_path):
     if object_path:
-        rag_ret = Rag_Document.presigned_url(user_id, settings.OSS_PUBLIC_KEY, 'get_object', object_path=object_path)
+        rag_ret = RagDocument.presigned_url(user_id, settings.OSS_PUBLIC_KEY, 'get_object', object_path=object_path)
         return rag_ret['presigned_url'] if rag_ret and rag_ret.get('presigned_url') else None
     return None
 
 
-def search(user_id, content, page_size=10, page_num=1, topn=100):
-    start_num = page_size * (page_num - 1)
-    logger.info(f"limit: [{start_num}: {page_size * page_num}]")
-    if cache_data := search_result_from_cache(user_id, content, page_size, page_num):
-        return cache_data
-
-    rag_ret = Rag_Document.search(user_id, content, limit=topn)
-    rag_ret = DocumentRagCreateSerializer(rag_ret, many=True).data
-    ret_data = []
+def _rag_papers_to_documents(rag_papers):
+    rag_ret = DocumentRagCreateSerializer(rag_papers, many=True).data
+    documents = []
     rag_collections = list(set([r['collection_id'] for r in rag_ret]))
     collections = Collection.objects.filter(id__in=rag_collections).values('id', 'title').all()
     collections_dict = {c['id']: c for c in collections}
@@ -110,7 +105,7 @@ def search(user_id, content, page_size=10, page_num=1, topn=100):
             data['conference'] if data['conference'] else
             data['venue'] if data['venue'] else ''
         )
-        ret_data.append({
+        documents.append({
             'id': data['id'],
             'title': data['title'],
             'abstract': data['abstract'],
@@ -121,15 +116,63 @@ def search(user_id, content, page_size=10, page_num=1, topn=100):
             'collection_id': str(data['collection_id']),
             'type': collection_tag,
             'collection_title': collection_title,
+            'venue': source,
             'source': source,
             'reference_formats': get_reference_formats(data),
         })
+    return documents
+
+
+def search(user_id, content, page_size=10, page_num=1, topn=100):
+    start_num = page_size * (page_num - 1)
+    logger.info(f"limit: [{start_num}: {page_size * page_num}]")
+    if cache_data := search_result_from_cache(user_id, content, page_size, page_num):
+        return cache_data
+
+    rag_ret = RagDocument.search(user_id, content, limit=topn)
+    documents = _rag_papers_to_documents(rag_ret)
+    document_ids = [d['id'] for d in documents]
     async_update_document.apply_async(args=[document_ids])
-    search_result_save_cache(user_id, content, ret_data)
-    total = len(ret_data)
+    search_result_save_cache(user_id, content, documents)
+    total = len(documents)
     return {
-        'list': ret_data[start_num:(page_size * page_num)] if total > start_num else [],
+        'list': documents[start_num:(page_size * page_num)] if total > start_num else [],
         'total': total,
+    }
+
+
+def author_detail(user_id, author_id):
+    author = RagAuthors.get_author(author_id)
+    return AuthorsDetailSerializer(author).data
+
+
+def author_documents(user_id, author_id, page_size=10, page_num=1):
+    start_num = page_size * (page_num - 1)
+    if cache_data := search_result_from_cache(user_id, author_id, page_size, page_num, search_type='author_papers'):
+        return cache_data
+    papers = RagAuthors.get_author_papers(author_id)
+    documents = _rag_papers_to_documents(papers)
+    document_ids = [d['id'] for d in documents]
+    async_update_document.apply_async(args=[document_ids])
+    search_result_save_cache(user_id, author_id, documents)
+    total = len(documents)
+    return {
+        'list': documents[start_num:(page_size * page_num)] if total > start_num else [],
+        'total': total,
+    }
+
+
+def search_authors(user_id, content, page_size=10, page_num=1, topn=100):
+    start_num = page_size * (page_num - 1)
+    logger.info(f"limit: [{start_num}: {page_size * page_num}]")
+    if cache_data := search_result_from_cache(user_id, content, page_size, page_num, search_type='author'):
+        return cache_data
+    authors = RagAuthors.search_authors(content, limit=topn)
+    authors_list = AuthorsDetailSerializer(authors, many=True).data
+    search_result_save_cache(user_id, content, authors_list, search_type='author')
+    return {
+        'list': authors_list[start_num:(page_size * page_num)] if len(authors_list) > start_num else [],
+        'total': len(authors_list),
     }
 
 
@@ -149,8 +192,8 @@ def get_documents_by_rag(rag_data):
     return {f"{d.collection_id}-{d.doc_id}": d for d in documents}
 
 
-def search_result_from_cache(user_id, content, page_size=10, page_num=1):
-    doc_search_redis_key_prefix = f'scinav:doc:search:{user_id}'
+def search_result_from_cache(user_id, content, page_size=10, page_num=1, search_type='paper'):
+    doc_search_redis_key_prefix = f'scinav:{search_type}:search:{user_id}'
     content_hash = str_hash(f'{content}')
     redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
     search_cache = cache.get(redis_key)
@@ -167,8 +210,8 @@ def search_result_from_cache(user_id, content, page_size=10, page_num=1):
         }
 
 
-def search_result_save_cache(user_id, content, data, search_result_expires=600):
-    doc_search_redis_key_prefix = f'scinav:doc:search:{user_id}'
+def search_result_save_cache(user_id, content, data, search_result_expires=600, search_type='doc'):
+    doc_search_redis_key_prefix = f'scinav:{search_type}:search:{user_id}'
     content_hash = str_hash(f'{content}')
     redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
     res = cache.set(redis_key, json.dumps(data), search_result_expires)
@@ -431,7 +474,7 @@ def document_personal_upload(validated_data):
     return instances
 
 
-def document_library_add(user_id, document_ids, collection_id, bot_id, add_type, search_content):
+def document_library_add(user_id, document_ids, collection_id, bot_id, add_type, search_content, author_id=None):
     """
     添加个人库：
      1. 搜索结果添加
@@ -445,6 +488,10 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
         bot = Bot.objects.filter(id=bot_id, del_flag=False).first()
     if add_type == DocLibAddQuerySerializer.AddTypeChoices.DOCUMENT_SEARCH:
         search_result = search(user_id, search_content, 200, 1)
+        if search_result:
+            all_document_ids = [d['id'] for d in search_result['list']]
+    elif add_type == DocLibAddQuerySerializer.AddTypeChoices.AUTHOR_SEARCH:
+        search_result = author_documents(user_id, author_id, 1000, 1)
         if search_result:
             all_document_ids = [d['id'] for d in search_result['list']]
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_ARXIV:
@@ -606,13 +653,27 @@ def document_library_delete(user_id, ids, list_type):
     ).values('id', 'collection_id', 'doc_id').all()
     for document in to_del_documents:
         RagDocument.delete_personal_paper(document['collection_id'], document['doc_id'])
+    failed_tasks = []
     for task in in_progress_document_libs:
-        RagDocument.cancel_ingest_task(task.task_id)
+        new_task, task_result = update_document_library_task(task)
+        if new_task:
+            if new_task.task_status == DocumentLibrary.TaskStatusChoices.COMPLETED and task.task_type == 'personal':
+                RagDocument.delete_personal_paper(task_result['paper']['collection_id'], task_result['paper']['doc_id'])
+            elif new_task.task_status in [
+                DocumentLibrary.TaskStatusChoices.IN_PROGRESS, DocumentLibrary.TaskStatusChoices.PENDING
+            ]:
+                RagDocument.cancel_ingest_task(task.task_id)
+        else:
+            failed_tasks.append(task)
     # delete search cache when delete personal document_library
     if user_per_document_ids:
         search_result_delete_cache(user_id)
     # delete DocumentLibrary
     effected_num = doc_libs.update(del_flag=True)
+    for failed_task in failed_tasks:
+        failed_task.del_flag = False
+        failed_task.save()
+        effected_num -= 1
     return effected_num
 
 

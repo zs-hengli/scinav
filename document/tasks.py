@@ -47,39 +47,45 @@ def async_document_library_task(self, task_id=None):
         DocumentLibrary.TaskStatusChoices.TO_BE_CANCELLED
     ]).all():
         for i in instances:
-            try:
-                rag_ret = RagDocument.get_ingest_task(i.task_id)
-            except Exception as e:
-                logger.error(f'async_document_library_task get_ingest_task error {i.task_id}, {e}')
-                continue
-            task_status = rag_ret['task_status']
-            logger.info(f'async_document_library_task {i.task_id}, {task_status}')
-
-            if task_status == DocumentLibrary.TaskStatusChoices.ERROR:
-                if i.document_id:
-                    Document.objects.filter(pk=i.document_id).update(state='error')
-                i.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message']}
-                update_openapi_log_upload_status(task_id, OpenapiLog.Status.FAILED)
-            elif task_status == DocumentLibrary.TaskStatusChoices.CANCELLED:
-                update_openapi_log_upload_status(task_id, OpenapiLog.Status.FAILED)
-            elif task_status == DocumentLibrary.TaskStatusChoices.COMPLETED:
-                if rag_ret.get('paper'):
-                    rag_ret['paper']['state'] = task_status
-                update_openapi_log_upload_status(task_id, OpenapiLog.Status.SUCCESS)
-                try:
-                    document = document_update_from_rag_ret(rag_ret['paper']) if rag_ret['paper'] else None
-                    i.document = document
-                    reference_doc_to_document(document)
-                except Exception as e:
-                    logger.error(f'async_document_library_task {task_status} {i.task_id}, {e}')
-            else:  # QUEUEING IN_PROGRESS TO_BE_CANCELLED
-                if i.task_status == task_status:
-                    continue
-            i.task_status = task_status
-            i.save()
-            if i.task_status == DocumentLibrary.TaskStatusChoices.COMPLETED and i.task_type == 'personal':
-                search_result_delete_cache(i.user_id)
+            update_document_library_task(i)
     return True
+
+
+def update_document_library_task(doc_lib: DocumentLibrary):
+    try:
+        rag_ret = RagDocument.get_ingest_task(doc_lib.task_id)
+    except Exception as e:
+        logger.error(f'async_document_library_task get_ingest_task error {doc_lib.task_id}, {e}')
+        return False, False
+    task_id = doc_lib.task_id
+    task_status = rag_ret['task_status']
+    logger.info(f'async_document_library_task {task_id}, {task_status}')
+
+    if task_status == DocumentLibrary.TaskStatusChoices.ERROR:
+        if doc_lib.document_id:
+            Document.objects.filter(pk=doc_lib.document_id).update(state='error')
+        doc_lib.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message']}
+        update_openapi_log_upload_status(task_id, OpenapiLog.Status.FAILED)
+    elif task_status == DocumentLibrary.TaskStatusChoices.CANCELLED:
+        update_openapi_log_upload_status(task_id, OpenapiLog.Status.FAILED)
+    elif task_status == DocumentLibrary.TaskStatusChoices.COMPLETED:
+        if rag_ret.get('paper'):
+            rag_ret['paper']['state'] = task_status
+        update_openapi_log_upload_status(task_id, OpenapiLog.Status.SUCCESS)
+        try:
+            document = document_update_from_rag_ret(rag_ret['paper']) if rag_ret['paper'] else None
+            doc_lib.document = document
+            reference_doc_to_document(document)
+        except Exception as e:
+            logger.error(f'async_document_library_task {task_status} {doc_lib.task_id}, {e}')
+    else:  # QUEUEING IN_PROGRESS TO_BE_CANCELLED
+        if doc_lib.task_status == task_status:
+            return doc_lib, rag_ret
+    doc_lib.task_status = task_status
+    doc_lib.save()
+    if doc_lib.task_status == DocumentLibrary.TaskStatusChoices.COMPLETED and doc_lib.task_type == 'personal':
+        search_result_delete_cache(doc_lib.user_id)
+    return doc_lib, rag_ret
 
 
 @shared_task(bind=True)

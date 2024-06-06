@@ -20,7 +20,8 @@ from collection.service import (collection_list, collections_docs, generate_coll
                                 collections_delete, collection_chat_operation_check, collection_delete_operation_check,
                                 collections_published_bot_titles, collections_create_bot_check,
                                 collections_reference_bot_titles, collection_document_add, collection_document_delete,
-                                collection_documents_select_list)
+                                collection_documents_select_list, get_documents_titles,
+                                get_search_documents_4_all_selected)
 from core.utils.views import check_keys, extract_json, my_json_response
 
 logger = logging.getLogger(__name__)
@@ -69,26 +70,35 @@ class Collections(APIView):
     @staticmethod
     def post(request, *args, **kwargs):
         query = request.data
-        query['user_id'] = request.user.id
+        user_id = request.user.id
         serial = CollectionCreateSerializer(data=query)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         vd = serial.validated_data
-        if vd.get('document_ids'):
+        if vd.get('is_all'):
+            documents = get_search_documents_4_all_selected(
+                user_id, vd.get('document_ids'), vd.get('search_content'), vd.get('author_id'))
+            vd['document_ids'] = [doc['id'] for doc in documents]
+            vd['document_titles'] = [doc['title'] for doc in documents]
+        else:
+            vd['document_titles'] = get_documents_titles(vd['document_ids'])
+
+        if vd.get('document_titles'):
             title = generate_collection_title(document_titles=vd['document_titles'])
-            vd['title'] = title
         elif vd.get('search_content'):
-            vd['title'] = generate_collection_title(content=vd['search_content'])
+            title = vd['search_content']
+        else:
+            title = generate_collection_title(document_titles=[])
 
         collection = serial.create({
-            'title': vd['title'],
-            'user_id': vd['user_id'],
+            'title': title,
+            'user_id': user_id,
             'type': vd['type'],
             'updated_at': datetime.datetime.now()
         })
         # update collection document
         update_data = {
-            'user_id': vd['user_id'],
+            'user_id': user_id,
             'collection_id': str(collection.id),
             'document_ids': vd.get('document_ids'),
             'is_all': vd.get('is_all', False),
@@ -96,6 +106,8 @@ class Collections(APIView):
         }
         if vd.get('search_content'):
             update_data['search_content'] = vd['search_content']
+        if vd.get('author_id'):
+            update_data['author_id'] = vd['author_id']
         update_serial = CollectionDocUpdateSerializer(data=update_data)
         update_serial.is_valid(raise_exception=True)
         collection_document_add(update_serial.validated_data)
@@ -180,6 +192,11 @@ class CollectionDocuments(APIView):
         post_data = request.data
         post_data['user_id'] = user_id
         post_data['collection_id'] = collection_id
+        if post_data.get('search_content') or post_data.get('author_id'):
+            documents = get_search_documents_4_all_selected(
+                user_id, post_data.get('document_ids'), post_data.get('search_content'), post_data.get('author_id')
+            )
+            post_data['document_ids'] = [doc['id'] for doc in documents]
         serial = CollectionDocUpdateSerializer(data=post_data)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')

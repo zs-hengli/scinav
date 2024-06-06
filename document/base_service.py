@@ -76,7 +76,7 @@ def reference_doc_to_document_library(document):
 
 
 def search_result_delete_cache(user_id):
-    doc_search_redis_key_prefix = f'scinav:doc:search:{user_id}'
+    doc_search_redis_key_prefix = f'scinav:paper:search:{user_id}'
     keys = cache.keys(f"{doc_search_redis_key_prefix}:*")
     if keys:
         return cache.delete_many(keys)
