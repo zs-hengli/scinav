@@ -52,7 +52,6 @@ def conversation_create(user_id, validated_data, openapi_kay_id=None):
                 type=Collection.TypeChoices.PERSONAL,
                 total_personal=len(vd['documents']),
                 updated_at=datetime.datetime.now(),
-                is_api=True if openapi_kay_id else False,
             )
             c_doc_objs = []
             d_lib = DocumentLibrary.objects.filter(
@@ -108,6 +107,7 @@ def conversation_create(user_id, validated_data, openapi_kay_id=None):
         type=chat_type,
         is_named=title is not None,
         bot_id=vd.get('bot_id'),
+        is_api=True if openapi_kay_id else False,
     )
     # 返回 Conversation id
     return str(conversation.id)
