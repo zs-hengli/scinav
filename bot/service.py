@@ -14,7 +14,7 @@ from collection.serializers import CollectionDocumentListSerializer
 from core.utils.exceptions import InternalServerError, ValidationError
 from document.base_service import update_document_lib
 from document.models import Document, DocumentLibrary
-from document.tasks import async_schedule_publish_bot_task
+from document.tasks import async_schedule_publish_bot_task, async_ref_document_to_document_library
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +83,13 @@ def bot_update(bot, bot_collections, updated_attrs, validated_data):
     need_recreate_attrs = ['questions', 'prompt_spec', 'collections', 'tools']
     if set(need_recreate_attrs) & set(updated_attrs):
         recreate_bot(bot, collections)
+    # update ref_document_to_document_library
+    if bot.type == Bot.TypeChoices.PUBLIC:
+        for collection_id in validated_data['collections']:
+            if collection_id not in bc_ids:
+                document_ids = CollectionDocument.objects.filter(
+                    collection_id=collection_id, del_flag=False).values_list('document_id', flat=True).all()
+                async_ref_document_to_document_library.apply_async(args=[list(document_ids)])
     # update BotCollection
     if to_add_ids := set(c_ids) - set(bc_ids):
         logger.debug(f'bot_update to_add_ids: {to_add_ids}')
