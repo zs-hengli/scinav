@@ -406,10 +406,10 @@ class CollectionCreateBotCheckQuerySerializer(serializers.Serializer):
     ids = serializers.ListField(required=False, child=serializers.CharField(max_length=36, min_length=1), default=[])
     bot_id = serializers.CharField(required=False, max_length=36, min_length=1, default=None)
 
-    def validate(self, attrs):
-        if not attrs.get('bot_id') and not attrs.get('ids'):
-            raise serializers.ValidationError(_('bot_id or ids must be set'))
-        return attrs
+    # def validate(self, attrs):
+    #     if not attrs.get('bot_id') and not attrs.get('ids'):
+    #         raise serializers.ValidationError(_('bot_id or ids must be set'))
+    #     return attrs
 
 
 def bot_subscribe_personal_document_num(bot_user_id, bot_collections=None, bot=None):
