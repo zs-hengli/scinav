@@ -45,6 +45,16 @@ class CollectionDocument(models.Model):
     updated_at = models.DateTimeField(null=True, auto_now=True)
     created_at = models.DateTimeField(null=True, auto_now_add=True)
 
+    @staticmethod
+    def raw_by_docs(collection_document_ids, fileds='*', where=None):
+        if fileds != '*' and isinstance(fileds, list):
+            fileds = ','.join(fileds)
+        doc_ids_str = ','.join([f"('{d['collection_id']}', '{d['document_id']}')" for d in collection_document_ids])
+        sql = f"SELECT {fileds} FROM collection_document WHERE (collection_id, document_id) IN ({doc_ids_str})"
+        if where:
+            sql += f"and {where}"
+        return CollectionDocument.objects.raw(sql)
+
     class Meta:
         db_table = 'collection_document'
         verbose_name = 'collection_document'

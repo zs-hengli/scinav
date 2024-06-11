@@ -212,27 +212,32 @@ def collection_detail(user_id, collection_id):
 def collection_document_add(validated_data):
     vd = validated_data
     document_ids = vd.get('document_ids', [])
-    instances = []
     created_num, updated_num = 0, 0
     updated_num = CollectionDocument.objects.filter(
         collection_id=vd['collection_id'], document_id__in=document_ids, del_flag=True).update(del_flag=False)
     d_lib = DocumentLibrary.objects.filter(
         user_id=vd['user_id'], del_flag=False, document_id__in=vd['document_ids']
     ).values_list('document_id', flat=True)
+    collection_document_ids = [{'collection_id': vd['collection_id'], 'document_id': d_id} for d_id in document_ids]
+
+    exist_coll_docs = CollectionDocument.raw_by_docs(
+        collection_document_ids, ['id', 'collection_id', 'document_id', 'full_text_accessible'])
+    exist_coll_docs_dict = {cd.document_id: cd for cd in exist_coll_docs}
+    non_exist_coll_docs = []
     for d_id in document_ids:
         cd_data = {
             'collection_id': vd['collection_id'],
             'document_id': d_id,
             'full_text_accessible': d_id in d_lib,  # todo v1.0 默认都有全文 v2.0需要考虑策略
         }
-        collection_document, created = (CollectionDocument.objects.update_or_create(
-            cd_data, collection_id=cd_data['collection_id'], document_id=cd_data['document_id']))
-        instances.append({
-            'collection_document': collection_document,
-            'created': created,
-        })
-        if created:
+        if d_id not in exist_coll_docs_dict:
+            non_exist_coll_docs.append(CollectionDocument(**cd_data))
             created_num += 1
+        elif exist_coll_docs_dict[d_id].full_text_accessible != cd_data['full_text_accessible']:
+            exist_coll_docs_dict[d_id].full_text_accessible = cd_data['full_text_accessible']
+            exist_coll_docs_dict[d_id].save()
+    # bulk_insert
+    CollectionDocument.objects.bulk_create(non_exist_coll_docs)
     if created_num + updated_num:
         Collection.objects.filter(id=vd['collection_id']).update(
             total_personal=F('total_personal') + created_num + updated_num)
@@ -242,7 +247,7 @@ def collection_document_add(validated_data):
     ):
         async_ref_document_to_document_library.apply_async(args=[document_ids])
     async_update_conversation_by_collection.apply_async(args=[vd['collection_id']])
-    return instances
+    return True
 
 
 def get_search_documents_4_all_selected(user_id, document_ids, content=None, author_id=None, page_size=1000, page_num=1):
