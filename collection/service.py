@@ -512,7 +512,7 @@ def collections_create_bot_check(user_id, collection_ids=None, bot_id=None):
         collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False).all()
         collection_ids += [c.collection_id for c in collections]
     if not collection_ids:
-        return 0
+        return 0, ''
     query_set, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(user_id, collection_ids, 'all')
     document_ids = [cd['document_id'] for cd in query_set.all()]
     # 是否有关联文献
