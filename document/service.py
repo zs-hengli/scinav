@@ -457,20 +457,21 @@ def document_personal_upload(validated_data):
             filename__startswith=file['filename'], user_id=vd['user_id'], del_flag=False).count()
         if filename_count:
             doc_lib_data['filename'] = f"{file['filename']}({filename_count})"
-        instance, _ = DocumentLibrary.objects.update_or_create(
-            doc_lib_data, user_id=vd['user_id'], filename=file['filename'], object_path=file['object_path'])
-        if not instance.task_id:
+        try:
             rag_ret = RagDocument.ingest_personal_paper(vd['user_id'], file['object_path'])
-            instance.task_id = rag_ret['task_id']
-            instance.task_status = (
+            doc_lib_data['task_id'] = rag_ret['task_id']
+            doc_lib_data['task_status'] = (
                 rag_ret['task_status']
                 if rag_ret['task_status'] != DocumentLibrary.TaskStatusChoices.COMPLETED
                 else DocumentLibrary.TaskStatusChoices.IN_PROGRESS
             )
-            if instance.task_status == DocumentLibrary.TaskStatusChoices.ERROR:
-                instance.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message'], }
-            instance.save()
-            instances.append(instance)
+            if doc_lib_data['task_status'] == DocumentLibrary.TaskStatusChoices.ERROR:
+                doc_lib_data['error'] = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message']}
+        except Exception as e:
+            logger.warning(f"RagDocument.ingest_personal_paper error: {e}")
+        instance, _ = DocumentLibrary.objects.update_or_create(
+            doc_lib_data, user_id=vd['user_id'], filename=file['filename'], object_path=file['object_path'])
+        instances.append(instance)
     return instances
 
 
