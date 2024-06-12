@@ -45,12 +45,8 @@ class DocumentApaListSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def get_doc_apa(obj: Document):
-        # 作者1,作者2;标题.期刊 时间
-        authors = ','.join(obj.authors)
-        title = obj.title
-        year = obj.year
-        source = obj.journal if obj.journal else obj.conference if obj.conference else ''
-        return f'{authors};{title}.{source} {year}'  # noqa
+        source = obj.journal if obj.journal else obj.conference if obj.conference else obj.venue
+        return Document.get_doc_apa(obj.authors, obj.year, obj.title, source)
 
     class Meta:
         model = Document
@@ -62,12 +58,8 @@ class DocumentApcReadListSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def get_doc_apa(obj: Document):
-        # 作者1,作者2;标题.期刊 时间
-        authors = ','.join(obj.authors)
-        title = obj.title
-        year = obj.year
-        source = obj.journal if obj.journal else obj.conference if obj.conference else ''
-        return f'{authors};{title}.{source} {year}'  # noqa
+        source = obj.journal if obj.journal else obj.conference if obj.conference else obj.venue
+        return Document.get_doc_apa(obj.authors, obj.year, obj.title, source)
 
     class Meta:
         model = Document
@@ -81,12 +73,8 @@ class CollectionDocumentListCollectionSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def get_doc_apa(obj: Document):
-        # 作者1,作者2;标题.期刊 时间
-        authors = ','.join(obj.authors)
-        title = obj.title
-        year = obj.year
-        source = obj.journal if obj.journal else obj.conference if obj.conference else ''
-        return f'{authors};{title}.{source} {year}'  # noqa
+        source = obj.journal if obj.journal else obj.conference if obj.conference else obj.venue
+        return Document.get_doc_apa(obj.authors, obj.year, obj.title, source)
 
     @staticmethod
     def get_type(obj: Document):

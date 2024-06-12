@@ -1,6 +1,5 @@
 import logging
 import os
-import re
 import time
 
 import binascii
@@ -55,7 +54,7 @@ def check_openapi_key(request):
     openapi_key = request.headers.get('X-API-KEY')
     if openapi_key:
         patt = '-'
-        if re.compile(patt).findall(openapi_key).count(patt) != 2:
+        if openapi_key.count(patt) != 2:
             logger.info(f"openapi_key format error: {openapi_key}")
             return None, False
         _, openapi_key_id, openapi_key_str = openapi_key.split(patt)

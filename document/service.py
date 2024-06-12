@@ -702,7 +702,7 @@ def get_reference_formats(document):
     )
     pub_data = document['pub_date'] if document['pub_date'] else ''
     # apa
-    apa = f'{authors};{title}.{source} {year}'  # noqa
+    apa = Document.get_doc_apa(document['authors'], pub_data, title, source)
     mla = f'{authors}. "{title}." {venue}, {pub_data}.'
     pub_type_tag = '[C]' if pub_type == 'conference' else '[J]' if pub_type == 'journal' else ''
     gbt = f'{authors}. {title}: {venue}{pub_type_tag}, {year}.'

@@ -1,8 +1,11 @@
 import logging
+import re
 import uuid
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+
+from core.utils.statics import EN_FIRST_NAMES
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +79,66 @@ class Document(models.Model):
             if k not in docs2_dict:
                 diff_docs.append(v)
         return diff_docs
+
+    @staticmethod
+    def get_doc_apa(authors, pub_date, title, venue):
+        """
+        authors. (pub_date). title. venue
+        1. authors:
+            1. Initials are separated and ended by a period eg Mitchell, J.A
+            2. Multiple authors are separated by commas and an ampersand eg Mitchell, J.A., Thomson, M., & Coyne, R
+            3. Multiple authors with the same sumame and initial: add their name in square brackets eg Mendeley, J. [James].
+        2. pub_date
+            有 pub_date 直接使用 (pub_date) 展示，没有 date，显示未 (n.d)
+        3. 无作者、无 title、无 venue 的情况直接显示空
+        :param authors:
+        :param title:
+        :param venue:
+        :param pub_date:
+        :return:
+        """
+        def format_authors(authors: list):
+            def is_english(string):
+                pattern = "^[A-Za-z -.áàâèéêëîïôöùûüçÀÂÈÉÊËÎÏÔÖÙÛÜÇ]+$"
+                if re.match(pattern, string):
+                    return True
+                else:
+                    return False
+
+            formatted_authors = []
+            for author in authors:
+                author = author.strip()
+                is_en = is_english(author)
+                if is_en:
+                    sub_chars = author.split(' ')
+                    last_sub_chars = [s.strip('.-') for s in sub_chars[:-1]]
+                    if (
+                        len(sub_chars) == 2 and len(last_sub_chars[0]) > 1 and sub_chars[0][1] != '.'
+                        and sub_chars[1].lower() in (EN_FIRST_NAMES['1'] + EN_FIRST_NAMES['2'])
+                    ):
+                        f_author = f"{sub_chars[0]}, {sub_chars[1][0] + '.'}"
+                    else:
+                        last_sub_chars_format = ''.join(
+                            [s[0] + '.' if s.find('.') == -1 else s for s in last_sub_chars])
+                        f_author = f"{sub_chars[-1]}, {last_sub_chars_format}"
+                else:
+                    f_author = author
+                formatted_authors.append(f_author)
+                # print(f"{is_english(author)}({author})--({f_author})")
+            ret_authors = None
+            if formatted_authors and len(formatted_authors) == 2:
+                ret_authors = f"{formatted_authors[0]}, {formatted_authors[1]}"
+            elif formatted_authors and len(formatted_authors) > 2:
+                ret_authors = ', '.join(formatted_authors[:-1]) + f", & {formatted_authors[-1]}"
+            return ret_authors
+
+        if not pub_date:
+            pub_date = 'n.d'
+        if title:
+            title = title.strip('.')
+            if venue:
+                title += '.'
+        return f"{format_authors(authors)} ({pub_date}). {title} {venue}"
 
     class Meta:
         unique_together = ['collection', 'doc_id']
