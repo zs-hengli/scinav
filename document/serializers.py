@@ -181,11 +181,10 @@ class DocumentDetailSerializer(BaseModelSerializer):
         if citations:
             ret_data = []
             for i, c in enumerate(citations):
-                authors = ','.join(c['authors'])
                 title = c['title']
                 year = c['year']
                 source = c['journal'] if c['journal'] else c['conference'] if c['conference'] else c['venue']
-                doc_apa = f'{authors};{title}.{source} {year}'  # noqa
+                doc_apa = Document.get_doc_apa(c['authors'], year, title, source)
                 ret_data.append({
                     'doc_id': c['doc_id'],
                     'collection_id': c['collection_id'],
@@ -208,11 +207,10 @@ class DocumentDetailSerializer(BaseModelSerializer):
         if references:
             ret_data = []
             for i, r in enumerate(references):
-                authors = ','.join(r['authors'])
                 title = r['title']
                 year = r['year']
                 source = r['journal'] if r['journal'] else r['conference'] if r['conference'] else r['venue']
-                doc_apa = f'{authors};{title}.{source} {year}'  # noqa
+                doc_apa = Document.get_doc_apa(r['authors'], year, title, source)
                 ret_data.append({
                     'doc_id': r['doc_id'],
                     'collection_id': r['collection_id'],

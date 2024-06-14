@@ -81,8 +81,9 @@ class Document(models.Model):
         return diff_docs
 
     @staticmethod
-    def get_doc_apa(authors, pub_date, title, venue):
+    def get_doc_apa(authors, year, title, venue):
         """
+        author:  （姓，名首字母）  fistname lastname
         authors. (pub_date). title. venue
         1. authors:
             1. Initials are separated and ended by a period eg Mitchell, J.A
@@ -94,17 +95,18 @@ class Document(models.Model):
         :param authors:
         :param title:
         :param venue:
-        :param pub_date:
+        :param year:
         :return:
         """
+
         def format_authors(authors: list):
             def is_english(string):
-                pattern = "^[A-Za-z -.áàâèéêëîïôöùûüçÀÂÈÉÊËÎÏÔÖÙÛÜÇ]+$"
+                pattern = "^[A-Za-z -.áàâèéêëîïôöùûüçÀÂÈÉÊËÎÏÔÖÙÛÜÇØ]+$"
                 if re.match(pattern, string):
                     return True
                 else:
                     return False
-
+            # ["T. Herrscher", "Harriet Akre", "B. Øverland", "L. Sandvik", "A. Westheim", "Li Ming", "Ming Li", "M.-H Hua"]
             formatted_authors = []
             for author in authors:
                 author = author.strip()
@@ -113,32 +115,45 @@ class Document(models.Model):
                     sub_chars = author.split(' ')
                     last_sub_chars = [s.strip('.-') for s in sub_chars[:-1]]
                     if (
-                        len(sub_chars) == 2 and len(last_sub_chars[0]) > 1 and sub_chars[0][1] != '.'
-                        and sub_chars[1].lower() in (EN_FIRST_NAMES['1'] + EN_FIRST_NAMES['2'])
+                        len(sub_chars) == 2 and len(sub_chars[0]) > 1
+                        and sub_chars[0].strip('.').lower() in (EN_FIRST_NAMES['1'] + EN_FIRST_NAMES['2'])
+                        and sub_chars[1].strip('.').lower() not in (EN_FIRST_NAMES['1'] + EN_FIRST_NAMES['2'])
                     ):
-                        f_author = f"{sub_chars[0]}, {sub_chars[1][0] + '.'}"
-                    else:
+                        if sub_chars[1].find('-') != -1:
+                            sub_chars = [sub_chars[0]] + sub_chars[1].split('-')
                         last_sub_chars_format = ''.join(
-                            [s[0] + '.' if s.find('.') == -1 else s for s in last_sub_chars])
+                            [s[0] + '.' if s.find('.') == -1 else s for s in sub_chars[1:]])
+                        f_author = f"{sub_chars[0]}, {last_sub_chars_format}"
+                    else:
+                        if sub_chars[0].find('-') != -1:
+                            sub_chars = sub_chars[0].split('-') + sub_chars[1:]
+                            last_sub_chars = [s.strip('.-') for s in sub_chars[:-1]]
+                        last_sub_chars_format = ''.join(
+                            [s[0].upper() + '.' if s.find('.') == -1 else s for s in last_sub_chars])
                         f_author = f"{sub_chars[-1]}, {last_sub_chars_format}"
                 else:
                     f_author = author
+                print(f"{is_english(author)}({author})--({f_author})")
                 formatted_authors.append(f_author)
-                # print(f"{is_english(author)}({author})--({f_author})")
             ret_authors = None
-            if formatted_authors and len(formatted_authors) == 2:
-                ret_authors = f"{formatted_authors[0]}, {formatted_authors[1]}"
-            elif formatted_authors and len(formatted_authors) > 2:
+            if formatted_authors and len(formatted_authors) == 1:
+                ret_authors = formatted_authors[0]
+            elif formatted_authors and len(formatted_authors) == 2:
+                ret_authors = f"{formatted_authors[0]} & {formatted_authors[1]}"
+            elif formatted_authors and len(formatted_authors) < 6:
                 ret_authors = ', '.join(formatted_authors[:-1]) + f", & {formatted_authors[-1]}"
+            elif formatted_authors:
+                ret_authors = formatted_authors[0] + f" et al."
             return ret_authors
 
-        if not pub_date:
-            pub_date = 'n.d'
+        if not year:
+            year = 'n.d'
         if title:
             title = title.strip('.')
             if venue:
                 title += '.'
-        return f"{format_authors(authors)} ({pub_date}). {title} {venue}"
+                venue = f"<em>{venue}</em>"
+        return f"{format_authors(authors)} ({year}). {title} {venue}"
 
     class Meta:
         unique_together = ['collection', 'doc_id']

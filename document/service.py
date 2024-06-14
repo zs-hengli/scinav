@@ -231,7 +231,7 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
             if start_num == 0:
                 for public_colle in public_colles:
                     list_data.append({
-                        'id': None,
+                        'id': public_colle.id,
                         'collection_id': public_colle.id,
                         'filename': f"{_('公共库')}: {public_colle.title}",
                         'document_title': None,
@@ -703,7 +703,7 @@ def get_reference_formats(document):
     )
     pub_data = document['pub_date'] if document['pub_date'] else ''
     # apa
-    apa = Document.get_doc_apa(document['authors'], pub_data, title, source)
+    apa = Document.get_doc_apa(document['authors'], year, title, source)
     mla = f'{authors}. "{title}." {venue}, {pub_data}.'
     pub_type_tag = '[C]' if pub_type == 'conference' else '[J]' if pub_type == 'journal' else ''
     gbt = f'{authors}. {title}: {venue}{pub_type_tag}, {year}.'
