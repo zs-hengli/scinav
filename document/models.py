@@ -83,6 +83,7 @@ class Document(models.Model):
     @staticmethod
     def get_doc_apa(authors, year, title, venue):
         """
+        https://wordvice.cn/apa-citation-generator
         author:  （姓，名首字母）  fistname lastname
         authors. (pub_date). title. venue
         1. authors:

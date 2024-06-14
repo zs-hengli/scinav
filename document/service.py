@@ -233,7 +233,7 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
                     list_data.append({
                         'id': public_colle.id,
                         'collection_id': public_colle.id,
-                        'filename': f"{_('公共库')}: {public_colle.title}",
+                        'filename': public_colle.title,
                         'document_title': None,
                         'document_id': None,
                         'pages': None,
