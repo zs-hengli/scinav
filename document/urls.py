@@ -18,6 +18,8 @@ urlpatterns = [
     path('documents/<str:document_id>/citations', views.DocumentsCitations.as_view()),
     path('documents/<str:document_id>/references', views.DocumentsReferences.as_view()),
     path('documents/<str:collection_id>/<int:doc_id>', views.DocumentsByDocId.as_view()),
+    path('documents/<str:document_id>/references/formats', views.DocumentsReferencesFormats.as_view()),
+    path('documents/<str:collection_id>/<int:doc_id>/references/formats', views.DocumentsReferencesFormats.as_view()),
 
     path('documents/rag/update', views.DocumentsRagUpdate.as_view()),
     path('documents/rag/update/<int:begin_id>/<int:end_id>', views.DocumentsRagUpdate.as_view()),

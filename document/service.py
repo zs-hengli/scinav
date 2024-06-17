@@ -105,12 +105,14 @@ def _rag_papers_to_documents(rag_papers):
             data['conference'] if data['conference'] else
             data['venue'] if data['venue'] else ''
         )
+        pub_date = data['pub_date'] if data['pub_date'] else str(data['year']) if data['year'] else None
+        document = Document(**data)
         documents.append({
             'id': data['id'],
             'title': data['title'],
             'abstract': data['abstract'],
             'authors': data['authors'],
-            'pub_date': data['pub_date'],
+            'pub_date': pub_date,
             'citation_count': data['citation_count'],
             'doc_id': data['doc_id'],
             'collection_id': str(data['collection_id']),
@@ -118,7 +120,7 @@ def _rag_papers_to_documents(rag_papers):
             'collection_title': collection_title,
             'venue': source,
             'source': source,
-            'reference_formats': get_reference_formats(data),
+            'reference_formats': get_reference_formats(document),
         })
     return documents
 
@@ -681,84 +683,93 @@ def document_library_delete(user_id, ids, list_type):
 def get_reference_formats(document):
     """
         APA 格式 （参考 https://wordvice.cn/citation-guide/apa）
+            作者姓氏, 名字首字母 中间名首字母. (出版日期). 网页标题. 网站名称. URL
         MLA 格式 （参考 https://wordvice.cn/citation-guide/mla）
-            作者. "来源标题." 出版物名称, 其他贡献者, 版本, 编号, 出版社, 出版日期, 地点.
-        GB/T 7714 （文案有 GB/T 修改为 GB/T 7714）格式 （参考 GB/T 7714-2015 国标要求）
+            作者姓氏 作者名字 & 作者姓氏 作者名字. “文章标题.” 期刊标题, 出版日期.
+        GB/T 7714-2015
+            https://lgc0208.github.io/reference_format_generation/
             作者. 会议文集名：会议文集其他信息[C]. 出版地：出版者，出版年. 获取和访问路径.
         BibTeX（中间无空格）
 
     """
-    authors = ','.join(document['authors'])
-    title = document['title']
-    year = document['year']
-    source = document['journal'] if document['journal'] else document['conference'] \
-        if document['conference'] else document['venue']
-    pages = document['pages'] if document['pages'] else ''
-    venue = document['venue'] if document['venue'] else ''
-    pub_type = (
-        document['pub_type']
-        if document['pub_type'] else 'conference'
-        if document['conference'] else 'journal'
-        if document['journal'] else ''
-    )
-    pub_data = document['pub_date'] if document['pub_date'] else ''
-    # apa
-    apa = Document.get_doc_apa(document['authors'], year, title, source)
-    mla = f'{authors}. "{title}." {venue}, {pub_data}.'
-    pub_type_tag = '[C]' if pub_type == 'conference' else '[J]' if pub_type == 'journal' else ''
-    gbt = f'{authors}. {title}: {venue}{pub_type_tag}, {year}.'
-    # bibtex
-    # conference
-    # @conference{RN04,
-    #   author    = "Holleis, Paul and Wagner, Matthias and Koolwaaij, Johan",
-    #   title     = "Studying mobile context-aware social services in the wild",
-    #   booktitle = "Proc. of the 6th Nordic Conf. on Human-Computer Interaction",
-    #   series    = "NordiCHI",
-    #   year      = 2010,
-    #   pages     = "207--216",
-    #   publisher = "ACM",
-    #   address   = "New York, NY"
-    # }
-    bibtex = ''
-    info = {
-        'authors': authors,
-        'title': title,
-        'venue': venue,
-        'year': year,
-        'pages': f'number={pages}' if pages else '',
-    }
-    if pub_type == 'conference':
-        template = '''@conference{{RN04,
-    author={authors},
-    title={title},
-    booktitle={venue},
-    year={year}
-}}'''
-        bibtex = template.format(**info)
-    # journal
-    # @article{RN01,
-    #   author   = "P. J. Cohen",
-    #   title    = "The independence of the continuum hypothesis",
-    #   journal  = "Proceedings of the National Academy of Sciences",
-    #   year     = 1963,
-    #   volume   = "50",
-    #   number   = "6",
-    #   pages    = "1143--1148",
-    # }
-    else:  # pub_type == 'journal':
-        template = '''@article{{RN01,
-    author={authors},
-    title={title},
-    journal={venue},
-    year={year},
-    {pages}
-}}'''
-        bibtex = template.format(**info)
+    # authors = ','.join(document['authors'])
+    # title = document['title']
+    # year = document['year']
+    # source = document['journal'] if document['journal'] else document['conference'] \
+    #     if document['conference'] else document['venue']
+    # pages = document['pages'] if document['pages'] else ''
+    # venue = document['venue'] if document['venue'] else ''
+    # pub_type = (
+    #     document['pub_type']
+    #     if document['pub_type'] else 'conference'
+    #     if document['conference'] else 'journal'
+    #     if document['journal'] else ''
+    # )
+#     pub_data = document['pub_date'] if document['pub_date'] else ''
+#     # apa
+#     apa = Document.get_doc_apa(document['authors'], year, title, source)
+#     mla = Document.get_doc_mla(document['authors'], year, title, source)
+#     pub_type_tag = '[C]' if pub_type == 'conference' else '[J]' if pub_type == 'journal' else ''
+#     gbt = Document.get_doc_gbt(document['authors'], year, title, source, pub_type_tag)
+#     # bibtex
+#     # conference
+#     # @conference{RN04,
+#     #   author    = "Holleis, Paul and Wagner, Matthias and Koolwaaij, Johan",
+#     #   title     = "Studying mobile context-aware social services in the wild",
+#     #   booktitle = "Proc. of the 6th Nordic Conf. on Human-Computer Interaction",
+#     #   series    = "NordiCHI",
+#     #   year      = 2010,
+#     #   pages     = "207--216",
+#     #   publisher = "ACM",
+#     #   address   = "New York, NY"
+#     # }
+#     bibtex = ''
+#     info = {
+#         'authors': authors,
+#         'title': title,
+#         'venue': venue,
+#         'year': year,
+#         'pages': f'number={pages}' if pages else '',
+#     }
+#     if pub_type == 'conference':
+#         template = '''@inproceedings{{CitekeyInproceedings,
+#     author={authors},
+#     title={title},
+#     booktitle={venue},
+#     year={year}
+# }}'''
+#         bibtex = template.format(**info)
+#     # journal
+#     # @article{RN01,
+#     #   author   = "P. J. Cohen",
+#     #   title    = "The independence of the continuum hypothesis",
+#     #   journal  = "Proceedings of the National Academy of Sciences",
+#     #   year     = 1963,
+#     #   volume   = "50",
+#     #   number   = "6",
+#     #   pages    = "1143--1148",
+#     # }
+#     else:  # pub_type == 'journal':
+#         template = '''@article{{CitekeyArticle,
+#     author={{{authors}}},
+#     title={{{title}}},
+#     journal={{{venue}}},
+#     year={{{year}}}
+# }}'''
+#         bibtex = template.format(**info)
 
     return {
-        'GB/T': gbt,
-        'MLA': mla,
-        'APA': apa,
-        'BibTex': bibtex,
+        'GB/T': document.get_csl_formate('gbt'),
+        'MLA': document.get_csl_formate('mla'),
+        'APA': document.get_csl_formate('apa'),
+        'BibTex': document.get_bibtex_format(),
     }
 
+
+def get_csl_reference_formats(document: Document):
+    return {
+        'GB/T': document.get_csl_formate('gbt'),
+        'MLA': document.get_csl_formate('mla'),
+        'APA': document.get_csl_formate('apa'),
+        'BibTex': document.get_bibtex_format(),
+    }

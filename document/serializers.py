@@ -45,8 +45,10 @@ class DocumentApaListSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def get_doc_apa(obj: Document):
-        source = obj.journal if obj.journal else obj.conference if obj.conference else obj.venue
-        return Document.get_doc_apa(obj.authors, obj.year, obj.title, source)
+        return obj.get_csl_formate('apa')
+        # source = obj.journal if obj.journal else obj.conference if obj.conference else obj.venue
+        # return Document.get_doc_apa(obj.authors, obj.year, obj.title, source)
+
 
     class Meta:
         model = Document
@@ -58,8 +60,9 @@ class DocumentApcReadListSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def get_doc_apa(obj: Document):
-        source = obj.journal if obj.journal else obj.conference if obj.conference else obj.venue
-        return Document.get_doc_apa(obj.authors, obj.year, obj.title, source)
+        return obj.get_csl_formate('apa')
+        # source = obj.journal if obj.journal else obj.conference if obj.conference else obj.venue
+        # return Document.get_doc_apa(obj.authors, obj.year, obj.title, source)
 
     class Meta:
         model = Document
@@ -73,8 +76,9 @@ class CollectionDocumentListCollectionSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def get_doc_apa(obj: Document):
-        source = obj.journal if obj.journal else obj.conference if obj.conference else obj.venue
-        return Document.get_doc_apa(obj.authors, obj.year, obj.title, source)
+        return obj.get_csl_formate('apa')
+        # source = obj.journal if obj.journal else obj.conference if obj.conference else obj.venue
+        # return Document.get_doc_apa(obj.authors, obj.year, obj.title, source)
 
     @staticmethod
     def get_type(obj: Document):
@@ -181,10 +185,26 @@ class DocumentDetailSerializer(BaseModelSerializer):
         if citations:
             ret_data = []
             for i, c in enumerate(citations):
-                title = c['title']
-                year = c['year']
-                source = c['journal'] if c['journal'] else c['conference'] if c['conference'] else c['venue']
-                doc_apa = Document.get_doc_apa(c['authors'], year, title, source)
+                # title = c['title']
+                # year = c['year']
+                # source = c['journal'] if c['journal'] else c['conference'] if c['conference'] else c['venue']
+                # doc_apa = Document.get_doc_apa(c['authors'], year, title, source)
+                document = Document(
+                    collection_type=c['collection_type'],
+                    collection_id=c['collection_id'],
+                    doc_id=c['doc_id'],
+                    title=c['title'],
+                    authors=c['authors'],
+                    year=c['year'],
+                    pub_date=c['pub_date'],
+                    pub_type=c['pub_type'],
+                    venue=c['venue'],
+                    journal=c['journal'],
+                    conference=c['conference'],
+                    pages=c['pages'],
+                    citation_count=c['citation_count'],
+                )
+                doc_apa = document.get_csl_formate('apa')
                 ret_data.append({
                     'doc_id': c['doc_id'],
                     'collection_id': c['collection_id'],
@@ -207,10 +227,27 @@ class DocumentDetailSerializer(BaseModelSerializer):
         if references:
             ret_data = []
             for i, r in enumerate(references):
-                title = r['title']
-                year = r['year']
-                source = r['journal'] if r['journal'] else r['conference'] if r['conference'] else r['venue']
-                doc_apa = Document.get_doc_apa(r['authors'], year, title, source)
+                # title = r['title']
+                # year = r['year']
+                # source = r['journal'] if r['journal'] else r['conference'] if r['conference'] else r['venue']
+                # doc_apa = Document.get_doc_apa(r['authors'], year, title, source)
+
+                document = Document(
+                    collection_type=r['collection_type'],
+                    collection_id=r['collection_id'],
+                    doc_id=r['doc_id'],
+                    title=r['title'],
+                    authors=r['authors'],
+                    year=r['year'],
+                    pub_date=r['pub_date'],
+                    pub_type=r['pub_type'],
+                    venue=r['venue'],
+                    journal=r['journal'],
+                    conference=r['conference'],
+                    pages=r['pages'],
+                    citation_count=r['citation_count'],
+                )
+                doc_apa = document.get_csl_formate('apa')
                 ret_data.append({
                     'doc_id': r['doc_id'],
                     'collection_id': r['collection_id'],

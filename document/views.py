@@ -20,7 +20,7 @@ from document.serializers import DocumentDetailSerializer, GenPresignedUrlQueryS
 from document.service import search, presigned_url, document_personal_upload, \
     get_document_library_list, document_library_add, document_library_delete, doc_lib_batch_operation_check, \
     get_url_by_object_path, get_reference_formats, update_exist_documents, import_papers_to_collection, \
-    document_update_from_rag, search_authors, author_detail, author_documents
+    document_update_from_rag, search_authors, author_detail, author_documents, get_csl_reference_formats
 from document.tasks import async_add_user_operation_log
 
 logger = logging.getLogger(__name__)
@@ -129,7 +129,7 @@ class Documents(APIView):
         document_data = DocumentDetailSerializer(document).data
         document_data['citation_count'] = len(document_data['citations']) if document_data['citations'] else document_data['citation_count']
         document_data['reference_count'] = len(document_data['references']) if document_data['references'] else document_data['reference_count']
-        document_data['reference_formats'] = get_reference_formats(document_data)
+        document_data['reference_formats'] = get_reference_formats(document)
         async_add_user_operation_log.apply_async(kwargs={
             'user_id': user_id,
             'operation_type': 'document_detail',
@@ -153,7 +153,7 @@ class DocumentsByDocId(APIView):
         document_data = DocumentDetailSerializer(document).data
         document_data['citation_count'] = len(document_data['citations']) if document_data['citations'] else document_data['citation_count']
         document_data['reference_count'] = len(document_data['references']) if document_data['references'] else document_data['reference_count']
-        document_data['reference_formats'] = get_reference_formats(document_data)
+        document_data['reference_formats'] = get_reference_formats(document)
         async_add_user_operation_log.apply_async(kwargs={
             'user_id': user_id,
             'operation_type': 'document_detail',
@@ -196,6 +196,24 @@ class DocumentsReferences(APIView):
             'total': len(references)
         }
         return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+class DocumentsReferencesFormats(APIView):
+
+    @staticmethod
+    def get(request, document_id=None, collection_id=None, doc_id=None, *args, **kwargs):
+        if document_id:
+            document = Document.objects.filter(id=document_id).first()
+        else:
+            if not collection_id or not doc_id:
+                return my_json_response(code=100001, msg='invalid query data')
+            document = Document.objects.filter(collection_id=collection_id, doc_id=doc_id).first()
+        if not document:
+            return my_json_response(code=100002, msg=f'document not found')
+        reference_formats = get_csl_reference_formats(document)
+        return my_json_response(reference_formats)
 
 
 @method_decorator([extract_json], name='dispatch')

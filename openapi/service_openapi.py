@@ -3,6 +3,7 @@ import logging
 from django.db.models import Q
 from bot.rag_service import Document as Rag_Document
 from collection.models import Collection
+from document.models import Document
 from document.serializers import DocumentRagCreateSerializer
 from document.service import get_documents_by_rag, get_reference_formats
 from document.tasks import async_update_document
@@ -25,6 +26,7 @@ def search(user_id, content, topn=100):
             data['conference'] if data['conference'] else
             data['venue'] if data['venue'] else ''
         )
+        document = Document(**data)
         ret_data.append({
             'id': data['id'],
             'title': data['title'],
@@ -40,7 +42,7 @@ def search(user_id, content, topn=100):
                 'collection_id': str(data['collection_id']),
                 'doc_id': data['doc_id'],
             },
-            'reference_formats': get_reference_formats(data),
+            'reference_formats': get_reference_formats(document),
         })
     async_update_document.apply_async(args=[document_ids])
     return ret_data

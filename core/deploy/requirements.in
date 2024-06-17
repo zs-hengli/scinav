@@ -25,3 +25,7 @@ django-cors-headers
 
 # authing
 authing==4.5.18
+
+# cls(citation style language) styles format
+citeproc-py
+pybtex

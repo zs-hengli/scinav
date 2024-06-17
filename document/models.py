@@ -2,8 +2,11 @@ import logging
 import re
 import uuid
 
+from citeproc import CitationStylesStyle, CitationStylesBibliography, formatter, Citation, CitationItem
+from citeproc.source.json import CiteProcJSON
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+from pybtex.database import BibliographyData, Entry
 
 from core.utils.statics import EN_FIRST_NAMES
 
@@ -107,7 +110,7 @@ class Document(models.Model):
                     return True
                 else:
                     return False
-            # ["T. Herrscher", "Harriet Akre", "B. Øverland", "L. Sandvik", "A. Westheim", "Li Ming", "Ming Li", "M.-H Hua"]
+
             formatted_authors = []
             for author in authors:
                 author = author.strip()
@@ -134,7 +137,7 @@ class Document(models.Model):
                         f_author = f"{sub_chars[-1]}, {last_sub_chars_format}"
                 else:
                     f_author = author
-                print(f"{is_english(author)}({author})--({f_author})")
+                # print(f"{is_english(author)}({author})--({f_author})")
                 formatted_authors.append(f_author)
             ret_authors = None
             if formatted_authors and len(formatted_authors) == 1:
@@ -155,6 +158,238 @@ class Document(models.Model):
                 title += '.'
                 venue = f"<em>{venue}</em>"
         return f"{format_authors(authors)} ({year}). {title} {venue}"
+
+    @staticmethod
+    def get_doc_mla(authors, year, title, venue):
+        """
+        https://wordvice.cn/citation-guide/mla
+            作者姓氏, 作者名字 中间名字. “网页标题.” 网站名称, 出版社名称, 出版日期, URL.
+        :param authors:
+        :param year:
+        :param title:
+        :param venue:
+        :return:
+        """
+
+        def format_authors(authors: list):
+            def is_english(string):
+                pattern = "^[A-Za-z -.áàâèéêëîïôöùûüçÀÂÈÉÊËÎÏÔÖÙÛÜÇØ]+$"
+                if re.match(pattern, string):
+                    return True
+                else:
+                    return False
+
+            formatted_authors = []
+            for author in authors:
+                author = author.strip()
+                is_en = is_english(author)
+                if is_en:
+                    sub_chars = author.split(' ')
+                    last_sub_chars = [s for s in sub_chars[:-1]]
+                    if (
+                        len(sub_chars) == 2 and len(sub_chars[0]) > 1
+                        and sub_chars[0].strip('.').lower() in (EN_FIRST_NAMES['1'] + EN_FIRST_NAMES['2'])
+                        and sub_chars[1].strip('.').lower() not in (EN_FIRST_NAMES['1'] + EN_FIRST_NAMES['2'])
+                    ):
+                        if sub_chars[1].find('-') != -1:
+                            sub_chars = [sub_chars[0]] + sub_chars[1].split('-')
+                        last_sub_chars_format = ' '.join([s for s in sub_chars[1:]])
+                        f_author = f"{sub_chars[0]} {last_sub_chars_format}"
+                    else:
+                        if sub_chars[0].find('-') != -1:
+                            sub_chars = sub_chars[0].split('-') + sub_chars[1:]
+                            last_sub_chars = [s for s in sub_chars[:-1]]
+                        last_sub_chars_format = ''.join([s for s in last_sub_chars])
+                        f_author = f"{sub_chars[-1]} {last_sub_chars_format}"
+                else:
+                    f_author = author
+                # print(f"{is_english(author)}({author})--({f_author})")
+                formatted_authors.append(f_author)
+            ret_authors = ''
+            if formatted_authors and len(formatted_authors) == 1:
+                ret_authors = formatted_authors[0]
+            elif formatted_authors and len(formatted_authors) == 2:
+                ret_authors = f"{formatted_authors[0]} & {formatted_authors[1]}"
+            elif formatted_authors and len(formatted_authors) < 6:
+                ret_authors = ', '.join(formatted_authors[:-1]) + f", & {formatted_authors[-1]}"
+            elif formatted_authors:
+                ret_authors = formatted_authors[0] + f" et al."
+            return ret_authors
+
+        if not year:
+            year = 'n.d'
+        if title:
+            title = title.strip('.')
+            if venue:
+                title += '.'
+                venue = f"<em>{venue}</em>"
+        authors_str = format_authors(authors).strip('.')
+        authors_str = f"{authors_str}." if authors_str else ''
+        return f"{authors_str} \"{title}\" {venue}, Accessed {year}.  "
+
+    @staticmethod
+    def get_doc_gbt(authors, year, title, venue, pub_type_tag):
+        def format_authors(authors: list):
+            def is_english(string):
+                pattern = "^[A-Za-z -.áàâèéêëîïôöùûüçÀÂÈÉÊËÎÏÔÖÙÛÜÇØ]+$"
+                if re.match(pattern, string):
+                    return True
+                else:
+                    return False
+
+            formatted_authors = []
+            for author in authors:
+                author = author.strip()
+                is_en = is_english(author)
+                if is_en:
+                    sub_chars = author.split(' ')
+                    last_sub_chars = [s.strip('.-') for s in sub_chars[:-1]]
+                    if (
+                        len(sub_chars) == 2 and len(sub_chars[0]) > 1
+                        and sub_chars[0].strip('.').lower() in (EN_FIRST_NAMES['1'] + EN_FIRST_NAMES['2'])
+                        and sub_chars[1].strip('.').lower() not in (EN_FIRST_NAMES['1'] + EN_FIRST_NAMES['2'])
+                    ):
+                        if sub_chars[1].find('-') != -1:
+                            sub_chars = [sub_chars[0]] + sub_chars[1].split('-')
+                        last_sub_chars_format = ''.join(
+                            [s[0] + '.' if s.find('.') == -1 else s for s in sub_chars[1:]])
+                        f_author = f"{sub_chars[0]} {last_sub_chars_format}"
+                    else:
+                        if sub_chars[0].find('-') != -1:
+                            sub_chars = sub_chars[0].split('-') + sub_chars[1:]
+                            last_sub_chars = [s.strip('.-') for s in sub_chars[:-1]]
+                        last_sub_chars_format = ''.join(
+                            [s[0].upper() + '.' if s.find('.') == -1 else s for s in last_sub_chars])
+                        f_author = f"{sub_chars[-1]} {last_sub_chars_format}"
+                else:
+                    f_author = author
+                # print(f"{is_english(author)}({author})--({f_author})")
+                formatted_authors.append(f_author)
+            ret_authors = ''
+            if formatted_authors and len(formatted_authors) <= 3:
+                ret_authors = ', '.join(formatted_authors)
+            elif formatted_authors and len(formatted_authors) == 2:
+                ret_authors = f"{formatted_authors[0]} & {formatted_authors[1]}"
+            elif formatted_authors and len(formatted_authors) < 6:
+                ret_authors = ', '.join(formatted_authors[:-1]) + f", & {formatted_authors[-1]}"
+            elif formatted_authors:
+                ret_authors = formatted_authors[0] + f" et al."
+            return ret_authors
+
+        if not year:
+            year = 'n.d'
+        if title:
+            title = title.strip('.')
+            if venue:
+                venue = f"<em>{venue}</em>,"
+        return f"{format_authors(authors)} {title}{pub_type_tag}. {venue} {year}."
+
+    def get_csl_formate(self, style):
+        title = self.title
+        year = self.year
+        venue = self.journal if self.journal else self.conference \
+            if self.conference else self.venue
+        pub_type = (
+            self.pub_type
+            if self.pub_type else 'conference'
+            if self.conference else 'journal'
+            if self.journal else ''
+        )
+
+        def format_authors(authors: list):
+            final_authors = []
+            for author in authors:
+                author_split = author.split(' ')
+                last_name = author_split[-1].strip()
+                first_name = author_split[0].strip()
+                family = last_name
+                given = ' '.join(author_split[:-1])
+
+                if (
+                    first_name.lower() in (EN_FIRST_NAMES['1'] + EN_FIRST_NAMES['2'])
+                    and last_name.lower() not in (EN_FIRST_NAMES['1'] + EN_FIRST_NAMES['2'])
+                ):
+                    family = first_name
+                    given = ' '.join(author_split[1:])
+                final_authors.append({
+                    'family': family,
+                    'given': given,
+                })
+            return final_authors
+
+        style_csl_map = {
+            'apa': 'document/csl/apa.csl',
+            'mla': 'document/csl/modern-language-association.csl',
+            'gbt': 'document/csl/china-national-standard-gb-t-7714-2015-numeric.csl'
+        }
+        if style not in style_csl_map:
+            return None
+        paper_type = 'paper-conference' if pub_type == 'conference' else 'article-journal'
+        json_id = str(uuid.uuid4())
+        json_data = [{
+            'id': json_id,
+            'author': format_authors(self.authors),
+            'title': title,
+            "issued": {"date-parts": [[year]]},
+            # 'publisher': venue,
+            'container-title': venue,
+            "references": "",  # apa
+            'type': paper_type,
+        }]
+        try:
+            bib_source = CiteProcJSON(json_data)
+            # for key, entry in bib_source.items():
+            #    print(key)
+            #    for name, value in entry.items():
+            #        print('   {}: {}'.format(name, value))
+
+            bib_style = CitationStylesStyle(style_csl_map[style], validate=False)
+            bibliography = CitationStylesBibliography(bib_style, bib_source, formatter.html)
+
+            citation1 = Citation([CitationItem(json_id)])
+            bibliography.register(citation1)
+            formatted_text = str(bibliography.bibliography()[0])
+            formatted_text = formatted_text[3:] if style == 'gbt' else formatted_text
+        except Exception as e:
+            logger.warning('Error when formatting the document. ' + str(e))
+            formatted_text = ''
+        return formatted_text
+
+    def get_bibtex_format(self):
+        title = self.title
+        year = self.year
+        venue = self.journal if self.journal else self.conference \
+            if self.conference else self.venue
+        pub_type = (
+            self.pub_type
+            if self.pub_type else 'conference'
+            if self.conference else 'journal'
+            if self.journal else ''
+        )
+        if pub_type == 'conference':
+            bib_data = BibliographyData({
+                'inproceedings-minimal': Entry('inproceedings', [
+                    ('author', ','.join(self.authors)),
+                    ('title', title),
+                    ('journal', venue),
+                    ('year', str(year)),
+                ]),
+            })
+        else:
+            bib_data = BibliographyData({
+                'article-minimal': Entry('article', [
+                    ('author', ','.join(self.authors)),
+                    ('title', title),
+                    ('journal', venue),
+                    ('year', str(year)),
+                ]),
+            })
+        try:
+            bibtex_str = bib_data.to_string('bibtex')
+        except Exception as e:
+            logger.warning('Error when bibtex_format the document. ' + str(e))
+            bibtex_str = ''
+        return bibtex_str
 
     class Meta:
         unique_together = ['collection', 'doc_id']
