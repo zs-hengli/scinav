@@ -12,6 +12,20 @@ from core.utils.statics import EN_FIRST_NAMES
 
 logger = logging.getLogger(__name__)
 
+PUB_TYPE_2_CSL_TYPE = {
+    "Review": "review",
+    "JournalArticle": "article-journal",
+    "CaseReport": "document",
+    "ClinicalTrial": "report",
+    "Dataset": "dataset",
+    "Editorial": "article-journal",
+    "LettersAndComments": "post",
+    "MetaAnalysis": "article-journal",
+    "News": "article-newspaper",
+    "Study": "article-journal",
+    "Book": "book",
+    "BookSection": "chapter"
+}
 
 class Document(models.Model):
     class TypeChoices(models.TextChoices):
@@ -289,12 +303,7 @@ class Document(models.Model):
         year = self.year
         venue = self.journal if self.journal else self.conference \
             if self.conference else self.venue
-        pub_type = (
-            self.pub_type
-            if self.pub_type else 'conference'
-            if self.conference else 'journal'
-            if self.journal else ''
-        )
+        pub_type = self.pub_type
 
         def format_authors(authors: list):
             final_authors = []
@@ -324,7 +333,9 @@ class Document(models.Model):
         }
         if style not in style_csl_map:
             return None
-        paper_type = 'paper-conference' if pub_type == 'conference' else 'article-journal'
+        if not PUB_TYPE_2_CSL_TYPE.get(pub_type) and style == 'gbt':
+            return ''
+        paper_type = PUB_TYPE_2_CSL_TYPE[pub_type] if PUB_TYPE_2_CSL_TYPE.get(pub_type) else 'article-journal'
         json_id = str(uuid.uuid4())
         json_data = [{
             'id': json_id,
@@ -360,30 +371,32 @@ class Document(models.Model):
         year = self.year
         venue = self.journal if self.journal else self.conference \
             if self.conference else self.venue
-        pub_type = (
-            self.pub_type
-            if self.pub_type else 'conference'
-            if self.conference else 'journal'
-            if self.journal else ''
-        )
-        if pub_type == 'conference':
-            bib_data = BibliographyData({
-                'inproceedings-minimal': Entry('inproceedings', [
-                    ('author', ','.join(self.authors)),
-                    ('title', title),
-                    ('journal', venue),
-                    ('year', str(year)),
-                ]),
-            })
-        else:
-            bib_data = BibliographyData({
-                'article-minimal': Entry('article', [
-                    ('author', ','.join(self.authors)),
-                    ('title', title),
-                    ('journal', venue),
-                    ('year', str(year)),
-                ]),
-            })
+        pub_type = self.pub_type
+        if not PUB_TYPE_2_CSL_TYPE.get(pub_type):
+            return ''
+        paper_type = PUB_TYPE_2_CSL_TYPE[pub_type]
+        paper_type_2_bibtex_type = {
+            "book":"book",
+            "report":"techreport",
+            "article":"article",
+            "article-journal":"article",
+            "article-newspaper":"article",
+            "paper-conference":"inproceedings",
+            "chapter":"inbook",
+            "dataset":"misc",
+            "document":"misc",
+            "review":"misc",
+            "post":"misc",
+        }
+        bibtex_type = paper_type_2_bibtex_type[paper_type]
+        bib_data = BibliographyData({
+            f"{bibtex_type}-minimal": Entry(bibtex_type, [
+                ('author', ','.join(self.authors)),
+                ('title', title),
+                ('journal', venue),
+                ('year', str(year)),
+            ]),
+        })
         try:
             bibtex_str = bib_data.to_string('bibtex')
         except Exception as e:
