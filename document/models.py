@@ -373,7 +373,7 @@ class Document(models.Model):
             if self.conference else self.venue
         pub_type = self.pub_type
         if not PUB_TYPE_2_CSL_TYPE.get(pub_type):
-            return ''
+            pub_type = 'article'
         paper_type = PUB_TYPE_2_CSL_TYPE[pub_type]
         paper_type_2_bibtex_type = {
             "book":"book",
