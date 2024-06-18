@@ -334,7 +334,7 @@ class Document(models.Model):
         if style not in style_csl_map:
             return None
         if not PUB_TYPE_2_CSL_TYPE.get(pub_type) and style == 'gbt':
-            return ''
+            style_csl_map['gbt'] = 'document/csl/china-national-standard-gb-t-7714-2015-numeric-no-type-code.csl'
         paper_type = PUB_TYPE_2_CSL_TYPE[pub_type] if PUB_TYPE_2_CSL_TYPE.get(pub_type) else 'article-journal'
         json_id = str(uuid.uuid4())
         json_data = [{
