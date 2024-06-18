@@ -101,9 +101,10 @@ def _rag_papers_to_documents(rag_papers):
         type_pub = Collection.TypeChoices.PUBLIC
         collection_tag = data['collection_id'] if data['collection_type'] == type_pub else data['collection_type']
         source = (
+            data['venue'] if data['venue'] else
             data['journal'] if data['journal'] else
-            data['conference'] if data['conference'] else
-            data['venue'] if data['venue'] else ''
+            data['conference'] if data['conference']
+            else ''
         )
         pub_date = data['pub_date'] if data['pub_date'] else str(data['year']) if data['year'] else None
         document = Document(**data)

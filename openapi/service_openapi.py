@@ -22,9 +22,10 @@ def search(user_id, content, topn=100):
         data = DocumentRagCreateSerializer(doc).data
         data['id'] = str(documents_dict[f"{doc['collection_id']}-{doc['doc_id']}"].id)
         venue = (
+            data['venue'] if data['venue'] else
             data['journal'] if data['journal'] else
             data['conference'] if data['conference'] else
-            data['venue'] if data['venue'] else ''
+            ''
         )
         document = Document(**data)
         ret_data.append({

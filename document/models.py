@@ -6,7 +6,7 @@ from citeproc import CitationStylesStyle, CitationStylesBibliography, formatter,
 from citeproc.source.json import CiteProcJSON
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-from pybtex.database import BibliographyData, Entry
+# from pybtex.database import BibliographyData, Entry
 
 from core.utils.statics import EN_FIRST_NAMES
 
@@ -301,7 +301,7 @@ class Document(models.Model):
     def get_csl_formate(self, style):
         title = self.title
         year = self.year
-        venue = self.journal if self.journal else self.conference \
+        venue = self.venue if self.venue else self.journal if self.journal else self.conference \
             if self.conference else self.venue
         pub_type = self.pub_type
 
@@ -329,7 +329,8 @@ class Document(models.Model):
         style_csl_map = {
             'apa': 'document/csl/apa.csl',
             'mla': 'document/csl/modern-language-association.csl',
-            'gbt': 'document/csl/china-national-standard-gb-t-7714-2015-numeric.csl'
+            'gbt': 'document/csl/china-national-standard-gb-t-7714-2015-numeric.csl',
+            'bibtex': 'document/csl/bibtex.csl',
         }
         if style not in style_csl_map:
             return None
@@ -344,7 +345,7 @@ class Document(models.Model):
             "issued": {"date-parts": [[year]]},
             # 'publisher': venue,
             'container-title': venue,
-            "references": "",  # apa
+            "references": '',  # apa
             'type': paper_type,
         }]
         try:
@@ -360,7 +361,11 @@ class Document(models.Model):
             citation1 = Citation([CitationItem(json_id)])
             bibliography.register(citation1)
             formatted_text = str(bibliography.bibliography()[0])
-            formatted_text = formatted_text[3:] if style == 'gbt' else formatted_text
+            if style == 'gbt':
+                formatted_text = formatted_text[3:]
+            elif style == 'mla':
+                formatted_text = formatted_text.replace('“', '"').replace('”', '"')
+
         except Exception as e:
             logger.warning('Error when formatting the document. ' + str(e))
             formatted_text = ''
@@ -369,12 +374,13 @@ class Document(models.Model):
     def get_bibtex_format(self):
         title = self.title
         year = self.year
-        venue = self.journal if self.journal else self.conference \
+        venue = self.venue if self.venue else self.journal if self.journal else self.conference \
             if self.conference else self.venue
         pub_type = self.pub_type
         if not PUB_TYPE_2_CSL_TYPE.get(pub_type):
-            pub_type = 'article'
-        paper_type = PUB_TYPE_2_CSL_TYPE[pub_type]
+            paper_type = 'article-journal'
+        else:
+            paper_type = PUB_TYPE_2_CSL_TYPE[pub_type]
         paper_type_2_bibtex_type = {
             "book":"book",
             "report":"techreport",
@@ -389,19 +395,64 @@ class Document(models.Model):
             "post":"misc",
         }
         bibtex_type = paper_type_2_bibtex_type[paper_type]
-        bib_data = BibliographyData({
-            f"{bibtex_type}-minimal": Entry(bibtex_type, [
-                ('author', ','.join(self.authors)),
-                ('title', title),
-                ('journal', venue),
-                ('year', str(year)),
-            ]),
-        })
-        try:
-            bibtex_str = bib_data.to_string('bibtex')
-        except Exception as e:
-            logger.warning('Error when bibtex_format the document. ' + str(e))
-            bibtex_str = ''
+        if self.authors:
+            author_split = self.authors[0].split(' ')
+            first_name = author_split[0].strip().strip('.')
+            last_name = author_split[-1].strip().strip('.')
+            if (
+                first_name.lower() in (EN_FIRST_NAMES['1'] + EN_FIRST_NAMES['2'])
+                and last_name.lower() not in (EN_FIRST_NAMES['1'] + EN_FIRST_NAMES['2'])
+            ):
+                family_name = first_name
+            else:
+                family_name = last_name
+        else:
+            family_name = 'author'
+        title_split = title.split(' ')
+        rest_title = [t[0].upper() for t in title_split[1:]]
+        title_key = f"{title_split[0]}{''.join(rest_title[:2])}"
+        bib_key = f"{family_name}{year}{title_key}"
+        template1 = '''@{bibtex_type}{{{bib_key},
+    author={{{authors}}},
+    title={{{title}}},
+    journal={{{venue}}},
+    year={{{year}}}
+}}'''
+        template2 = '''@{bibtex_type}{{{bib_key},
+    author={{{authors}}},
+    title={{{title}}},
+    year={{{year}}}
+}}'''
+        if venue:
+            bibtex_str = template1.format(
+                bib_key=bib_key,
+                bibtex_type=bibtex_type,
+                authors=' and '.join(self.authors),
+                title=title,
+                venue=venue,
+                year=year,
+            )
+        else:
+            bibtex_str = template2.format(
+                bib_key=bib_key,
+                bibtex_type=bibtex_type,
+                authors=' and '.join(self.authors),
+                title=title,
+                year=year,
+            )
+        # bib_data = BibliographyData({
+        #     f"{bib_key}": Entry(bibtex_type, [
+        #         ('author', ' and '.join(self.authors)),
+        #         ('title', title),
+        #         ('journal', venue),
+        #         ('year', str(year)),
+        #     ]),
+        # })
+        # try:
+        #     bibtex_str = bib_data.to_string('bibtex')
+        # except Exception as e:
+        #     logger.warning('Error when bibtex_format the document. ' + str(e))
+        #     bibtex_str = ''
         return bibtex_str
 
     class Meta:
