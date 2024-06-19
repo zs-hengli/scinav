@@ -1,5 +1,6 @@
 import logging
 import re
+import traceback
 import uuid
 
 from citeproc import CitationStylesStyle, CitationStylesBibliography, formatter, Citation, CitationItem
@@ -304,6 +305,8 @@ class Document(models.Model):
         venue = self.venue if self.venue else self.journal if self.journal else self.conference \
             if self.conference else self.venue
         pub_type = self.pub_type
+        if not title:
+            return ''
 
         def format_authors(authors: list):
             final_authors = []
@@ -342,12 +345,19 @@ class Document(models.Model):
             'id': json_id,
             'author': format_authors(self.authors),
             'title': title,
-            "issued": {"date-parts": [[year]]},
+            # "issued": {"date-parts": [[year]]},
             # 'publisher': venue,
             'container-title': venue,
             "references": '',  # apa
             'type': paper_type,
         }]
+        if year:
+            json_data[0]['issued'] = {
+                "date-parts": [[year]]
+            }
+        if style == 'apa' and paper_type == 'book':
+            json_data[0]['number-of-volumes'] = ''
+
         try:
             bib_source = CiteProcJSON(json_data)
             # for key, entry in bib_source.items():
@@ -360,14 +370,16 @@ class Document(models.Model):
 
             citation1 = Citation([CitationItem(json_id)])
             bibliography.register(citation1)
-            formatted_text = str(bibliography.bibliography()[0])
+            bib_formatted = bibliography.bibliography()
+            formatted_text = str(bib_formatted[0]) if bib_formatted else ''
             if style == 'gbt':
                 formatted_text = formatted_text[3:]
             elif style == 'mla':
                 formatted_text = formatted_text.replace('“', '"').replace('”', '"')
 
         except Exception as e:
-            logger.warning('Error when formatting the document. ' + str(e))
+            logger.warning('Error when formatting the document. ' + str(e) + traceback.format_exc())
+            logger.warning(f'style:{style}, json_data: {json_data}')
             formatted_text = ''
         return formatted_text
 
@@ -377,6 +389,8 @@ class Document(models.Model):
         venue = self.venue if self.venue else self.journal if self.journal else self.conference \
             if self.conference else self.venue
         pub_type = self.pub_type
+        if not title:
+            return ''
         if not PUB_TYPE_2_CSL_TYPE.get(pub_type):
             paper_type = 'article-journal'
         else:
@@ -409,37 +423,24 @@ class Document(models.Model):
         else:
             family_name = 'author'
         title_split = title.split(' ')
-        rest_title = [t[0].upper() for t in title_split[1:]]
+        rest_title = [t[0].upper() for t in title_split[1:] if t]
         title_key = f"{title_split[0]}{''.join(rest_title[:2])}"
         bib_key = f"{family_name}{year}{title_key}"
-        template1 = '''@{bibtex_type}{{{bib_key},
+        template = '''@{bibtex_type}{{{bib_key},
     author={{{authors}}},
     title={{{title}}},
     journal={{{venue}}},
     year={{{year}}}
 }}'''
-        template2 = '''@{bibtex_type}{{{bib_key},
-    author={{{authors}}},
-    title={{{title}}},
-    year={{{year}}}
-}}'''
+        bibtex_str = f"@{bibtex_type}{{{bib_key},\n"
+        bibtex_str += f"    author={{{' and '.join(self.authors)}}},\n"
+        bibtex_str += f"    title={{{title}}},\n"
         if venue:
-            bibtex_str = template1.format(
-                bib_key=bib_key,
-                bibtex_type=bibtex_type,
-                authors=' and '.join(self.authors),
-                title=title,
-                venue=venue,
-                year=year,
-            )
-        else:
-            bibtex_str = template2.format(
-                bib_key=bib_key,
-                bibtex_type=bibtex_type,
-                authors=' and '.join(self.authors),
-                title=title,
-                year=year,
-            )
+            bibtex_str += f"    journal={{{venue}}},\n"
+        if year:
+            bibtex_str += f"    year={{{year}}},\n"
+        bibtex_str += "}"
+
         # bib_data = BibliographyData({
         #     f"{bib_key}": Entry(bibtex_type, [
         #         ('author', ' and '.join(self.authors)),
