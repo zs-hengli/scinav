@@ -60,13 +60,7 @@ def pay_status(out_trade_no=None, transaction_id=None):
 
 
 def weixin_notify(request):
-    headers = {
-        'Wechatpay-Signature': request.META.get('HTTP_WECHATPAY_SIGNATURE'),
-        'Wechatpay-Timestamp': request.META.get('HTTP_WECHATPAY_TIMESTAMP'),
-        'Wechatpay-Nonce': request.META.get('HTTP_WECHATPAY_NONCE'),
-        'Wechatpay-Serial': request.META.get('HTTP_WECHATPAY_SERIAL')
-    }
-    result = wxpay.callback(headers=headers, body=request.body)
+    result = wxpay.callback(headers=request.headers, body=request.body)
     if result and result.get('event_type') == 'TRANSACTION.SUCCESS':
         logger.info(f"weixin pay notify success:{result}")
         resp = result.get('resource')
