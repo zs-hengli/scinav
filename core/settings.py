@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'collection',
     'document',
     'openapi',
+    'vip',
 ]
 
 MIDDLEWARE = [
@@ -237,7 +238,6 @@ REST_FRAMEWORK = {
         # 'rest_framework_jwt.authentication.JSONWebTokenAuthentication',
     ),
 
-
     # throttle
     'DEFAULT_THROTTLE_CLASSES': (
         # 'rest_framework.throttling.AnonRateThrottle',
@@ -330,3 +330,13 @@ LOG_REQUESTS = True
 GENERATE_REQUEST_ID_IF_NOT_IN_HEADER = True
 LOG_REQUEST_ID_HEADER = "HTTP_X_REQUEST_ID"
 REQUEST_ID_RESPONSE_HEADER = "X-Request-Id"
+
+# weixin pay
+WEIXIN_PAY_APIV3_KEY = os.environ.get('WEIXIN_PAY_APIV3_KEY', 'apiv3_key')
+WEIXIN_PAY_MCHID = os.environ.get('WEIXIN_PAY_MCHID', 'mchid')
+WEIXIN_PAY_APPID = os.environ.get('WEIXIN_PAY_APPID', 'appid')
+WEIXIN_PAY_MCH_PRIVATE_KEY = os.environ.get('WEIXIN_PAY_MCH_PRIVATE_KEY', 'private_key in application_key.pem')
+# 商户 API 证书序列号
+# https://wechatpay-api.gitbook.io/wechatpay-api-v3/chang-jian-wen-ti/zheng-shu-xiang-guan#ru-he-cha-kan-zheng-shu-xu-lie-hao
+WEIXIN_PAY_MCH_CERT_SERIAL_NO = os.environ.get('WEIXIN_PAY_MCH_CERT_SERIAL_NO', 'mch cert serial no')
+WEIXIN_PAY_NOTIFY_URL = os.environ.get('WEIXIN_PAY_NOTIFY_URL', 'https://host/path')

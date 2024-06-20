@@ -29,3 +29,7 @@ authing==4.5.18
 # cls(citation style language) styles format
 citeproc-py
 pybtex
+
+# weichat pay
+wechatpayv3
+qrcode
