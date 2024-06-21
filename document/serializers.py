@@ -8,7 +8,7 @@ from rest_framework import serializers
 
 from bot.rag_service import Document as RagDocument
 from collection.models import Collection
-from document.models import Document
+from document.models import Document, DocumentLibrary
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +120,13 @@ class DocumentUploadFileSerializer(serializers.Serializer):
 class DocumentUploadQuerySerializer(serializers.Serializer):
     user_id = serializers.CharField(required=True, allow_blank=False, allow_null=False)
     files = DocumentUploadFileSerializer(many=True, required=True, allow_null=False)
+
+
+class DocumentUploadResultSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = DocumentLibrary
+        fields = ['id', 'object_path', 'task_id', 'task_status']
 
 
 class DocumentRagCreateSerializer(BaseModelSerializer):
@@ -284,6 +291,7 @@ class DocumentLibraryListQuerySerializer(serializers.Serializer):
     list_type = serializers.ChoiceField(required=False, choices=ListTypeChoices, default=ListTypeChoices.ALL)
     page_size = serializers.IntegerField(required=True)
     page_num = serializers.IntegerField(required=True)
+    keyword = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
 
 
 class DocumentLibraryPersonalSerializer(serializers.Serializer):
@@ -352,6 +360,7 @@ class DocLibAddQuerySerializer(serializers.Serializer):
     add_type = serializers.ChoiceField(required=False, choices=AddTypeChoices, default=None)
     search_content = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
     author_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    keyword = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
 
     def validate(self, attrs):
         if (
@@ -399,6 +408,7 @@ class DocLibCheckQuerySerializer(serializers.Serializer):
     is_all = serializers.BooleanField(required=False, default=False)
     list_type = serializers.ChoiceField(
         required=False, choices=['all', 'in_progress', 'completed', 'failed'], default='all')
+    keyword = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
 
     def validate(self, attrs):
         if attrs.get('ids'):

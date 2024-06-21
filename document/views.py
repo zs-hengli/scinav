@@ -16,7 +16,8 @@ from document.serializers import DocumentDetailSerializer, GenPresignedUrlQueryS
     DocumentUploadQuerySerializer, \
     DocumentLibraryListQuerySerializer, DocumentRagUpdateSerializer, DocLibUpdateNameQuerySerializer, \
     DocLibAddQuerySerializer, DocLibDeleteQuerySerializer, DocLibCheckQuerySerializer, DocumentRagCreateSerializer, \
-    ImportPapersToCollectionSerializer, AuthorsSearchQuerySerializer, AuthorsDocumentsQuerySerializer
+    ImportPapersToCollectionSerializer, AuthorsSearchQuerySerializer, AuthorsDocumentsQuerySerializer, \
+    DocumentUploadResultSerializer
 from document.service import search, presigned_url, document_personal_upload, \
     get_document_library_list, document_library_add, document_library_delete, doc_lib_batch_operation_check, \
     get_url_by_object_path, get_reference_formats, update_exist_documents, import_papers_to_collection, \
@@ -220,16 +221,37 @@ class DocumentsReferencesFormats(APIView):
 @method_decorator(require_http_methods(['GET', "POST", 'PUT', 'DELETE']), name='dispatch')
 class DocumentsLibrary(APIView):
     @staticmethod
-    def get(request, *args, **kwargs):
+    def get(request, document_library_id=None, *args, **kwargs):
         """
         get documents by user_id
         """
         user_id = request.user.id
-        serial = DocumentLibraryListQuerySerializer(data=request.query_params)
-        if not serial.is_valid():
-            return my_json_response(serial.errors, code=100001, msg='invalid query data')
-        vd = serial.validated_data
-        data = get_document_library_list(user_id, vd['list_type'], vd['page_size'], vd['page_num'])
+        if document_library_id:
+            document_library = DocumentLibrary.objects.filter(id=document_library_id).first()
+            if not document_library:
+                return my_json_response(code=100002, msg=f'document_library not found by id={document_library_id}')
+            status = (
+                'completed' if document_library.task_status == DocumentLibrary.TaskStatusChoices.COMPLETED
+                else 'in_progress' if document_library.task_status in [
+                    DocumentLibrary.TaskStatusChoices.PENDING,
+                    DocumentLibrary.TaskStatusChoices.QUEUEING,
+                    DocumentLibrary.TaskStatusChoices.IN_PROGRESS
+                ] else 'failed'
+            )
+            data = {
+                'id': document_library_id,
+                'status': status,
+                'document_id': document_library.document_id,
+                'task_type': document_library.task_type,
+                'task_id': document_library.task_id,
+                'object_path': document_library.object_path,
+            }
+        else:
+            serial = DocumentLibraryListQuerySerializer(data=request.query_params)
+            if not serial.is_valid():
+                return my_json_response(serial.errors, code=100001, msg='invalid query data')
+            vd = serial.validated_data
+            data = get_document_library_list(user_id, vd['list_type'], vd['page_size'], vd['page_num'], vd['keyword'])
         return my_json_response(data)
 
     @staticmethod
@@ -239,11 +261,12 @@ class DocumentsLibrary(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg='invalid post data')
         vd = serial.validated_data
-        document_library_add(
+        document_libraries = document_library_add(
             request.user.id, vd['document_ids'], vd['collection_id'], vd['bot_id'], vd['add_type'],
-            vd['search_content'], vd['author_id']
+            vd['search_content'], vd['author_id'], keyword=vd['keyword'],
         )
-        return my_json_response({})
+        data = DocumentUploadResultSerializer(document_libraries, many=True).data
+        return my_json_response({'list': data})
 
     @staticmethod
     def put(request, document_library_id, *args, **kwargs):
@@ -298,8 +321,9 @@ class DocumentsPersonal(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg='invalid post data')
         validated_data = serial.validated_data
-        document_personal_upload(validated_data)
-        return my_json_response(validated_data)
+        document_libraries = document_personal_upload(validated_data)
+        data = DocumentUploadResultSerializer(document_libraries, many=True).data
+        return my_json_response({'list': data})
 
 
 @method_decorator([extract_json], name='dispatch')

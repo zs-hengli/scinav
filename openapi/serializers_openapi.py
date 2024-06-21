@@ -76,9 +76,9 @@ class PaperIdSerializer(serializers.Serializer):
                 "Psychology"
             ],
             "reference_formats": {
-                "GB/T": "A. Lengeris. Perceptual Assimilation and L2 Learning: Evidence from the Perception of "
+                "GB/T": "A. Lengeris. (2009). Perceptual Assimilation and L2 Learning: Evidence from the Perception of "
                         "Southern British English Vowels by Native Speakers of Greek and Japanese: Phonetica: "
-                        "International Journal of Phonetic Science, 2009.",
+                        "International Journal of Phonetic Science.",
                 "MLA": "A. Lengeris. \"Perceptual Assimilation and L2 Learning: Evidence from the Perception of "
                        "Southern British English Vowels by Native Speakers of Greek and Japanese.\" Phonetica: "
                        "International Journal of Phonetic Science, 2009-09-01.",

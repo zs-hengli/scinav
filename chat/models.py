@@ -27,6 +27,10 @@ class Conversation(models.Model):
     title = models.CharField(null=True, blank=True, max_length=200, default=None, db_default=None)
     user = models.ForeignKey(
         'user.MyUser', db_constraint=False, on_delete=models.DO_NOTHING, null=True, db_column='user_id')
+    share = models.ForeignKey(
+        'chat.ConversationShare', db_constraint=False, on_delete=models.DO_NOTHING, null=True, db_column='share_id',
+        default=None, db_default=None, related_name='share_conversations'
+    )
     agent_id = models.CharField(null=True, blank=True, max_length=36, default=None, db_default=None)
     public_collection_ids = models.JSONField(null=True, blank=True, db_default=None)
     paper_ids = models.JSONField(null=True, blank=True, db_default=None)
@@ -54,7 +58,7 @@ class Question(models.Model):
     conversation = models.ForeignKey(
         Conversation, db_constraint=False, on_delete=models.DO_NOTHING, null=True, related_name='question'
     )
-    content = models.TextField()
+    content = models.TextField(null=True)
     answer = models.TextField(null=True, blank=True, db_default=None)
     is_like = models.BooleanField(null=True, default=None, db_default=None)
     stream = models.JSONField(null=True, blank=True, db_default=None)
@@ -63,9 +67,33 @@ class Question(models.Model):
     output_tokens = models.IntegerField(null=True, default=None, db_default=None)
     del_flag = models.BooleanField(default=False, db_default=False)
     is_stop = models.BooleanField(default=False, db_default=False)
+    source = models.CharField(null=True, blank=True, max_length=512, default=None, db_default=None)
     updated_at = models.DateTimeField(null=True, auto_now=True)
     created_at = models.DateTimeField(null=True, auto_now_add=True)
 
     class Meta:
         db_table = 'question'
         verbose_name = 'question'
+
+
+class ConversationShare(models.Model):
+    id = models.CharField(max_length=36, primary_key=True, default=uuid.uuid4)
+    user = models.ForeignKey(
+        'user.MyUser', db_constraint=False, on_delete=models.DO_NOTHING, null=True, db_column='user_id')
+    conversation = models.ForeignKey(
+        Conversation, db_constraint=False, on_delete=models.DO_NOTHING, null=True, db_column='conversation_id'
+    )
+    title = models.CharField(null=True, blank=True, max_length=200, default=None, db_default=None)
+    bot_id = models.CharField(null=True, blank=True, max_length=36, default=None, db_default=None)
+    collections = models.JSONField(null=True)
+    documents = models.JSONField(null=True)
+    model = models.CharField(null=True, blank=True, max_length=64, default=None, db_default=None)
+    content = models.JSONField(null=True, blank=True, db_default=None)
+    num = models.IntegerField(null=True, default=None, db_default=None)
+    del_flag = models.BooleanField(default=False, db_default=False)
+    updated_at = models.DateTimeField(null=True, auto_now=True)
+    created_at = models.DateTimeField(null=True, auto_now_add=True)
+
+    class Meta:
+        db_table = 'conversation_share'
+        verbose_name = 'conversation_share'

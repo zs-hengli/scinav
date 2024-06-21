@@ -7,7 +7,7 @@ from rest_framework import serializers
 from django.utils.translation import gettext_lazy as _
 
 from bot.models import BotCollection, Bot, BotSubscribe
-from chat.models import Conversation, Question
+from chat.models import Conversation, Question, ConversationShare
 from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionDocumentListSerializer
 from document.models import Document, DocumentLibrary
@@ -64,7 +64,6 @@ class ConversationCreateBaseSerializer(serializers.Serializer):
             bot_id=bot_id,
         )
 
-
     @staticmethod
     def get_chat_type(validated_data):
         vd = validated_data
@@ -95,6 +94,7 @@ class ConversationCreateSerializer(ConversationCreateBaseSerializer):
     paper_ids = serializers.ListField(
         required=False, child=serializers.JSONField(), allow_empty=True, allow_null=True, default=list())
     question = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    share_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, min_length=32, max_length=36)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
@@ -102,8 +102,9 @@ class ConversationCreateSerializer(ConversationCreateBaseSerializer):
             not attrs.get('documents')
             and not attrs.get('collections')
             and not attrs.get('bot_id')
+            and not attrs.get('share_id')
         ):
-            raise serializers.ValidationError('documents, collections, bot_id are all empty')
+            raise serializers.ValidationError('documents, collections, bot_id, share_id are all empty')
         if attrs.get('question'):
             attrs['content'] = attrs['question']
         return attrs
@@ -124,15 +125,15 @@ class ConversationUpdateSerializer(serializers.Serializer):
 
 
 class ConversationDetailSerializer(BaseModelSerializer):
-    # todo answers, questions
     questions = serializers.SerializerMethodField()
     stop_chat_type = serializers.SerializerMethodField(default=None)
 
     @staticmethod
     def get_questions(obj: Conversation):
-        filter_query = Q(del_flag=False) & ~Q(answer='') & Q(answer__isnull=False)
-        query_set = obj.question.filter(filter_query).order_by('-updated_at')
-        return QuestionConvDetailSerializer(query_set[0:10], many=True).data[::-1]
+        return None
+        # filter_query = Q(del_flag=False) & (Q(source='share') | (~Q(answer='') & Q(answer__isnull=False)))
+        # query_set = obj.question.filter(filter_query).order_by('-updated_at')
+        # return QuestionListSerializer(query_set[0:10], many=True).data[::-1]
 
     @staticmethod
     def get_stop_chat_type(obj: Conversation):
@@ -193,7 +194,27 @@ class QuestionReferenceSerializer(serializers.Serializer):
     collection_type = serializers.CharField(required=False, min_length=1, max_length=36)
 
 
-class QuestionConvDetailSerializer(serializers.ModelSerializer):
+def update_chat_references(references):
+    data_dict = {
+        f"{o['collection_id']}__{o['doc_id']}": 1
+        for o in references if o.get('doc_id') and o.get('collection_id')
+    }
+    docs = []
+    for d in data_dict.keys():
+        collection_id, doc_id = d.split('__')
+        docs.append({'doc_id': doc_id, 'collection_id': collection_id})
+    documents = Document.raw_by_docs(docs)
+    doc_apas, doc_titles = {}, {}
+    for d in documents:
+        doc_apas[f"{d.collection_id}__{d.doc_id}"] = d.get_csl_formate('apa')
+        doc_titles[f"{d.collection_id}__{d.doc_id}"] = d.title
+    for index, d in enumerate(references):
+        references[index]['doc_apa'] = doc_apas.get(f"{d['collection_id']}__{d['doc_id']}", '')
+        references[index]['title'] = doc_titles.get(f"{d['collection_id']}__{d['doc_id']}", '')
+    return references
+
+
+class QuestionListSerializer(serializers.ModelSerializer):
     references = serializers.SerializerMethodField()
 
     @staticmethod
@@ -201,11 +222,14 @@ class QuestionConvDetailSerializer(serializers.ModelSerializer):
         data = []
         if obj.stream and obj.stream.get('output'):
             data = [QuestionReferenceSerializer(o).data for o in obj.stream['output'] if 'bbox' in o]
+            papers = {}
+            data = update_chat_references(data)
         return data
 
     class Meta:
         model = Question
-        fields = ['id', 'content', 'answer', 'model', 'input_tokens', 'output_tokens', 'is_like', 'references']
+        fields = [
+            'id', 'content', 'answer', 'model', 'input_tokens', 'output_tokens', 'is_like', 'references', 'source']
 
 
 class QuestionAnswerSerializer(serializers.Serializer):
@@ -326,4 +350,54 @@ def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
             'full_text_accessible': d['id'] in full_text_documents
         })
     return ret_data
+
+
+class ConversationShareQuestionSelectSerializer(serializers.Serializer):
+    id = serializers.CharField(required=True, max_length=36)
+    has_answer = serializers.BooleanField(required=False, default=True)
+    has_question = serializers.BooleanField(required=False, default=True)
+
+
+class ConversationShareCreateQuerySerializer(serializers.Serializer):
+    conversation_id = serializers.CharField(required=True, max_length=36)
+    selected_questions = ConversationShareQuestionSelectSerializer(required=False, many=True)
+    is_all = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        if not attrs.get('selected_questions') and not attrs.get('is_all'):
+            raise serializers.ValidationError('selected_questions or is_all is required')
+        return attrs
+
+
+class ConversationShareListQuerySerializer(serializers.Serializer):
+    page_num = serializers.IntegerField(required=False, default=1)
+    page_size = serializers.IntegerField(required=False, default=10)
+
+
+class ShareQuestionListSerializer(serializers.Serializer):
+    id = serializers.CharField(required=True, max_length=36)
+    content = serializers.CharField(required=True, allow_null=True, allow_blank=True)
+    answer = serializers.CharField(required=True, allow_null=True, allow_blank=True)
+    model = serializers.CharField(required=True)
+    references = serializers.JSONField(required=False, allow_null=True)
+
+
+class ConversationShareDetailSerializer(BaseModelSerializer):
+    # todo answers, questions
+    questions = serializers.SerializerMethodField()
+
+    @staticmethod
+    def get_questions(obj: ConversationShare):
+        questions = obj.content['questions']
+        for question in questions:
+            if question.get('references'):
+                question['references'] = update_chat_references(question['references'])
+        return questions
+
+    class Meta:
+        model = ConversationShare
+        fields = [
+            'id', 'user_id', 'bot_id', 'model', 'documents', 'collections', 'questions'
+        ]
+
 

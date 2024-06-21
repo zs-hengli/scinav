@@ -89,6 +89,10 @@ class Document(models.Model):
         return Document.objects.raw(sql)
 
     @staticmethod
+    def raw_sql(sql):
+        return Document.objects.raw(sql)
+
+    @staticmethod
     def difference_docs(docs1, docs2):
         docs1_dict = {f"{d['collection_id']}-{d['doc_id']}": d for d in docs1}
         docs2_dict = {f"{d['collection_id']}-{d['doc_id']}": d for d in docs2}

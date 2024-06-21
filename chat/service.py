@@ -1,5 +1,6 @@
 import datetime
 import logging
+from time import sleep
 
 from django.db.models import Q
 
@@ -8,13 +9,14 @@ from operator import itemgetter
 
 from bot.models import Bot
 from bot.rag_service import Conversations as RagConversation
-from chat.models import Conversation, Question
+from chat.models import Conversation, Question, ConversationShare
 from chat.serializers import ConversationCreateSerializer, ConversationDetailSerializer, ConversationListSerializer, \
-    QuestionConvDetailSerializer
+    QuestionListSerializer, ConversationShareCreateQuerySerializer
 from collection.base_service import update_conversation_by_collection
 from collection.models import Collection, CollectionDocument
 from core.utils.common import cmp_ignore_order
 from document.models import DocumentLibrary, Document
+from document.tasks import async_update_conversation_share_content
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +115,100 @@ def conversation_create(user_id, validated_data, openapi_kay_id=None):
     return str(conversation.id)
 
 
+def conversation_create_by_share(user_id, conversation_share: ConversationShare, validated_data, openapi_kay_id=None):
+    vd = validated_data
+    chat_type = ConversationCreateSerializer.get_chat_type(validated_data)
+    papers_info = ConversationCreateSerializer.get_papers_info(
+        user_id, vd.get('bot_id'), vd.get('collections'), vd['all_document_ids']
+    )
+    title = conversation_share.title
+    public_collection_ids = vd.get('public_collection_ids')
+    if chat_type == Conversation.TypeChoices.BOT_COV:
+        bot_id = validated_data.get('bot_id')
+        bot = Bot.objects.get(pk=bot_id, del_flag=False)
+        agent_id = bot.agent_id
+        documents = None
+        collections = vd.get('collections')
+    else:
+        agent_id = None
+        documents = vd.get('documents')
+        collections = vd.get('collections')
+    # 创建 Conversation
+    paper_ids = []
+    for p in papers_info:
+        paper_ids.append({
+            'collection_id': p['collection_id'],
+            'collection_type': p['collection_type'],
+            'doc_id': p['doc_id'],
+            'full_text_accessible': p['full_text_accessible']
+        })
+    history_messages = []
+    for q in conversation_share.content.get('questions'):
+        if q['content']:
+            history_messages.append({
+                'role': 'user',
+                'content': q['content'],
+            })
+        if q['answer']:
+            history_messages.append({
+                'role': 'assistant',
+                'content': q['answer'],
+            })
+    rag_conv_create_data = {
+        'conversation_id': vd.get('conversation_id'),
+        'user_id': user_id,
+        'agent_id': agent_id,
+        'paper_ids': paper_ids,
+        'public_collection_ids': public_collection_ids,
+        'llm_name': vd['model'],
+    }
+    if history_messages:
+        rag_conv_create_data['history_messages'] = history_messages
+    conv = RagConversation.create(**rag_conv_create_data)
+    conversation = Conversation.objects.create(
+        id=conv['id'],
+        title=title,
+        user_id=conv['user_id'],
+        share_id=conversation_share.id,
+        agent_id=conv['agent_id'],
+        documents=documents,
+        model=vd['model'] if vd['model'] else 'gpt-4o',
+        collections=collections,
+        public_collection_ids=conv['public_collection_ids'],
+        paper_ids=papers_info,
+        type=chat_type,
+        is_named=title is not None,
+        bot_id=vd.get('bot_id'),
+        is_api=True if openapi_kay_id else False,
+    )
+    # add questions to conversation
+    questions, times = conversation_share.content.get('questions'), 0
+    while not questions and times < 3:
+        sleep(2)
+        conversation_share = ConversationShare.objects.get(pk=conversation_share.id)
+        questions = conversation_share.content.get('questions')
+        times += 1
+    if not questions:
+        logger.warning(f'conversation_share {conversation_share.id} questions is None')
+    else:
+        conv_questions = []
+        for q in questions:
+            conv_questions.append(Question(
+                conversation=conversation,
+                content=q['content'],
+                answer=q['answer'],
+                stream={'output': q['references']},
+                model=q['model'],
+                input_tokens=q['input_tokens'],
+                output_tokens=q['output_tokens'],
+                source='share',
+            ))
+        question_objs = Question.objects.bulk_create(conv_questions)
+        logger.debug(f'conversation {conversation.id} add {len(question_objs)} questions')
+    # 返回 Conversation id
+    return str(conversation.id)
+
+
 def conversation_update(user_id, conversation_id, validated_data):
     vd = validated_data
     conversation = Conversation.objects.get(pk=conversation_id, user_id=user_id)
@@ -186,12 +282,15 @@ def conversation_detail(conversation_id):
 
 
 def question_list(conversation_id, page_num, page_size):
-    filter_query = Q(conversation_id=conversation_id, del_flag=False) & ~Q(answer='') & Q(answer__isnull=False)
+    filter_query = (
+        Q(conversation_id=conversation_id, del_flag=False)
+        & (((~Q(answer='')) & Q(answer__isnull=False)) | Q(source='share'))
+    )
     query_set = Question.objects.filter(filter_query).order_by('-updated_at')
     total = query_set.count()
     questions = query_set[(page_num - 1) * page_size: page_num * page_size]
     return {
-        'list': QuestionConvDetailSerializer(questions, many=True).data[::-1],
+        'list': QuestionListSerializer(questions, many=True).data[::-1],
         'total': total,
     }
 
@@ -262,6 +361,51 @@ def conversation_menu_list(user_id, list_type='all'):
         'data': data,
         'keys': list(data.keys()),
     }
+
+
+def conversation_share_create(user_id,
+                              validated_data: ConversationShareCreateQuerySerializer.data,
+                              conversation: Conversation):
+    vd = validated_data
+    content = None
+    if not vd['is_all']:
+        question_ids = [q['id'] for q in vd['selected_questions']]
+        selected_questions_dict = {
+            q['id']: {'has_answer': q['has_answer'], 'has_question': q['has_question']}
+            for q in vd['selected_questions']
+        }
+        questions = Question.objects.filter(id__in=question_ids).all()
+        questions_data = QuestionListSerializer(questions, many=True).data
+        for index,v in enumerate(questions_data):
+            selected_question = selected_questions_dict[v['id']]
+            questions_data[index].update(selected_question)
+            if not selected_question.get('has_answer'):
+                questions_data[index]['answer'] = None
+                questions_data[index]['references'] = None
+            if not selected_question.get('has_question'):
+                questions_data[index]['content'] = None
+        content = {'questions': questions_data}
+
+    share_data = {
+        'user_id': user_id,
+        'conversation_id': vd['conversation_id'],
+        'bot_id': conversation.bot_id,
+        'title': conversation.title,
+        'collections': conversation.collections,
+        'documents': conversation.documents,
+        'model': conversation.model,
+        'content': content,
+        'num': len(content['questions']) if content else 0,
+    }
+    if not conversation.bot_id and not conversation.collections:
+        share_data['documents'] = conversation.documents
+    conversation_share = ConversationShare.objects.create(**share_data)
+    if vd['is_all']:
+        # 异步获取所以问题列表
+        async_update_conversation_share_content.apply_async(
+            args=[conversation_share.id, vd['conversation_id'], vd['selected_questions']]
+        )
+    return {'share_id': conversation_share.id}
 
 
 def chat_query(user_id, validated_data, openapi_key_id=None):

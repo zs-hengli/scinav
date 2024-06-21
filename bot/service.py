@@ -10,7 +10,7 @@ from bot.rag_service import Bot as RagBot
 from bot.serializers import (BotDetailSerializer, BotListAllSerializer, HotBotListSerializer, BotListChatMenuSerializer,
                              MyBotListAllSerializer, BotToolsDetailSerializer, BotToolsUpdateQuerySerializer)
 from collection.models import Collection, CollectionDocument
-from collection.serializers import CollectionDocumentListSerializer
+from collection.serializers import CollectionDocumentListSerializer, bot_subscribe_personal_document_num
 from core.utils.exceptions import InternalServerError, ValidationError
 from document.base_service import update_document_lib
 from document.models import Document, DocumentLibrary
@@ -234,24 +234,6 @@ def bot_list_chat_menu(user_id, page_size=10, page_num=1):
 def bot_subscribe(user_id, bot_id, action='subscribe'):
     # 订阅： 加个人文件库 创建同名收藏夹
     # 取消订阅 删除收藏夹
-    # todo 收藏夹有调整 增加文献时修改订阅者的个人文件库
-    # if action == 'subscribe':
-    #     bot = Bot.objects.filter(pk=bot_id).values_list('title', 'type', 'user_id', named=True).first()
-    #     items = BotCollection.objects.filter(bot_id=bot_id, del_flag=False).all()
-    #     total_public = sum(items.values_list('collection__total_public', flat=True))
-    #     total_personal = sum(items.values_list('collection__total_personal', flat=True))
-    #     collect_data = {
-    #         'user_id': user_id,
-    #         'title': bot.title,
-    #         'type': Collection.TypeChoices.PERSONAL,
-    #         'bot_id': bot_id,
-    #         'total_public': total_public,
-    #         'total_personal': total_personal,
-    #         'del_flag': False,
-    #     }
-    #     Collection.objects.update_or_create(collect_data, user_id=user_id, bot_id=bot_id)
-    # else:
-    #     Collection.objects.filter(user_id=user_id, bot_id=bot_id).update(del_flag=True)
     data = {
         'user_id': user_id,
         'bot_id': bot_id,
@@ -290,30 +272,14 @@ def bot_publish(bot_id, action=Bot.TypeChoices.PUBLIC):
     if action == Bot.TypeChoices.PUBLIC:
         bot.type = Bot.TypeChoices.IN_PROGRESS
         bot.pub_date = datetime.datetime.now()
+        # 个人文献 下载关联公共库文献
+        p_documents, ref_documents = bot_subscribe_personal_document_num(bot.user_id, bot=bot)
+        if ref_documents:
+            update_document_lib('0000', ref_documents)
+        elif action == Bot.TypeChoices.PUBLIC:
+            bot.type = Bot.TypeChoices.PUBLIC
     else:
         bot.type = Bot.TypeChoices.PERSONAL
-    # 个人文献 下载关联公共库文献
-    bot_collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False)
-    collections = [bc.collection for bc in bot_collections]
-    collection_ids = [c.id for c in collections]
-    query_set, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
-        bot.user_id, collection_ids, 'personal', bot)
-    document_ids = [cd['document_id'] for cd in query_set.all()]
-    documents = Document.objects.filter(id__in=document_ids).all()
-    ref_documents = []
-    for d in documents:
-        ref_document = Document.objects.filter(
-            collection_id=d.ref_collection_id, doc_id=d.ref_doc_id).values('id').first()
-        if ref_document:
-            ref_documents.append(ref_document['id'])
-    if ref_documents:
-        update_document_lib('0000', ref_documents)
-    elif action == Bot.TypeChoices.PUBLIC:
-        bot.type = Bot.TypeChoices.PUBLIC
-
-    # 本人专题自动订阅
-    # BotSubscribe.objects.update_or_create(
-    #     user_id=bot.user_id, bot_id=bot_id, defaults={'del_flag': False})
     bot.save()
     async_schedule_publish_bot_task.apply_async()
     return 0, ''

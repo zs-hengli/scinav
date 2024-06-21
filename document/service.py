@@ -107,7 +107,7 @@ def _rag_papers_to_documents(rag_papers):
             else ''
         )
         pub_date = data['pub_date'] if data['pub_date'] else str(data['year']) if data['year'] else None
-        document = Document(**data)
+        # document = Document(**data)
         documents.append({
             'id': data['id'],
             'title': data['title'],
@@ -121,7 +121,7 @@ def _rag_papers_to_documents(rag_papers):
             'collection_title': collection_title,
             'venue': source,
             'source': source,
-            'reference_formats': get_reference_formats(document),
+            # 'reference_formats': get_reference_formats(document),
         })
     return documents
 
@@ -221,14 +221,17 @@ def search_result_save_cache(user_id, content, data, search_result_expires=600, 
     return res
 
 
-def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
+def get_document_library_list(user_id, list_type, page_size=10, page_num=1, keyword=None):
     # {'filename': '', 'document_title': '', 'status': '-', 'record_time': '-'}
     start_num = page_size * (page_num - 1)
     list_data = []
     public_total, subscribe_total, sub_add_list, my_total = 0, 0, [], 0
     if list_type == DocumentLibraryListQuerySerializer.ListTypeChoices.ALL:
         # public
-        public_colles = Collection.objects.filter(id__in=['arxiv'], del_flag=False).all()
+        filter_query = Q(id__in=['arxiv'], del_flag=False)
+        if keyword:
+            filter_query &= Q(title__contains=keyword)
+        public_colles = Collection.objects.filter(filter_query).all()
         if public_colles:
             public_total = len(public_colles)
             if start_num == 0:
@@ -255,37 +258,31 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1):
         # list_data += sub_add_list
 
     # personal
+    filter_query = Q(user_id=user_id, del_flag=False)
+    if keyword:
+        filter_query &= Q(filename__contains=keyword) | Q(document__title__contains=keyword)
     if list_type == DocumentLibraryListQuerySerializer.ListTypeChoices.ALL:
-        query_set = DocumentLibrary.objects.filter(
-            user_id=user_id, del_flag=False,
-            task_status__in=[DocumentLibrary.TaskStatusChoices.COMPLETED,
-                             DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
-                             DocumentLibrary.TaskStatusChoices.PENDING,
-                             DocumentLibrary.TaskStatusChoices.QUEUEING,
-                             DocumentLibrary.TaskStatusChoices.ERROR,
-                             ]
-        ).order_by('-updated_at')
+        filter_query &= Q(task_status__in=[
+            DocumentLibrary.TaskStatusChoices.COMPLETED,
+            DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
+            DocumentLibrary.TaskStatusChoices.PENDING,
+            DocumentLibrary.TaskStatusChoices.QUEUEING,
+            DocumentLibrary.TaskStatusChoices.ERROR,
+        ])
     elif list_type == DocumentLibraryListQuerySerializer.ListTypeChoices.IN_PROGRESS:
-        query_set = DocumentLibrary.objects.filter(
-            user_id=user_id, del_flag=False,
-            task_status__in=[DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
-                             DocumentLibrary.TaskStatusChoices.PENDING,
-                             DocumentLibrary.TaskStatusChoices.QUEUEING,
-                             ]
-        ).order_by('-updated_at')
+        filter_query &= Q(task_status__in=[
+            DocumentLibrary.TaskStatusChoices.IN_PROGRESS,
+            DocumentLibrary.TaskStatusChoices.PENDING,
+            DocumentLibrary.TaskStatusChoices.QUEUEING,
+        ])
     elif list_type in [
         DocumentLibraryListQuerySerializer.ListTypeChoices.ERROR,
         DocumentLibraryListQuerySerializer.ListTypeChoices.FAILED
     ]:
-        query_set = DocumentLibrary.objects.filter(
-            user_id=user_id, del_flag=False,
-            task_status=DocumentLibrary.TaskStatusChoices.ERROR
-        ).order_by('-updated_at')
+        filter_query &= Q(task_status=DocumentLibrary.TaskStatusChoices.ERROR)
     else:
-        query_set = DocumentLibrary.objects.filter(
-            user_id=user_id, del_flag=False,
-            task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
-        ).order_by('-updated_at')
+        filter_query &= Q(task_status=DocumentLibrary.TaskStatusChoices.COMPLETED)
+    query_set = DocumentLibrary.objects.filter(filter_query).order_by('-updated_at')
     my_total = query_set.count()
     if len(list_data) < page_size:
         my_start_num = 0 if list_data else max(start_num - public_total - subscribe_total, 0)
@@ -429,7 +426,7 @@ def update_exist_documents():
     page_num = 1
     documents = Document.objects.filter(del_flag=False).values(
         'collection_type', 'doc_id', 'collection_id').order_by(
-        'updated_at')[page_size*(page_num-1):page_size*page_num]
+        'updated_at')[page_size * (page_num - 1):page_size * page_num]
     while documents:
         logger.debug(f'ddddddddd page_size: {page_size}, page_num: {page_num}')
         for d in documents:
@@ -438,7 +435,7 @@ def update_exist_documents():
         page_num += 1
         documents = Document.objects.filter(del_flag=False).values(
             'collection_type', 'doc_id', 'collection_id').order_by(
-            'updated_at')[page_size*(page_num-1):page_size*page_num]
+            'updated_at')[page_size * (page_num - 1):page_size * page_num]
 
 
 def document_personal_upload(validated_data):
@@ -478,7 +475,9 @@ def document_personal_upload(validated_data):
     return instances
 
 
-def document_library_add(user_id, document_ids, collection_id, bot_id, add_type, search_content, author_id=None):
+def document_library_add(
+    user_id, document_ids, collection_id, bot_id, add_type, search_content, author_id=None, keyword=None
+):
     """
     添加个人库：
      1. 搜索结果添加
@@ -550,9 +549,9 @@ def document_library_add(user_id, document_ids, collection_id, bot_id, add_type,
     # document_ids = _get_public_document_ids(user_id, document_ids)
     if ref_ds:
         document_ids = list(set(document_ids) | set(ref_ds))
-    update_document_lib(user_id, document_ids)
+    document_libraries = update_document_lib(user_id, document_ids, keyword=keyword)
     async_document_library_task.apply_async()
-    return True
+    return document_libraries
 
 
 def _get_public_document_ids(user_id, document_ids):
@@ -580,6 +579,7 @@ def doc_lib_batch_operation_check(user_id, validated_data):
     ids = validated_data.get('ids')
     list_type = validated_data.get('list_type')
     is_all = validated_data.get('is_all')
+    keyword = validated_data.get('keyword')
     if is_all:
         if list_type == 'failed':
             filter_query = Q(user_id=user_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.ERROR)
@@ -593,7 +593,9 @@ def doc_lib_batch_operation_check(user_id, validated_data):
         else:
             filter_query = Q(user_id=user_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.COMPLETED)
         if ids:
-            filter_query &= ~Q(id__in=ids,)
+            filter_query &= ~Q(id__in=ids, )
+        if keyword:
+            filter_query &= (Q(document_title__icontains=keyword) | Q(filename__icontains=keyword))
         doc_libs = DocumentLibrary.objects.filter(filter_query)
     else:
         doc_libs = DocumentLibrary.objects.filter(user_id=user_id, del_flag=False, id__in=ids)

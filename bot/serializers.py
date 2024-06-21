@@ -173,6 +173,7 @@ class BotDocumentsQuerySerializer(serializers.Serializer):
     bot_id = serializers.CharField(required=False, max_length=36)
     page_num = serializers.IntegerField(required=False, default=1)
     page_size = serializers.IntegerField(required=False, default=10)
+    keyword = serializers.CharField(required=False, trim_whitespace=False, allow_blank=True, default=None)
 
     def validate(self, attrs):
         if attrs.get('list_type') in ['subscribe_full_text', 'all_documents'] and not attrs.get('bot_id'):

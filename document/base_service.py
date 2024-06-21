@@ -1,5 +1,6 @@
 import logging
 
+from django.db.models import Q
 from django.core.cache import cache
 
 from collection.models import Collection, CollectionDocument
@@ -10,10 +11,12 @@ from bot.rag_service import Document as RagDocument
 logger = logging.getLogger(__name__)
 
 
-def update_document_lib(user_id, document_ids):
-    document_ids = Document.objects.filter(
-        id__in=document_ids, del_flag=False, collection_type=Document.TypeChoices.PUBLIC
-    ).values_list('id', flat=True).all()
+def update_document_lib(user_id, document_ids, keyword=None):
+    filter_query = Q(id__in=document_ids, del_flag=False, collection_type=Document.TypeChoices.PUBLIC)
+    if keyword:
+        filter_query &= Q(title__contains=keyword)
+    document_ids = Document.objects.filter(filter_query).values_list('id', flat=True).all()
+    document_libraries = []
     for doc_id in document_ids:
         data = {
             'user_id': user_id,
@@ -24,8 +27,9 @@ def update_document_lib(user_id, document_ids):
             'task_id': None,
             'error': None,
         }
-        DocumentLibrary.objects.update_or_create(data, user_id=user_id, document_id=doc_id)
-    return True
+        document_library, _ = DocumentLibrary.objects.update_or_create(data, user_id=user_id, document_id=doc_id)
+        document_libraries.append(document_library)
+    return document_libraries
 
 
 def document_update_from_rag_ret(rag_ret):

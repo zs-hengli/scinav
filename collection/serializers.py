@@ -290,6 +290,10 @@ class CollectionDocumentListSerializer(serializers.Serializer):
         p_documents, ref_documents = [], []
         if bot and user_id != bot.user_id:
             p_documents, ref_documents = bot_subscribe_personal_document_num(bot.user_id, bot=bot)
+        elif collection_ids:
+            p_documents = collection_sub_personal_documents(user_id, collection_ids)
+            if p_documents:
+                ref_documents = get_ref_document_ids(p_documents)
         doc_lib_document_ids, sub_bot_document_ids = None, None
         if list_type in ['all', 'all_documents']:
             filter_query = Q(collection_id__in=collection_ids, del_flag=False)
@@ -447,3 +451,32 @@ def bot_subscribe_personal_document_num(bot_user_id, bot_collections=None, bot=N
         & set([pd['document_id'] for pd in personal_doc_libs])
     )
     return list(document_set), ref_document_ids
+
+
+def collection_sub_personal_documents(user_id, collection_ids) -> list:
+    """
+    非本人收藏夹列表中包括的个人文献id列表
+    :param user_id:
+    :param collection_ids:
+    :return:
+    """
+    collection_ids = '\'' + '\', \''.join(collection_ids) + '\''
+    sql = ("select d.id from collection_document cd "
+           "left join document d on d.id = cd.document_id "
+           "left join collection c on cd.collection_id=c.id "
+           f"where cd.collection_id in ({collection_ids}) and cd.del_flag=false "
+           f"and c.user_id != '{user_id}' and c.del_flag=false "
+           f"and d.collection_type='personal'")
+    result = Document.raw_sql(sql)
+    document_ids = [d.id for d in result]
+    return document_ids
+
+
+def get_ref_document_ids(document_ids) -> list:
+    document_ids = '\'' + '\', \''.join(document_ids) + '\''
+    sql = ("select d.id from document d "
+           "left join document dr on d.ref_collection_id=dr.collection_id and d.ref_doc_id=dr.doc_id "
+           f"where d.id in ({document_ids})")
+    result = Document.raw_sql(sql)
+    ref_document_ids = [d.id for d in result]
+    return ref_document_ids
