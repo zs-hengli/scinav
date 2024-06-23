@@ -48,7 +48,7 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
             update_data['public_collection_ids'] = public_collection_ids
             conversation.paper_ids = papers_info
             conversation.public_collection_ids = public_collection_ids
-            conversation.collections = collection_ids
+            conversation.collections = personal_collection_ids
             if collection_ids and not conversation.bot_id:
                 conversation.type = (
                     Conversation.TypeChoices.COLLECTION_COV
@@ -56,6 +56,14 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
                 )
             conversation.save()
             RagConversation.update(**update_data)
+        elif (
+            conversation.public_collection_ids != public_collection_ids
+            or conversation.collections != personal_collection_ids
+        ):
+            conversation.public_collection_ids = public_collection_ids
+            conversation.collections = personal_collection_ids
+            conversation.save()
+
     elif collection_ids is not None and collection_ids != conversation.collections:
         paper_ids = []
         update_data['paper_ids'] = paper_ids

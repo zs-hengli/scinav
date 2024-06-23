@@ -276,7 +276,7 @@ def conversation_detail(conversation_id):
         Collection.objects.filter(id__in=conversation.collections, del_flag=False).values('id').all()
         if conversation.collections else []
     )
-    collections = [c['id'] for c in collections]
+    collections = [c['id'] for c in collections] + conversation.public_collection_ids
     conversation.collections = collections
     return ConversationDetailSerializer(conversation).data
 
