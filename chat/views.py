@@ -85,16 +85,28 @@ class Conversations(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         validated_data = serial.validated_data
-        if (
-            validated_data.get('bot_id')
-            and not Bot.objects.filter(id=validated_data['bot_id'], del_flag=False).exists()
-        ):
-            return my_json_response({}, code=100002, msg='bot not found')
+        bot_be_deleted = False
+        if validated_data.get('bot_id'):
+            bot = Bot.objects.filter(id=validated_data.get('bot_id')).first()
+            if bot and bot.del_flag:
+                # return my_json_response({}, code=120003, msg='专题被删除，无法创建对话')
+                bot_be_deleted = True
+            if not bot:
+                return my_json_response({}, code=100002, msg='bot not found')
         if query_data.get('share_id'):
-            conversation_id = conversation_create_by_share(request.user.id, conversation_share, validated_data)
+            if bot_be_deleted:
+                validated_data['bot_id'] = None
+                validated_data['collections'] = []
+                validated_data['doc_ids'] = []
+                validated_data['all_document_ids'] = []
+            conversation = conversation_create_by_share(request.user.id, conversation_share, validated_data)
         else:
-            conversation_id = conversation_create(request.user.id, validated_data)
-        return my_json_response({'conversation_id': conversation_id})
+            conversation = conversation_create(request.user.id, validated_data)
+        data = {
+            'conversation_id': conversation.id,
+            'title': conversation.title,
+        }
+        return my_json_response(data)
 
     @staticmethod
     def delete(request, conversation_id, *args, **kwargs):

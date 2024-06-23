@@ -474,7 +474,7 @@ def collection_sub_personal_documents(user_id, collection_ids) -> list:
 
 def get_ref_document_ids(document_ids) -> list:
     document_ids = '\'' + '\', \''.join(document_ids) + '\''
-    sql = ("select d.id from document d "
+    sql = ("select dr.id from document d "
            "left join document dr on d.ref_collection_id=dr.collection_id and d.ref_doc_id=dr.doc_id "
            f"where d.id in ({document_ids})")
     result = Document.raw_sql(sql)

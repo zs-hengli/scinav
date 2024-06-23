@@ -127,6 +127,7 @@ class ConversationUpdateSerializer(serializers.Serializer):
 class ConversationDetailSerializer(BaseModelSerializer):
     questions = serializers.SerializerMethodField()
     stop_chat_type = serializers.SerializerMethodField(default=None)
+    sharer = serializers.SerializerMethodField()
 
     @staticmethod
     def get_questions(obj: Conversation):
@@ -143,11 +144,27 @@ class ConversationDetailSerializer(BaseModelSerializer):
                 return 'bot_deleted'
         return None
 
+    @staticmethod
+    def get_sharer(obj: Conversation):
+        if obj.share_id:
+            conv_share = ConversationShare.objects.filter(id=obj.share_id).first()
+            sharer_user = conv_share.user
+            if conv_share:
+                return {
+                    'id': sharer_user.id,
+                    'avatar': sharer_user.avatar,
+                    'nickname': sharer_user.nickname,
+                    'email': sharer_user.email,
+                    'phone': sharer_user.phone,
+                    'register_source': sharer_user.register_source,
+                }
+        return None
+
     class Meta:
         model = Conversation
         fields = [
             'id', 'title', 'user_id', 'bot_id', 'model', 'documents', 'collections', 'type', 'questions',
-            'stop_chat_type'
+            'stop_chat_type', 'sharer'
         ]
 
 
@@ -203,7 +220,7 @@ def update_chat_references(references):
     for d in data_dict.keys():
         collection_id, doc_id = d.split('__')
         docs.append({'doc_id': doc_id, 'collection_id': collection_id})
-    documents = Document.raw_by_docs(docs)
+    documents = Document.raw_by_docs(docs) if docs else []
     doc_apas, doc_titles = {}, {}
     for d in documents:
         doc_apas[f"{d.collection_id}__{d.doc_id}"] = d.get_csl_formate('apa')
@@ -347,7 +364,7 @@ def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
             'collection_id': d['collection_id'],
             'doc_id': d['doc_id'],
             'document_id': d['id'],
-            'full_text_accessible': d['id'] in full_text_documents
+            'full_text_accessible': d['id'] in full_text_documents or d['collection_id'] == 'arxiv'
         })
     return ret_data
 
@@ -385,6 +402,7 @@ class ShareQuestionListSerializer(serializers.Serializer):
 class ConversationShareDetailSerializer(BaseModelSerializer):
     # todo answers, questions
     questions = serializers.SerializerMethodField()
+    sharer = serializers.SerializerMethodField()
 
     @staticmethod
     def get_questions(obj: ConversationShare):
@@ -394,10 +412,22 @@ class ConversationShareDetailSerializer(BaseModelSerializer):
                 question['references'] = update_chat_references(question['references'])
         return questions
 
+    @staticmethod
+    def get_sharer(obj: ConversationShare):
+        sharer_user = obj.user
+        return {
+            'id': sharer_user.id,
+            'avatar': sharer_user.avatar,
+            'nickname': sharer_user.nickname,
+            'email': sharer_user.email,
+            'phone': sharer_user.phone,
+            'register_source': sharer_user.register_source,
+        }
+
     class Meta:
         model = ConversationShare
         fields = [
-            'id', 'user_id', 'bot_id', 'model', 'documents', 'collections', 'questions'
+            'id', 'user_id', 'bot_id', 'model', 'documents', 'collections', 'questions', 'sharer'
         ]
 
 

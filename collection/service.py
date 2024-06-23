@@ -388,7 +388,7 @@ def collections_docs(user_id, validated_data):
                 'title': f"{_('公共库')}: {c.title}",
                 'has_full_text': False,
             })
-    query_set, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
+    query_set, d1, d2, ref_ds = CollectionDocumentListSerializer.get_collection_documents(
         vd['user_id'], collection_ids, vd['list_type'])
     start_num = page_size * (page_num - 1)
     logger.info(f"limit: [{start_num}: {page_size * page_num}]")
@@ -398,7 +398,10 @@ def collections_docs(user_id, validated_data):
     # 按照名称升序排序
     all_c_docs = query_set.all()
     start = start_num - (public_count % page_size if not need_public_count and start_num else 0)
-    filter_query = Q(id__in=[cd['document_id'] for cd in all_c_docs])
+    document_ids = [cd['document_id'] for cd in all_c_docs]
+    if ref_ds:
+        document_ids += ref_ds
+    filter_query = Q(id__in=document_ids)
     if vd.get('keyword'):
         filter_query &= Q(title__icontains=vd['keyword'])
     doc_query_set = Document.objects.filter(filter_query).order_by('title')

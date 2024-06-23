@@ -112,7 +112,7 @@ def conversation_create(user_id, validated_data, openapi_kay_id=None):
         is_api=True if openapi_kay_id else False,
     )
     # 返回 Conversation id
-    return str(conversation.id)
+    return conversation
 
 
 def conversation_create_by_share(user_id, conversation_share: ConversationShare, validated_data, openapi_kay_id=None):
@@ -206,7 +206,7 @@ def conversation_create_by_share(user_id, conversation_share: ConversationShare,
         question_objs = Question.objects.bulk_create(conv_questions)
         logger.debug(f'conversation {conversation.id} add {len(question_objs)} questions')
     # 返回 Conversation id
-    return str(conversation.id)
+    return conversation
 
 
 def conversation_update(user_id, conversation_id, validated_data):

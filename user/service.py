@@ -17,3 +17,10 @@ def save_auth_user_info(user_info):
         id=info['id']
     )
     return user
+
+
+def sync_user_info(user: MyUser, user_info):
+    if user.id == user_info['id'] and user.register_source != user_info.get('registerSource'):
+        user.register_source = user_info['registerSource']
+        user.save()
+    return user

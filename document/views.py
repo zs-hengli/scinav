@@ -351,7 +351,7 @@ class DocumentsUrl(APIView):
         if not document:
             return my_json_response(code=100002, msg=f'document not found')
         url_document = None
-        if is_paper_chat and not DocumentLibrary.objects.filter(
+        if is_paper_chat and document['collection_id'] != 'arxiv' and not DocumentLibrary.objects.filter(
                 user_id=user_id, document_id=document['id'], del_flag=False,
                 task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
         ).exists():

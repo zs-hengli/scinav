@@ -80,6 +80,8 @@ class Document(models.Model):
 
     @staticmethod
     def raw_by_docs(docs, fileds='*', where=None):
+        if not docs:
+            return []
         if fileds != '*' and isinstance(fileds, list):
             fileds = ','.join(fileds)
         doc_ids_str = ','.join([f"('{d['collection_id']}', {d['doc_id']})" for d in docs])

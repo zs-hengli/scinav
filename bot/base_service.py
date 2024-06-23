@@ -42,6 +42,7 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
     bot_collections = BotCollection.objects.filter(bot_id=bot_id, del_flag=False)
     collections = [bc.collection for bc in bot_collections]
     collection_ids = [c.id for c in collections]
+    bot_is_subscribed = is_subscribed(user_id, bot)
     # query_set = CollectionDocument.objects.filter(
     #     collection_id__in=collection_ids).distinct().values('document_id').order_by('document_id')
     public_count, need_public, need_public_count, personal_count, public_collections = 0, False, 0, 0, []
@@ -124,12 +125,15 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
         # todo has_full_text
         query_set, d1, d2, ref_ds = CollectionDocumentListSerializer.get_collection_documents(
             user_id, collection_ids, 'personal&subscribe_full_text', bot)
-        all_full_text_docs = [d['document_id'] for d in query_set.all()]
+        if bot_is_subscribed:
+            all_full_text_docs = [d['document_id'] for d in query_set.all()]
+        else:
+            all_full_text_docs = d1
         # 个人关联文献是否有全文
         if ref_ds:
             full_text_ref_documents = Document.objects.filter(
                 id__in=ref_ds, full_text_accessible=True, del_flag=False).values_list('id', flat=True).all()
-            if bot.type == Bot.TypeChoices.PERSONAL:
+            if bot.type == Bot.TypeChoices.PERSONAL or not bot_is_subscribed:
                 full_text_ref_documents = DocumentLibrary.objects.filter(
                     user_id=user_id, document_id__in=list(full_text_ref_documents), del_flag=False,
                     task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
