@@ -1,9 +1,11 @@
+import json
 import logging
 
 from django.db.models import Q
 from django.core.cache import cache
 
 from collection.models import Collection, CollectionDocument
+from core.utils.common import str_hash
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentRagCreateSerializer
 from bot.rag_service import Document as RagDocument
@@ -85,6 +87,27 @@ def search_result_delete_cache(user_id):
     if keys:
         return cache.delete_many(keys)
     return True
+
+
+def search_result_from_cache(user_id, content, page_size=10, page_num=1, search_type='paper', limit=100):
+    if search_type == 'paper':
+        doc_search_redis_key_prefix = f'scinav:{search_type}:search:{user_id}:{limit}'
+    else:
+        doc_search_redis_key_prefix = f'scinav:{search_type}:search:{user_id}'
+    content_hash = str_hash(f'{content}')
+    redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
+    search_cache = cache.get(redis_key)
+
+    start_num = page_size * (page_num - 1)
+    logger.info(f"limit: [{start_num}: {page_size * page_num}]")
+    if search_cache:
+        logger.info(f'search resp from cache: {redis_key}')
+        all_cache = json.loads(search_cache)
+        total = len(all_cache)
+        return {
+            'list': json.loads(search_cache)[start_num:(page_size * page_num)] if total > start_num else [],
+            'total': total
+        }
 
 
 def bot_documents(user_id, bot, collections=None):

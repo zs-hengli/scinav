@@ -15,7 +15,8 @@ from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionDocumentListSerializer
 from core.utils.common import str_hash
 from core.utils.exceptions import ValidationError
-from document.base_service import document_update_from_rag_ret, update_document_lib, search_result_delete_cache
+from document.base_service import document_update_from_rag_ret, update_document_lib, search_result_delete_cache, \
+    search_result_from_cache
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentLibraryPersonalSerializer, DocLibAddQuerySerializer, \
     DocumentLibraryListQuerySerializer, DocumentRagCreateSerializer, AuthorsDetailSerializer
@@ -126,17 +127,17 @@ def _rag_papers_to_documents(rag_papers):
     return documents
 
 
-def search(user_id, content, page_size=10, page_num=1, topn=100):
+def search(user_id, content, page_size=10, page_num=1, limit=100):
     start_num = page_size * (page_num - 1)
     logger.info(f"limit: [{start_num}: {page_size * page_num}]")
-    if cache_data := search_result_from_cache(user_id, content, page_size, page_num):
+    if cache_data := search_result_from_cache(user_id, content, page_size, page_num, limit=limit):
         return cache_data
 
-    rag_ret = RagDocument.search(user_id, content, limit=topn)
+    rag_ret = RagDocument.search(user_id, content, limit=limit)
     documents = _rag_papers_to_documents(rag_ret)
     document_ids = [d['id'] for d in documents]
     async_update_document.apply_async(args=[document_ids])
-    search_result_save_cache(user_id, content, documents)
+    search_result_save_cache(user_id, content, documents, limit=limit)
     total = len(documents)
     return {
         'list': documents[start_num:(page_size * page_num)] if total > start_num else [],
@@ -157,7 +158,7 @@ def author_documents(user_id, author_id, page_size=10, page_num=1):
     documents = _rag_papers_to_documents(papers)
     document_ids = [d['id'] for d in documents]
     async_update_document.apply_async(args=[document_ids])
-    search_result_save_cache(user_id, author_id, documents)
+    search_result_save_cache(user_id, author_id, documents, search_type='author_papers')
     total = len(documents)
     return {
         'list': documents[start_num:(page_size * page_num)] if total > start_num else [],
@@ -195,26 +196,11 @@ def get_documents_by_rag(rag_data):
     return {f"{d.collection_id}-{d.doc_id}": d for d in documents}
 
 
-def search_result_from_cache(user_id, content, page_size=10, page_num=1, search_type='paper'):
-    doc_search_redis_key_prefix = f'scinav:{search_type}:search:{user_id}'
-    content_hash = str_hash(f'{content}')
-    redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
-    search_cache = cache.get(redis_key)
-
-    start_num = page_size * (page_num - 1)
-    logger.info(f"limit: [{start_num}: {page_size * page_num}]")
-    if search_cache:
-        logger.info(f'search resp from cache: {redis_key}')
-        all_cache = json.loads(search_cache)
-        total = len(all_cache)
-        return {
-            'list': json.loads(search_cache)[start_num:(page_size * page_num)] if total > start_num else [],
-            'total': total
-        }
-
-
-def search_result_save_cache(user_id, content, data, search_result_expires=600, search_type='doc'):
-    doc_search_redis_key_prefix = f'scinav:{search_type}:search:{user_id}'
+def search_result_save_cache(user_id, content, data, search_result_expires=600, search_type='paper', limit=None):
+    if limit:
+        doc_search_redis_key_prefix = f'scinav:{search_type}:search:{user_id}:{limit}'
+    else:
+        doc_search_redis_key_prefix = f'scinav:{search_type}:search:{user_id}'
     content_hash = str_hash(f'{content}')
     redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
     res = cache.set(redis_key, json.dumps(data), search_result_expires)
@@ -476,7 +462,8 @@ def document_personal_upload(validated_data):
 
 
 def document_library_add(
-    user_id, document_ids, collection_id, bot_id, add_type, search_content, author_id=None, keyword=None
+    user_id, document_ids, collection_id, bot_id, add_type, search_content,
+    author_id=None, keyword=None, search_limit=100
 ):
     """
     添加个人库：
@@ -490,7 +477,7 @@ def document_library_add(
     if bot_id:
         bot = Bot.objects.filter(id=bot_id, del_flag=False).first()
     if add_type == DocLibAddQuerySerializer.AddTypeChoices.DOCUMENT_SEARCH:
-        search_result = search(user_id, search_content, 200, 1)
+        search_result = search(user_id, search_content, search_limit, 1)
         if search_result:
             all_document_ids = [d['id'] for d in search_result['list']]
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.AUTHOR_SEARCH:

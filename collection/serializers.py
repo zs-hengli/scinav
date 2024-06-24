@@ -40,6 +40,7 @@ class CollectionCreateSerializer(serializers.ModelSerializer):
     type = serializers.ChoiceField(choices=Collection.TypeChoices.choices, default=Collection.TypeChoices.PERSONAL)
     document_titles = serializers.ListField(required=False, child=serializers.CharField(max_length=255))
     is_all = serializers.BooleanField(required=False, default=False)
+    search_limit = serializers.IntegerField(required=False, default=100)
 
     def validate(self, attrs):
         if (

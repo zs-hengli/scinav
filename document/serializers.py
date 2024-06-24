@@ -361,6 +361,7 @@ class DocLibAddQuerySerializer(serializers.Serializer):
     search_content = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
     author_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     keyword = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
+    search_limit = serializers.IntegerField(required=False, default=100)
 
     def validate(self, attrs):
         if (

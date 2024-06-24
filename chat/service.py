@@ -14,6 +14,7 @@ from chat.serializers import ConversationCreateSerializer, ConversationDetailSer
     QuestionListSerializer, ConversationShareCreateQuerySerializer
 from collection.base_service import update_conversation_by_collection
 from collection.models import Collection, CollectionDocument
+from collection.service import create_collection_by_documents
 from core.utils.common import cmp_ignore_order
 from document.models import DocumentLibrary, Document
 from document.tasks import async_update_conversation_share_content
@@ -125,7 +126,7 @@ def conversation_create_by_share(user_id, conversation_share: ConversationShare,
     public_collection_ids = vd.get('public_collection_ids')
     if chat_type == Conversation.TypeChoices.BOT_COV:
         bot_id = validated_data.get('bot_id')
-        bot = Bot.objects.get(pk=bot_id, del_flag=False)
+        bot = Bot.objects.get(pk=bot_id)
         agent_id = bot.agent_id
         documents = None
         collections = vd.get('collections')
@@ -134,14 +135,24 @@ def conversation_create_by_share(user_id, conversation_share: ConversationShare,
         documents = vd.get('documents')
         collections = vd.get('collections')
     # 创建 Conversation
+    all_document_ids = []
     paper_ids = []
     for p in papers_info:
+        all_document_ids.append(p['document_id'])
         paper_ids.append({
             'collection_id': p['collection_id'],
             'collection_type': p['collection_type'],
             'doc_id': p['doc_id'],
             'full_text_accessible': p['full_text_accessible']
         })
+    # 收藏夹对话分享，在收藏夹中自动创建一个自建收藏夹，收录该对话对应文献内容，默认不下载全文，在收藏夹下拉菜单中选中该收藏夹
+    if not vd.get('bot_id') and vd.get('collections') and user_id != conversation_share.user_id:
+        if all_document_ids:
+            collection = create_collection_by_documents(user_id, all_document_ids, conversation_share.title)
+            collections = [str(collection.id)]
+        else:
+            collections = []
+
     history_messages = []
     for q in conversation_share.content.get('questions'):
         if q['content']:
@@ -281,7 +292,7 @@ def conversation_detail(conversation_id):
     )
     public_collection_ids = conversation.public_collection_ids if conversation.public_collection_ids else []
     collections = [c['id'] for c in collections] + public_collection_ids
-    conversation.collections = collections
+    conversation.collections = list(set(collections))
     return ConversationDetailSerializer(conversation).data
 
 

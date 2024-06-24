@@ -16,7 +16,8 @@ from collection.serializers import (CollectionCreateSerializer,
                                     CollectionDocumentListQuerySerializer, CollectionCheckQuerySerializer,
                                     CollectionCreateBotCheckQuerySerializer, CollectionDocumentSelectedQuerySerializer,
                                     CollectionListQuerySerializer)
-from collection.service import (collection_list, collections_docs, generate_collection_title,
+from collection.base_service import generate_collection_title
+from collection.service import (collection_list, collections_docs,
                                 collections_delete, collection_chat_operation_check, collection_delete_operation_check,
                                 collections_published_bot_titles, collections_create_bot_check,
                                 collections_reference_bot_titles, collection_document_add, collection_document_delete,
@@ -77,7 +78,9 @@ class Collections(APIView):
         vd = serial.validated_data
         if vd.get('is_all'):
             documents = get_search_documents_4_all_selected(
-                user_id, vd.get('document_ids'), vd.get('search_content'), vd.get('author_id'))
+                user_id, vd.get('document_ids'), vd.get('search_content'), vd.get('author_id'),
+                search_limit=vd.get('search_limit', 100)
+            )
             vd['document_ids'] = [doc['id'] for doc in documents]
             vd['document_titles'] = [doc['title'] for doc in documents]
         else:

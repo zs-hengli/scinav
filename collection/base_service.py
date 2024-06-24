@@ -1,10 +1,11 @@
 from operator import itemgetter
 
-from bot.rag_service import Conversations as RagConversation
+from bot.rag_service import Conversations as RagConversations
 from chat.models import Conversation
 from chat.serializers import chat_paper_ids
 from collection.models import Collection, CollectionDocument
 from core.utils.common import cmp_ignore_order
+from document.base_service import search_result_from_cache
 from document.models import Document
 
 
@@ -58,7 +59,7 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
                     if len(collection_ids) == 1 else Conversation.TypeChoices.COLLECTIONS_COV
                 )
             conversation.save()
-            RagConversation.update(**update_data)
+            RagConversations.update(**update_data)
         elif (
             conversation.public_collection_ids != public_collection_ids
             or conversation.collections != personal_collection_ids
@@ -76,11 +77,23 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
         conversation.collections = []
         conversation.type = None
         conversation.save()
-        RagConversation.update(**update_data)
+        RagConversations.update(**update_data)
 
     if model:
         update_data['llm_name'] = model
         conversation.model = model
         conversation.save()
-        RagConversation.update(**update_data)
+        RagConversations.update(**update_data)
     return conversation
+
+
+def generate_collection_title(content=None, document_titles=None):
+    if content:
+        search_result = search_result_from_cache(content, 200, 1)
+        titles = [
+            sr['title'] for sr in search_result['list']
+        ] if search_result and search_result.get('list') else [content]
+    else:
+        titles = document_titles
+    title = RagConversations.generate_favorite_title(titles)
+    return title[:255]

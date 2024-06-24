@@ -1,23 +1,22 @@
 import copy
 import datetime
-import json
 import logging
 
-from django.core.cache import cache
 from django.db.models import Q, F
 from django.utils.translation import gettext_lazy as _
 
 from bot.models import BotCollection, BotSubscribe, Bot
-from bot.rag_service import Collection as RagCollection, Conversations as RagConversations
+from bot.rag_service import Collection as RagCollection
+from collection.base_service import generate_collection_title
 from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionPublicSerializer, CollectionListSerializer, \
     CollectionRagPublicListSerializer, \
-    CollectionSubscribeSerializer, CollectionDocumentListSerializer, bot_subscribe_personal_document_num
-from core.utils.common import str_hash
+    CollectionSubscribeSerializer, CollectionDocumentListSerializer, bot_subscribe_personal_document_num, \
+    CollectionDocUpdateSerializer
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentApaListSerializer, CollectionDocumentListCollectionSerializer
-from document.service import search_result_from_cache, search, author_documents
-from document.tasks import async_ref_document_to_document_library, async_update_conversation_by_collection, \
+from document.service import search, author_documents
+from document.tasks import async_update_conversation_by_collection, async_ref_document_to_document_library, \
     async_complete_abstract
 
 logger = logging.getLogger(__name__)
@@ -33,9 +32,11 @@ def collection_list(user_id, list_type, page_size, page_num, keyword=None):
         public_collections = [pc | {'updated_at': pc['update_time']} for pc in public_collections]
         pub_serial = CollectionRagPublicListSerializer(data=public_collections, many=True)
         pub_serial.is_valid(raise_exception=True)
-        public_total = len(pub_serial.data)
+        public_collection_list = pub_serial.data
+        public_collection_list.sort(key=lambda obj: obj.get('id'))
+        public_total = len(public_collection_list)
         if start_num == 0:
-            coll_list = pub_serial.data
+            coll_list = public_collection_list
             _save_public_collection(Collection.objects.filter(type=Collection.TypeChoices.PUBLIC).all(),
                                     public_collections)
     # 2 submit bot collections
@@ -200,18 +201,6 @@ def _bot_subscribe_collection_list(user_id, keyword=None):
     return list_data, bots_dict, sub_bot_infos
 
 
-def generate_collection_title(content=None, document_titles=None):
-    if content:
-        search_result = search_result_from_cache(content, 200, 1)
-        titles = [
-            sr['title'] for sr in search_result['list']
-        ] if search_result and search_result.get('list') else [content]
-    else:
-        titles = document_titles
-    title = RagConversations.generate_favorite_title(titles)
-    return title[:255]
-
-
 def collection_detail(user_id, collection_id):
     pass
 
@@ -258,12 +247,37 @@ def collection_document_add(validated_data):
     return True
 
 
+def create_collection_by_documents(user_id, document_ids, title=None):
+    if not title:
+        document_titles = Document.objects.filter(pk__in=document_ids).values_list('title', flat=True).all()
+        title = generate_collection_title(document_titles=document_titles)
+    collection_data = {
+        'title': title,
+        'user_id': user_id,
+        'type': Collection.TypeChoices.PERSONAL,
+        'updated_at': datetime.datetime.now()
+    }
+    collection = Collection.objects.create(**collection_data)
+    # update collection document
+    update_data = {
+        'user_id': user_id,
+        'collection_id': str(collection.id),
+        'document_ids': document_ids,
+        'is_all': False,
+        'action': 'add',
+    }
+    update_serial = CollectionDocUpdateSerializer(data=update_data)
+    update_serial.is_valid(raise_exception=True)
+    collection_document_add(update_serial.validated_data)
+    return collection
+
+
 def get_search_documents_4_all_selected(user_id, document_ids, content=None, author_id=None, page_size=1000,
-                                        page_num=1):
+                                        page_num=1, search_limit=100):
     if not content and not author_id:
         return []
     if content:
-        documents = search(user_id, content, page_size, page_num)
+        documents = search(user_id, content, page_size, page_num, search_limit)
     else:
         documents = author_documents(user_id, author_id, page_size, page_num)
     documents_dict = {d['id']: d for d in documents['list']}

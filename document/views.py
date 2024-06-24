@@ -66,9 +66,9 @@ class Search(APIView):
             'content': body['content'],
             'page_size': int(body.get('page_size', 10)),
             'page_num': int(body.get('page_num', 1)),
-            'topn': int(body.get('topn', 100))
+            'limit': min(int(body.get('limit', 100)), 1000),
         }
-        data = search(user_id, body['content'], post_data['page_size'], post_data['page_num'], topn=post_data['topn'])
+        data = search(user_id, body['content'], post_data['page_size'], post_data['page_num'], limit=post_data['limit'])
         async_add_user_operation_log.apply_async(kwargs={
             'user_id': user_id,
             'operation_type': 'search',
@@ -263,7 +263,7 @@ class DocumentsLibrary(APIView):
         vd = serial.validated_data
         document_libraries = document_library_add(
             request.user.id, vd['document_ids'], vd['collection_id'], vd['bot_id'], vd['add_type'],
-            vd['search_content'], vd['author_id'], keyword=vd['keyword'],
+            vd['search_content'], vd['author_id'], keyword=vd['keyword'], search_limit=vd['search_limit']
         )
         data = DocumentUploadResultSerializer(document_libraries, many=True).data
         return my_json_response({'list': data})

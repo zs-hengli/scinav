@@ -357,6 +357,20 @@ def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
                     rd['id'] for rd in ref_documents if rd['id'] in doc_lib_document_ids
                 ]
             full_text_documents += ref_text_accessible_ds
+    elif not bot and collection_ids:
+        is_self_coll = Collection.objects.filter(id=collection_ids[0], user_id=user_id).exists()
+        document_ids = CollectionDocument.objects.filter(
+            collection_id__in=collection_ids, del_flag=False).values_list('document_id', flat=True)
+        if not is_self_coll:
+            filter_query = Q(id__in=document_ids.all(), collection_type=Document.TypeChoices.PUBLIC)
+            if ref_ds:
+                filter_query |= Q(id__in=ref_ds, collection_type=Document.TypeChoices.PUBLIC)
+        else:
+            filter_query = Q(id__in=document_ids.all())
+        documents = Document.objects.filter(filter_query,).values(
+            'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
+            'ref_collection_id', 'ref_doc_id', 'object_path',
+        ).all()
 
     for d in documents:
         ret_data.append({

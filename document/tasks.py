@@ -73,6 +73,8 @@ def update_document_library_task(doc_lib: DocumentLibrary):
     elif task_status == DocumentLibrary.TaskStatusChoices.COMPLETED:
         if rag_ret.get('paper'):
             rag_ret['paper']['state'] = task_status
+        else:
+            return doc_lib, rag_ret
         update_openapi_log_upload_status(task_id, OpenapiLog.Status.SUCCESS)
         try:
             document = document_update_from_rag_ret(rag_ret['paper']) if rag_ret['paper'] else None

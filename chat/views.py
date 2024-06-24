@@ -95,8 +95,6 @@ class Conversations(APIView):
                 return my_json_response({}, code=100002, msg='bot not found')
         if query_data.get('share_id'):
             if bot_be_deleted:
-                validated_data['bot_id'] = None
-                validated_data['collections'] = []
                 validated_data['doc_ids'] = []
                 validated_data['all_document_ids'] = []
             conversation = conversation_create_by_share(request.user.id, conversation_share, validated_data)
