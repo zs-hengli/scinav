@@ -264,7 +264,10 @@ def update_simple_conversation(conversation: Conversation):
             conversation.paper_ids = new_papers_info
             conversation.save()
     elif conversation.bot_id:
-        conversation = update_conversation_by_collection(conversation.user_id, conversation, conversation.collections)
+        all_collections = list(
+            set(conversation.collections if conversation.collections else [])
+            | set(conversation.public_collection_ids if conversation.public_collection_ids else []))
+        conversation = update_conversation_by_collection(conversation.user_id, conversation, all_collections)
 
     return conversation
 
@@ -276,7 +279,8 @@ def conversation_detail(conversation_id):
         Collection.objects.filter(id__in=conversation.collections, del_flag=False).values('id').all()
         if conversation.collections else []
     )
-    collections = [c['id'] for c in collections] + conversation.public_collection_ids
+    public_collection_ids = conversation.public_collection_ids if conversation.public_collection_ids else []
+    collections = [c['id'] for c in collections] + public_collection_ids
     conversation.collections = collections
     return ConversationDetailSerializer(conversation).data
 
@@ -386,18 +390,21 @@ def conversation_share_create(user_id,
                 questions_data[index]['content'] = None
         content = {'questions': questions_data}
 
+    all_collections = list(
+        set(conversation.collections if conversation.collections else [])
+        | set(conversation.public_collection_ids if conversation.public_collection_ids else []))
     share_data = {
         'user_id': user_id,
         'conversation_id': vd['conversation_id'],
         'bot_id': conversation.bot_id,
         'title': conversation.title,
-        'collections': conversation.collections,
+        'collections': all_collections,
         'documents': conversation.documents,
         'model': conversation.model,
         'content': content,
         'num': len(content['questions']) if content else 0,
     }
-    if not conversation.bot_id and not conversation.collections:
+    if not conversation.bot_id and not all_collections:
         share_data['documents'] = conversation.documents
     conversation_share = ConversationShare.objects.create(**share_data)
     if vd['is_all']:

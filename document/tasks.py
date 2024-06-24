@@ -174,7 +174,10 @@ def async_update_conversation_by_collection(self, collection_id):
 
         conversations = Conversation.objects.filter(collections__contains=collection_id, del_flag=False).all()
         for conv in conversations:
-            update_conversation_by_collection(collection.user_id, conv, conv.collections)
+            all_collections = list(
+                set(conv.collections if conv.collections else [])
+                | set(conv.public_collection_ids if conv.public_collection_ids else []))
+            update_conversation_by_collection(collection.user_id, conv, all_collections)
     return True
 
 

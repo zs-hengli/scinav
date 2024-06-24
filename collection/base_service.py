@@ -18,6 +18,9 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
         # 'public_collection_ids': public_collection_ids,
         # 'llm_name': model,
     }
+    all_collections = list(
+        set(conversation.collections if conversation.collections else [])
+        | set(conversation.public_collection_ids if conversation.public_collection_ids else []))
     if collection_ids:
         collections = Collection.objects.filter(id__in=collection_ids).all()
         public_collection_ids = [c.id for c in collections if c.type == Collection.TypeChoices.PUBLIC]
@@ -64,7 +67,7 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
             conversation.collections = personal_collection_ids
             conversation.save()
 
-    elif collection_ids is not None and collection_ids != conversation.collections:
+    elif collection_ids is not None and collection_ids != all_collections:
         paper_ids = []
         update_data['paper_ids'] = paper_ids
         update_data['public_collection_ids'] = []
