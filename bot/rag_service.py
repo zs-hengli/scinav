@@ -387,7 +387,7 @@ class Conversations:
             question.save()
 
         try:
-            resp = rag_requests(url, json=post_data, method='POST', timeout=15, stream=True)
+            resp = rag_requests(url, json=post_data, method='POST', timeout=30, stream=True)
         except requests.exceptions.RequestException as e:
             logger.error(f'Request error: {e}')
             yield json.dumps({'event': 'on_error', 'error_code': 120001, 'error': error_msg, "detail": str(e)}) + "\n"
