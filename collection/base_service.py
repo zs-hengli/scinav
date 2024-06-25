@@ -47,7 +47,11 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
                 'full_text_accessible': p['full_text_accessible'],
             })
 
-        if not cmp_ignore_order(conversation.paper_ids, papers_info, sort_fun=itemgetter('collection_id', 'doc_id')):
+        if (
+            not cmp_ignore_order(conversation.paper_ids, papers_info, sort_fun=itemgetter('collection_id', 'doc_id'))
+            or conversation.public_collection_ids != public_collection_ids
+            or conversation.collections != personal_collection_ids
+        ):
             update_data['paper_ids'] = paper_ids
             update_data['public_collection_ids'] = public_collection_ids
             conversation.paper_ids = papers_info
@@ -60,13 +64,6 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
                 )
             conversation.save()
             RagConversations.update(**update_data)
-        elif (
-            conversation.public_collection_ids != public_collection_ids
-            or conversation.collections != personal_collection_ids
-        ):
-            conversation.public_collection_ids = public_collection_ids
-            conversation.collections = personal_collection_ids
-            conversation.save()
 
     elif collection_ids is not None and collection_ids != all_collections:
         paper_ids = []
