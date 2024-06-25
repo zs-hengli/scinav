@@ -427,6 +427,11 @@ def collections_docs(user_id, validated_data):
     if vd['list_type'] == 'all':
         docs_data = DocumentApaListSerializer(docs, many=True).data
         data_dict = {d['id']: d for d in docs_data}
+        document_ids = [d['id'] for d in docs_data]
+        doc_lib_document_ids = DocumentLibrary.objects.filter(
+            document_id__in=document_ids, del_flag=False, user_id=user_id,
+            task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
+        ).values_list('document_id', flat=True).all()
         temp_res_data = []
         for d in docs:
             temp = {
@@ -438,12 +443,10 @@ def collections_docs(user_id, validated_data):
                 'has_full_text': False,
             }
             # 本人个人库列表
-            if ((
-                DocumentLibrary.objects.filter(
-                    document_id=d.id, del_flag=False, user_id=user_id,
-                    task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
-                ).exists() or d.collection_id == user_id
-            ) and d.object_path):
+            if (
+                (d.id in doc_lib_document_ids or d.collection_id == user_id or d.collection_id == 'arxiv')
+                and d.object_path
+            ):
                 temp['has_full_text'] = True
             temp_res_data.append(temp)
         res_data += temp_res_data
