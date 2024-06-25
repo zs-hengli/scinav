@@ -1,5 +1,7 @@
+import datetime
 import logging
 import re
+import time
 import traceback
 import uuid
 
@@ -10,6 +12,7 @@ from django.utils.translation import gettext_lazy as _
 # from pybtex.database import BibliographyData, Entry
 
 from core.utils.statics import EN_FIRST_NAMES
+from django_redis import get_redis_connection
 
 logger = logging.getLogger(__name__)
 
@@ -525,3 +528,31 @@ class DocumentLibraryFolder(models.Model):
     class Meta:
         db_table = 'document_library_folder'
         verbose_name = 'document_library_folder'
+
+
+class CacheHistory:
+    def __init__(self, key, limit=10):
+        self.conn = get_redis_connection('default')
+        self.key = key
+        self.limit = limit
+        self.max_len = limit * 2
+
+    def add(self, content):
+        now = time.time()
+        self.conn.zadd(self.key, {content: now})
+        self.conn.zremrangebyrank(self.key, 0, -self.max_len)
+        data = self.conn.zrevrange(self.key, 0, self.limit)
+        if data:
+            data = [d.decode() for d in data]
+        return data
+
+    def get(self):
+        data = self.conn.zrevrange(self.key, 0, self.limit)
+        if data:
+            data = [d.decode() for d in data]
+        return data
+
+    def delete(self, content):
+        self.conn.zrem(self.key, content)
+        return True
+

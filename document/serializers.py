@@ -181,6 +181,22 @@ class DocumentRagGetSerializer(serializers.ModelSerializer):
 class DocumentDetailSerializer(BaseModelSerializer):
 
     @staticmethod
+    def get_document_library_status(user_id, document_id):
+        document_library = DocumentLibrary.objects.filter(
+            user_id=user_id, document_id=document_id, del_flag=False).first()
+        status = None
+        if document_library:
+            status = (
+                'completed' if document_library.task_status == DocumentLibrary.TaskStatusChoices.COMPLETED
+                else 'in_progress' if document_library.task_status in [
+                    DocumentLibrary.TaskStatusChoices.PENDING,
+                    DocumentLibrary.TaskStatusChoices.QUEUEING,
+                    DocumentLibrary.TaskStatusChoices.IN_PROGRESS
+                ] else 'failed'
+            )
+        return status
+
+    @staticmethod
     def get_citations(obj: Document):
         if obj.collection_type == Document.TypeChoices.PERSONAL:
             if obj.ref_doc_id and obj.ref_collection_id:

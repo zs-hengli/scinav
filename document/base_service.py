@@ -9,6 +9,7 @@ from core.utils.common import str_hash
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentRagCreateSerializer
 from bot.rag_service import Document as RagDocument
+from django_redis import get_redis_connection
 
 logger = logging.getLogger(__name__)
 
@@ -108,19 +109,3 @@ def search_result_from_cache(user_id, content, page_size=10, page_num=1, search_
             'list': json.loads(search_cache)[start_num:(page_size * page_num)] if total > start_num else [],
             'total': total
         }
-
-
-def bot_documents(user_id, bot, collections=None):
-    if not collections:
-        collections = Collection.objects.filter(
-            bot_id=bot.id, del_flag=False, type=Collection.TypeChoices.PERSONAL).all()
-    collection_ids = [coll.id for coll in collections]
-    coll_docs = CollectionDocument.objects.filter(collection_id__in=collection_ids, del_flag=False).all()
-    document_ids = [d.document_id for d in coll_docs]
-    if user_id == bot.user_id:
-        return document_ids
-    documents = Document.objects.filter(id__in=document_ids, del_flag=False).all()
-    pub_documents = [d for d in documents if d.collection_type == Collection.TypeChoices.PUBLIC]
-    personal_documents = [d for d in documents if d.collection_type == Collection.TypeChoices.PERSONAL]
-    documents = DocumentLibrary.objects.filter(
-        user_id=user_id, collection_id__in=collection_ids, del_flag=False).values_list('document_id', flat=True).all()

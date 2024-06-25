@@ -1,4 +1,5 @@
 import logging
+from time import sleep
 
 from django.core.cache import cache
 from django.db.models import Q
@@ -428,3 +429,13 @@ class DocumentsRagUpdate(APIView):
         )
         data = DocumentRagUpdateSerializer(document).data
         return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+class DocumentsLibraryStatus(APIView):
+
+    @staticmethod
+    def get(request, document_id, *args, **kwargs):
+        status = DocumentDetailSerializer.get_document_library_status(request.user.id, document_id)
+        return my_json_response({'status': status})

@@ -11,6 +11,7 @@ urlpatterns = [
     path('documents/library', views.DocumentsLibrary.as_view()),
     path('documents/library/operation/check', views.DocumentsLibraryOperationCheck.as_view()),
     path('documents/library/<str:document_library_id>', views.DocumentsLibrary.as_view()),
+    path('documents/library/<str:document_id>/status', views.DocumentsLibraryStatus.as_view()),
 
     path('documents/<str:document_id>', views.Documents.as_view()),
     path('documents/<str:document_id>/url', views.DocumentsUrl.as_view()),
