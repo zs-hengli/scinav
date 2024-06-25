@@ -232,6 +232,7 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1, keyw
                         'status': '-',
                         'record_time': None,
                         'type': 'public',
+                        'reference_type': 'public',
                     })
 
         # subscribe
