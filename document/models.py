@@ -530,7 +530,7 @@ class DocumentLibraryFolder(models.Model):
         verbose_name = 'document_library_folder'
 
 
-class CacheHistory:
+class SearchHistoryCache:
     def __init__(self, key, limit=10):
         self.conn = get_redis_connection('default')
         self.key = key

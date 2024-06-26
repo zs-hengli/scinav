@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 from bot.rag_service import Document as RagDocument
 from collection.models import Collection
 from core.utils.views import check_keys, extract_json, my_json_response
-from document.models import Document, DocumentLibrary
+from document.models import Document, DocumentLibrary, SearchHistoryCache
 from document.serializers import DocumentDetailSerializer, GenPresignedUrlQuerySerializer, \
     DocumentUploadQuerySerializer, \
     DocumentLibraryListQuerySerializer, DocumentRagUpdateSerializer, DocLibUpdateNameQuerySerializer, \
@@ -75,7 +75,36 @@ class Search(APIView):
             'operation_type': 'search',
             'operation_content': body['content'],
         })
+        # add search history
+        if data:
+            history_key = f"scinav:paper:search_history:{user_id}"
+            search_history_cache = SearchHistoryCache(history_key, 5)
+            search_history_cache.add(body['content'])
         return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['POST', 'GET', "DELETE"]), name='dispatch')
+class SearchHistory(APIView):
+
+    @staticmethod
+    def get(request, *args, **kwargs):  # noqa
+        user_id = request.user.id
+        history_key = f"scinav:paper:search_history:{user_id}"
+        search_history_cache = SearchHistoryCache(history_key, 5)
+        history = search_history_cache.get()
+        return my_json_response({'history': history})
+
+    @staticmethod
+    def delete(request, index, *args, **kwargs):
+        user_id = request.user.id
+        history_key = f"scinav:paper:search_history:{user_id}"
+        search_history_cache = SearchHistoryCache(history_key, 5)
+        history = search_history_cache.get()
+        if index >= len(history) or index < 0:
+            return my_json_response({'history': search_history_cache.get()})
+        search_history_cache.delete(content=history[index])
+        return my_json_response({'history': search_history_cache.get()})
 
 
 @method_decorator([extract_json], name='dispatch')

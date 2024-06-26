@@ -27,6 +27,8 @@ urlpatterns = [
 
 
     path('search', views.Search.as_view()),
+    path('search/history', views.SearchHistory.as_view()),
+    path('search/history/<int:index>', views.SearchHistory.as_view()),
     path('authors/search', views.AuthorsSearch.as_view()),
     path('authors/<int:author_id>', views.Authors.as_view()),
     path('authors/<int:author_id>/documents', views.AuthorsDocuments.as_view()),
