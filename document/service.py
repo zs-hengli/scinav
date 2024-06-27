@@ -17,6 +17,7 @@ from bot.rag_service import Authors as RagAuthors
 from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionDocumentListSerializer
 from core.utils.common import str_hash
+from core.utils.date import str2date
 from core.utils.exceptions import ValidationError
 from document.base_service import document_update_from_rag_ret, update_document_lib, search_result_delete_cache, \
     search_result_from_cache, search_result_cache_data
@@ -138,31 +139,32 @@ def advance_search(documents, validated_data):
     counter = Counter(all_sources)
     counter_sources = dict(sorted(counter.items(), key=lambda item: item[1], reverse=True))
 
-    all_authors = [author for d in documents for author in (d['authors'] if d['authors'] else [])]
+    all_authors = [author.strip() for d in documents for author in (d['authors'] if d['authors'] else [])]
     counter = Counter(all_authors)
     counter_authors = dict(sorted(counter.items(), key=lambda item: item[1], reverse=True))
 
-    all_author_ids = [author for d in documents for author in (d['author_names_ids'] if d['author_names_ids'] else [])]
-    counter = Counter(all_authors)
-    counter_authors = dict(sorted(counter.items(), key=lambda item: item[1], reverse=True))
     if vd.get('sources'):
         documents = [d for d in documents if d['source'] in vd['sources']]
     if vd.get('authors'):
-        documents = [d for d in documents if d['authors'] and any(author in d['authors'] for author in vd['authors'])]
+        documents = [
+            d for d in documents
+            if d['authors']
+               and any(author in [t.strip() for t in d['authors']] for author in [t.strip() for t in vd['authors']])
+        ]
 
     if isinstance(vd['begin_date'], str):
         if vd.get('begin_date'):
             vd['begin_date'] = datetime.datetime.strptime(vd['begin_date'], '%Y-%m-%d')
         documents = [
             d for d in documents
-            if d['pub_date'] and datetime.datetime.strptime(d['pub_date'], '%Y-%m-%d').date() >= vd['begin_date']
+            if d['pub_date'] and str2date(d['pub_date']) >= vd['begin_date']
         ]
     if vd.get('end_date'):
         if isinstance(vd['end_date'], str):
             vd['end_date'] = datetime.datetime.strptime(vd['end_date'], '%Y-%m-%d')
         documents = [
             d for d in documents
-            if d['pub_date'] and datetime.datetime.strptime(d['pub_date'], '%Y-%m-%d').date() <= vd['end_date']
+            if d['pub_date'] and str2date(d['pub_date']) <= vd['end_date']
         ]
     if vd.get('order_by') and vd.get('order_by') != SearchQuerySerializer.OrderBy.RELEVANCY:
         if vd['order_by'] == SearchQuerySerializer.OrderBy.PUB_DATE:
