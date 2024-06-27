@@ -347,7 +347,7 @@ class DocumentsUrl(APIView):
             ).first()
             if not document:
                 new_document = document_update_from_rag(None, collection_id, doc_id)
-                document = Document.objects.filter(new_document.id).values(
+                document = Document.objects.filter(id=new_document.id).values(
                     'id', 'title', 'object_path', 'collection_id', 'doc_id', 'collection_type',
                     'ref_doc_id', 'ref_collection_id'
                 ).first()
