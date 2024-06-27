@@ -149,10 +149,21 @@ def advance_search(documents, validated_data):
         documents = [d for d in documents if d['source'] in vd['sources']]
     if vd.get('authors'):
         documents = [d for d in documents if d['authors'] and any(author in d['authors'] for author in vd['authors'])]
-    if vd.get('begin_date'):
-        documents = [d for d in documents if d['pub_date'] and d['pub_date'] >= vd['begin_date']]
+
+    if isinstance(vd['begin_date'], str):
+        if vd.get('begin_date'):
+            vd['begin_date'] = datetime.datetime.strptime(vd['begin_date'], '%Y-%m-%d')
+        documents = [
+            d for d in documents
+            if d['pub_date'] and datetime.datetime.strptime(d['pub_date'], '%Y-%m-%d').date() >= vd['begin_date']
+        ]
     if vd.get('end_date'):
-        documents = [d for d in documents if d['pub_date'] and d['pub_date'] <= vd['end_date']]
+        if isinstance(vd['end_date'], str):
+            vd['end_date'] = datetime.datetime.strptime(vd['end_date'], '%Y-%m-%d')
+        documents = [
+            d for d in documents
+            if d['pub_date'] and datetime.datetime.strptime(d['pub_date'], '%Y-%m-%d').date() <= vd['end_date']
+        ]
     if vd.get('order_by') and vd.get('order_by') != SearchQuerySerializer.OrderBy.RELEVANCY:
         if vd['order_by'] == SearchQuerySerializer.OrderBy.PUB_DATE:
             documents = sorted(documents, key=lambda x: (x['pub_date'] is None, x['pub_date']), reverse=True)
