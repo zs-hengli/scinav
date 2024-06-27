@@ -152,7 +152,7 @@ class ConversationDetailSerializer(BaseModelSerializer):
             if conv_share:
                 return {
                     'id': sharer_user.id,
-                    'avatar': sharer_user.avatar,
+                    # 'avatar': sharer_user.avatar,
                     'nickname': sharer_user.nickname,
                     'email': sharer_user.email,
                     'phone': sharer_user.phone,

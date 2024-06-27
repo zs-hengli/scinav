@@ -14,7 +14,7 @@ class MyUser(AbstractUser):
     email = models.EmailField(null=True, max_length=254, default=None, db_default=None)
     phone = models.CharField(null=True, max_length=14, default=None, db_default=None)
     nickname = models.CharField(null=True, max_length=128, default=None, db_default=None)
-    avatar = models.CharField(null=True, max_length=256, default=None, db_default=None)
+    avatar = models.CharField(null=True, max_length=4096, default=None, db_default=None)
     first_name = models.CharField(null=True, max_length=150, verbose_name='first name')
     last_name = models.CharField(null=True, max_length=150, verbose_name='last name')
     password = models.CharField(null=True, max_length=128, verbose_name='password')

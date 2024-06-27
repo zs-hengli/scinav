@@ -266,20 +266,22 @@ def create_collection_by_documents(user_id, document_ids, title=None):
         'is_all': False,
         'action': 'add',
     }
-    update_serial = CollectionDocUpdateSerializer(data=update_data)
-    update_serial.is_valid(raise_exception=True)
-    collection_document_add(update_serial.validated_data)
+    # update_serial = CollectionDocUpdateSerializer(data=update_data)
+    # update_serial.is_valid(raise_exception=True)
+    collection_document_add(update_data)
     return collection
 
 
-def get_search_documents_4_all_selected(user_id, document_ids, content=None, author_id=None, page_size=1000,
-                                        page_num=1, search_limit=100):
-    if not content and not author_id:
-        return []
-    if content:
-        documents = search(user_id, content, page_size, page_num, search_limit)
+def get_search_documents_4_all_selected(user_id, document_ids, search_info):
+
+    if search_info.get('content'):
+        search_info['page_num'] = 1
+        search_info['page_size'] = search_info.get('limit', 100)
+        documents = search(user_id, search_info)
     else:
-        documents = author_documents(user_id, author_id, page_size, page_num)
+        search_info['page_num'] = 1
+        search_info['page_size'] = search_info.get('limit', 1000)
+        documents = author_documents(user_id, search_info['author_id'], search_info)
     documents_dict = {d['id']: d for d in documents['list']}
     if document_ids:
         for d_id in document_ids:

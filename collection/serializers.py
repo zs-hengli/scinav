@@ -1,4 +1,3 @@
-import json
 import logging
 
 from django.db.models import F
@@ -8,9 +7,8 @@ from rest_framework import serializers
 
 from bot.models import BotCollection, Bot
 from collection.models import Collection, CollectionDocument
-from core.utils.common import str_hash
 from document.models import Document, DocumentLibrary
-from django.core.cache import cache
+from document.serializers import SearchDocuments4AddQuerySerializer
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +35,7 @@ class CollectionCreateSerializer(serializers.ModelSerializer):
     document_ids = serializers.ListField(required=False, child=serializers.CharField(min_length=32, max_length=36))
     search_content = serializers.CharField(required=False)
     author_id = serializers.IntegerField(required=False)
+    search_info = SearchDocuments4AddQuerySerializer(required=False, default=None)
     type = serializers.ChoiceField(choices=Collection.TypeChoices.choices, default=Collection.TypeChoices.PERSONAL)
     document_titles = serializers.ListField(required=False, child=serializers.CharField(max_length=255))
     is_all = serializers.BooleanField(required=False, default=False)
@@ -53,11 +52,51 @@ class CollectionCreateSerializer(serializers.ModelSerializer):
         if attrs.get('title') and len(attrs['title']) > 255:
             attrs['title'] = attrs['title'][:255]
 
-        return attrs
+        if attrs.get('search_content'):
+            if not attrs.get('search_info'):
+                attrs['search_info'] = {}
+            attrs['search_info']['content'] = attrs['search_content']
+            attrs['search_info']['limit'] = attrs.get('limit', 100)
+
+        if attrs.get('author_id'):
+            if not attrs.get('search_info'):
+                attrs['search_info'] = {}
+            attrs['search_info']['author_id'] = attrs['author_id']
+            attrs['search_info']['limit'] = attrs.get('limit', 1000)
+
+        return super().validate(attrs)
 
     class Meta:
         model = Collection
         fields = '__all__'
+
+
+class AddDocument2CollectionQuerySerializer(serializers.Serializer):
+    document_ids = serializers.ListField(required=False, child=serializers.CharField(min_length=32, max_length=36))
+    action = serializers.ChoiceField(required=False, choices=['add', 'delete'], default='add')
+    is_all = serializers.BooleanField(required=False, default=False)
+    search_content = serializers.CharField(required=False)
+    author_id = serializers.IntegerField(required=False)
+    search_info = SearchDocuments4AddQuerySerializer(required=False, default=None)
+    list_type = serializers.ChoiceField(
+        required=False, choices=['s2', 'arxiv', 'document_library', 'all'], default=None)
+    search_limit = serializers.IntegerField(required=False, default=100)
+
+    def validate(self, attrs):
+
+        if attrs.get('search_content'):
+            if not attrs.get('search_info'):
+                attrs['search_info'] = {}
+            attrs['search_info']['content'] = attrs['search_content']
+            attrs['search_info']['limit'] = attrs.get('limit', 100)
+
+        if attrs.get('author_id'):
+            if not attrs.get('search_info'):
+                attrs['search_info'] = {}
+            attrs['search_info']['author_id'] = attrs['author_id']
+            attrs['search_info']['limit'] = attrs.get('limit', 1000)
+
+        return super().validate(attrs)
 
 
 class CollectionCreateByDocLibSerializer(BaseModelSerializer):
@@ -221,9 +260,7 @@ class CollectionDocUpdateSerializer(serializers.Serializer):
     def validate(self, attrs):
         if not attrs.get('document_ids') and not attrs.get('is_all') and not attrs.get('list_type'):
             raise serializers.ValidationError(f"document_ids and list_type {_('cannot be empty at the same time')}")
-        if (attrs.get('is_all') or attrs.get('list_type')
-        ) and attrs.get('action') == 'add' and not attrs.get('search_content') and not attrs.get('author_id'):
-            raise serializers.ValidationError("search_content or author_id required")
+
         return attrs
 
     @staticmethod

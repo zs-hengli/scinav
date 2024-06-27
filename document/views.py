@@ -18,11 +18,12 @@ from document.serializers import DocumentDetailSerializer, GenPresignedUrlQueryS
     DocumentLibraryListQuerySerializer, DocumentRagUpdateSerializer, DocLibUpdateNameQuerySerializer, \
     DocLibAddQuerySerializer, DocLibDeleteQuerySerializer, DocLibCheckQuerySerializer, DocumentRagCreateSerializer, \
     ImportPapersToCollectionSerializer, AuthorsSearchQuerySerializer, AuthorsDocumentsQuerySerializer, \
-    DocumentUploadResultSerializer
+    DocumentUploadResultSerializer, SearchQuerySerializer
 from document.service import search, presigned_url, document_personal_upload, \
     get_document_library_list, document_library_add, document_library_delete, doc_lib_batch_operation_check, \
     get_url_by_object_path, get_reference_formats, update_exist_documents, import_papers_to_collection, \
-    document_update_from_rag, search_authors, author_detail, author_documents, get_csl_reference_formats
+    document_update_from_rag, search_authors, author_detail, author_documents, get_csl_reference_formats, get_citations, \
+    get_references
 from document.tasks import async_add_user_operation_log
 
 logger = logging.getLogger(__name__)
@@ -62,14 +63,11 @@ class Search(APIView):
     def post(self, request, *args, **kwargs):  # noqa
         body = request.data
         user_id = request.user.id
-        check_keys(body, ['content'])
-        post_data = {
-            'content': body['content'],
-            'page_size': int(body.get('page_size', 10)),
-            'page_num': int(body.get('page_num', 1)),
-            'limit': min(int(body.get('limit', 100)), 1000),
-        }
-        data = search(user_id, body['content'], post_data['page_size'], post_data['page_num'], limit=post_data['limit'])
+        serial = SearchQuerySerializer(data=body)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        post_data = serial.validated_data
+        data = search(user_id, post_data)
         async_add_user_operation_log.apply_async(kwargs={
             'user_id': user_id,
             'operation_type': 'search',
@@ -129,7 +127,7 @@ class AuthorsSearch(APIView):
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         vd = serial.validated_data
         data = search_authors(
-            user_id, vd['content'], vd['page_size'], vd['page_num'], topn=vd['topn'])
+            user_id, vd['content'], vd['page_size'], vd['page_num'], limit=vd['limit'])
         return my_json_response(data)
 
 
@@ -143,7 +141,17 @@ class AuthorsDocuments(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         vd = serial.validated_data
-        data = author_documents(user_id, author_id, vd['page_size'], vd['page_num'])
+        data = author_documents(user_id, author_id, vd)
+        return my_json_response(data)
+
+    def post(self, request, author_id, *args, **kwargs):  # noqa
+        user_id = request.user.id
+        query = request.data
+        serial = AuthorsDocumentsQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        vd = serial.validated_data
+        data = author_documents(user_id, author_id, vd)
         return my_json_response(data)
 
 
@@ -204,7 +212,7 @@ class DocumentsCitations(APIView):
         document = Document.objects.filter(id=document_id).first()
         if not document:
             return my_json_response(code=100002, msg=f'document not found by document_id={document_id}')
-        citations = DocumentDetailSerializer.get_citations(document)
+        citations = get_citations(document)
         data = {
             'list': citations,
             'total': len(citations)
@@ -221,7 +229,7 @@ class DocumentsReferences(APIView):
         document = Document.objects.filter(id=document_id).first()
         if not document:
             return my_json_response(code=100002, msg=f'document not found by document_id={document_id}')
-        references = DocumentDetailSerializer.get_references(document)
+        references = get_references(document)
         data = {
             'list': references,
             'total': len(references)
@@ -293,7 +301,7 @@ class DocumentsLibrary(APIView):
         vd = serial.validated_data
         document_libraries = document_library_add(
             request.user.id, vd['document_ids'], vd['collection_id'], vd['bot_id'], vd['add_type'],
-            vd['search_content'], vd['author_id'], keyword=vd['keyword'], search_limit=vd['search_limit']
+            keyword=vd['keyword'], search_info=vd['search_info']
         )
         data = DocumentUploadResultSerializer(document_libraries, many=True).data
         return my_json_response({'list': data})

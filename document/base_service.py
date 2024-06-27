@@ -109,3 +109,19 @@ def search_result_from_cache(user_id, content, page_size=10, page_num=1, search_
             'list': json.loads(search_cache)[start_num:(page_size * page_num)] if total > start_num else [],
             'total': total
         }
+
+
+def search_result_cache_data(user_id, content, search_type='paper', limit=100):
+    if search_type == 'paper':
+        doc_search_redis_key_prefix = f'scinav:{search_type}:search:{user_id}:{limit}'
+    else:
+        doc_search_redis_key_prefix = f'scinav:{search_type}:search:{user_id}'
+    content_hash = str_hash(f'{content}')
+    redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
+    search_cache = cache.get(redis_key)
+
+    if search_cache:
+        logger.info(f'search resp from cache: {redis_key}')
+        all_cache = json.loads(search_cache)
+        return all_cache
+    return None

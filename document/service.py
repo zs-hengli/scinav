@@ -1,5 +1,8 @@
+import datetime
 import json
 import logging
+import uuid
+from collections import Counter
 
 import boto3
 from botocore.config import Config
@@ -16,10 +19,10 @@ from collection.serializers import CollectionDocumentListSerializer
 from core.utils.common import str_hash
 from core.utils.exceptions import ValidationError
 from document.base_service import document_update_from_rag_ret, update_document_lib, search_result_delete_cache, \
-    search_result_from_cache
-from document.models import Document, DocumentLibrary
+    search_result_from_cache, search_result_cache_data
+from document.models import Document, DocumentLibrary, bulk_insert_ignore_duplicates
 from document.serializers import DocumentLibraryPersonalSerializer, DocLibAddQuerySerializer, \
-    DocumentLibraryListQuerySerializer, DocumentRagCreateSerializer, AuthorsDetailSerializer
+    DocumentLibraryListQuerySerializer, DocumentRagCreateSerializer, AuthorsDetailSerializer, SearchQuerySerializer
 from document.tasks import async_document_library_task, async_update_document, async_update_conversation_by_collection, \
     update_document_library_task
 
@@ -114,6 +117,7 @@ def _rag_papers_to_documents(rag_papers):
             'title': data['title'],
             'abstract': data['abstract'],
             'authors': data['authors'],
+            'author_names_ids': data['author_names_ids'],
             'pub_date': pub_date,
             'citation_count': data['citation_count'],
             'doc_id': data['doc_id'],
@@ -127,22 +131,147 @@ def _rag_papers_to_documents(rag_papers):
     return documents
 
 
-def search(user_id, content, page_size=10, page_num=1, limit=100):
+def advance_search(documents, validated_data):
+    vd = validated_data
+    # static source/authors
+    all_sources = [d['source'] for d in documents if d['source']]
+    counter = Counter(all_sources)
+    counter_sources = dict(sorted(counter.items(), key=lambda item: item[1], reverse=True))
+
+    all_authors = [author for d in documents for author in (d['authors'] if d['authors'] else [])]
+    counter = Counter(all_authors)
+    counter_authors = dict(sorted(counter.items(), key=lambda item: item[1], reverse=True))
+
+    all_author_ids = [author for d in documents for author in (d['author_names_ids'] if d['author_names_ids'] else [])]
+    counter = Counter(all_authors)
+    counter_authors = dict(sorted(counter.items(), key=lambda item: item[1], reverse=True))
+    if vd.get('sources'):
+        documents = [d for d in documents if d['source'] in vd['sources']]
+    if vd.get('authors'):
+        documents = [d for d in documents if d['authors'] and any(author in d['authors'] for author in vd['authors'])]
+    if vd.get('begin_date'):
+        documents = [d for d in documents if d['pub_date'] and d['pub_date'] >= vd['begin_date']]
+    if vd.get('end_date'):
+        documents = [d for d in documents if d['pub_date'] and d['pub_date'] <= vd['end_date']]
+    if vd.get('order_by') and vd.get('order_by') != SearchQuerySerializer.OrderBy.RELEVANCY:
+        if vd['order_by'] == SearchQuerySerializer.OrderBy.PUB_DATE:
+            documents = sorted(documents, key=lambda x: (x['pub_date'] is None, x['pub_date']), reverse=True)
+    return documents, counter_sources, counter_authors
+
+
+def search(user_id, validated_data):
+    vd = validated_data
+    content = vd['content']
+    page_size = vd['page_size']
+    page_num = vd['page_num']
+    limit = vd['limit']
     start_num = page_size * (page_num - 1)
     logger.info(f"limit: [{start_num}: {page_size * page_num}]")
-    if cache_data := search_result_from_cache(user_id, content, page_size, page_num, limit=limit):
-        return cache_data
+    # if cache_data := search_result_from_cache(user_id, content, page_size, page_num, limit=limit):
+    #     return cache_data
 
-    rag_ret = RagDocument.search(user_id, content, limit=limit)
-    documents = _rag_papers_to_documents(rag_ret)
-    document_ids = [d['id'] for d in documents]
-    async_update_document.apply_async(args=[document_ids])
-    search_result_save_cache(user_id, content, documents, limit=limit)
+    if cache_data := search_result_cache_data(user_id, content, limit=limit):
+        documents = cache_data
+    else:
+        rag_ret = RagDocument.search(user_id, content, limit=limit)
+        documents = _rag_papers_to_documents(rag_ret)
+        document_ids = [d['id'] for d in documents]
+        async_update_document.apply_async(args=[document_ids])
+        search_result_save_cache(user_id, content, documents, limit=limit)
+
+    documents, sources, authors = advance_search(documents, vd)
     total = len(documents)
     return {
         'list': documents[start_num:(page_size * page_num)] if total > start_num else [],
+        'sources': sources,
+        'authors': authors,
         'total': total,
     }
+
+
+def get_citations(obj: Document):
+    if obj.collection_type == Document.TypeChoices.PERSONAL:
+        if obj.ref_doc_id and obj.ref_collection_id:
+            citations = RagDocument.citations('public', obj.ref_collection_id, obj.ref_doc_id)
+        else:
+            citations = []
+    else:
+        citations = RagDocument.citations(obj.collection_type, obj.collection_id, obj.doc_id)
+    if citations:
+        ret_data = []
+        for i, c in enumerate(citations):
+            # title = c['title']
+            # year = c['year']
+            # source = c['journal'] if c['journal'] else c['conference'] if c['conference'] else c['venue']
+            # doc_apa = Document.get_doc_apa(c['authors'], year, title, source)
+            document = Document(
+                collection_type=c['collection_type'],
+                collection_id=c['collection_id'],
+                doc_id=c['doc_id'],
+                title=c['title'],
+                authors=c['authors'],
+                year=c['year'],
+                pub_date=c['pub_date'],
+                pub_type=c['pub_type'],
+                venue=c['venue'],
+                journal=c['journal'],
+                conference=c['conference'],
+                pages=c['pages'],
+                citation_count=c['citation_count'],
+            )
+            doc_apa = document.get_csl_formate('apa')
+            ret_data.append({
+                'doc_id': c['doc_id'],
+                'collection_id': c['collection_id'],
+                'collection_type': c['collection_type'],
+                'title': c['title'],
+                'doc_apa': doc_apa
+            })
+        return ret_data
+    return []
+
+
+def get_references(obj: Document):
+    if obj.collection_type == Document.TypeChoices.PERSONAL:
+        if obj.ref_doc_id and obj.ref_collection_id:
+            references = RagDocument.references('public', obj.ref_collection_id, obj.ref_doc_id)
+        else:
+            references = []
+    else:
+        references = RagDocument.references(obj.collection_type, obj.collection_id, obj.doc_id)
+    if references:
+        ret_data = []
+        for i, r in enumerate(references):
+            # title = r['title']
+            # year = r['year']
+            # source = r['journal'] if r['journal'] else r['conference'] if r['conference'] else r['venue']
+            # doc_apa = Document.get_doc_apa(r['authors'], year, title, source)
+
+            document = Document(
+                collection_type=r['collection_type'],
+                collection_id=r['collection_id'],
+                doc_id=r['doc_id'],
+                title=r['title'],
+                authors=r['authors'],
+                year=r['year'],
+                pub_date=r['pub_date'],
+                pub_type=r['pub_type'],
+                venue=r['venue'],
+                journal=r['journal'],
+                conference=r['conference'],
+                pages=r['pages'],
+                citation_count=r['citation_count'],
+            )
+            doc_apa = document.get_csl_formate('apa')
+            ret_data.append({
+                'doc_id': r['doc_id'],
+                'collection_id': r['collection_id'],
+                'collection_type': r['collection_type'],
+                'title': r['title'],
+                'doc_apa': doc_apa
+            })
+        return ret_data
+    return []
 
 
 def author_detail(user_id, author_id):
@@ -150,28 +279,36 @@ def author_detail(user_id, author_id):
     return AuthorsDetailSerializer(author).data
 
 
-def author_documents(user_id, author_id, page_size=10, page_num=1):
+def author_documents(user_id, author_id, validated_data):
+    vd = validated_data
+    page_size = vd['page_size']
+    page_num = vd['page_num']
     start_num = page_size * (page_num - 1)
-    if cache_data := search_result_from_cache(user_id, author_id, page_size, page_num, search_type='author_papers'):
-        return cache_data
-    papers = RagAuthors.get_author_papers(author_id)
-    documents = _rag_papers_to_documents(papers)
-    document_ids = [d['id'] for d in documents]
-    async_update_document.apply_async(args=[document_ids])
-    search_result_save_cache(user_id, author_id, documents, search_type='author_papers')
+    if cache_data := search_result_cache_data(user_id, author_id, search_type='author_papers'):
+        documents = cache_data
+    else:
+        papers = RagAuthors.get_author_papers(author_id)
+        documents = _rag_papers_to_documents(papers)
+        document_ids = [d['id'] for d in documents]
+        async_update_document.apply_async(args=[document_ids])
+        search_result_save_cache(user_id, author_id, documents, search_type='author_papers')
+
+    documents, sources, authors = advance_search(documents, vd)
     total = len(documents)
     return {
         'list': documents[start_num:(page_size * page_num)] if total > start_num else [],
+        'sources': sources,
+        'authors': authors,
         'total': total,
     }
 
 
-def search_authors(user_id, content, page_size=10, page_num=1, topn=100):
+def search_authors(user_id, content, page_size=10, page_num=1, limit=100):
     start_num = page_size * (page_num - 1)
     logger.info(f"limit: [{start_num}: {page_size * page_num}]")
     if cache_data := search_result_from_cache(user_id, content, page_size, page_num, search_type='author'):
         return cache_data
-    authors = RagAuthors.search_authors(content, limit=topn)
+    authors = RagAuthors.search_authors(content, limit=limit)
     authors_list = AuthorsDetailSerializer(authors, many=True).data
     search_result_save_cache(user_id, content, authors_list, search_type='author')
     return {
@@ -186,13 +323,28 @@ def get_documents_by_rag(rag_data):
     """
     rag_dict = {f"{d['collection_id']}-{d['doc_id']}": d for d in rag_data}
     rag_docs = [{'id': None, 'collection_id': d['collection_id'], 'doc_id': d['doc_id']} for d in rag_data]
-    exit_documents = Document.raw_by_docs(rag_docs) if rag_docs else []
+    exit_d = Document.raw_by_docs(rag_docs) if rag_docs else []
+    exit_dict = {f"{d.collection_id}-{d.doc_id}": d for d in exit_d}
+    exit_documents = []
     exit_docs = [{'id': d.id, 'collection_id': d.collection_id, 'doc_id': d.doc_id} for d in exit_documents]
     diff_docs = Document.difference_docs(rag_docs, exit_docs)
     diff_rag = [rag_dict[f"{d['collection_id']}-{d['doc_id']}"] for d in diff_docs]
 
-    diff_documents = Document.objects.bulk_create([Document(**d) for d in diff_rag])
-    documents = list(exit_documents) + diff_documents
+    # diff_documents = Document.objects.bulk_create([Document(**d) for d in diff_rag])
+    if diff_rag:
+        new_data = []
+        for d in diff_rag:
+            if exit_d := exit_dict.get(f"{d['collection_id']}-{d['doc_id']}"):
+                d['id'] = exit_d.id
+            else:
+                d['id'] = str(uuid.uuid4())
+            d['created_at'] = datetime.datetime.now()
+            d['updated_at'] = datetime.datetime.now()
+            new_data.append(d)
+        bulk_insert_ignore_duplicates(Document, new_data)
+        documents = Document.raw_by_docs(rag_docs) if rag_docs else []
+    else:
+        documents = exit_documents
     return {f"{d.collection_id}-{d.doc_id}": d for d in documents}
 
 
@@ -463,8 +615,7 @@ def document_personal_upload(validated_data):
 
 
 def document_library_add(
-    user_id, document_ids, collection_id, bot_id, add_type, search_content,
-    author_id=None, keyword=None, search_limit=100
+    user_id, document_ids, collection_id, bot_id, add_type, keyword=None, search_info=None
 ):
     """
     添加个人库：
@@ -477,12 +628,12 @@ def document_library_add(
     all_document_ids, ref_ds, bot = [], [], None
     if bot_id:
         bot = Bot.objects.filter(id=bot_id, del_flag=False).first()
-    if add_type == DocLibAddQuerySerializer.AddTypeChoices.DOCUMENT_SEARCH:
-        search_result = search(user_id, search_content, search_limit, 1)
+    if add_type == DocLibAddQuerySerializer.AddTypeChoices.DOCUMENT_SEARCH or search_info.get('content'):
+        search_result = search(user_id, search_info)
         if search_result:
             all_document_ids = [d['id'] for d in search_result['list']]
-    elif add_type == DocLibAddQuerySerializer.AddTypeChoices.AUTHOR_SEARCH:
-        search_result = author_documents(user_id, author_id, 1000, 1)
+    elif add_type == DocLibAddQuerySerializer.AddTypeChoices.AUTHOR_SEARCH or search_info.get('author_id'):
+        search_result = author_documents(user_id, search_info.get('author_id'), search_info)
         if search_result:
             all_document_ids = [d['id'] for d in search_result['list']]
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_ARXIV:

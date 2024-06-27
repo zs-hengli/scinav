@@ -6,7 +6,7 @@ def save_auth_user_info(user_info):
         'id': user_info['sub'],
         'username': user_info['name'] if user_info['name'] else user_info['sub'],
         'nickname': user_info['nickname'],
-        'avatar': user_info['picture'],
+        # 'avatar': user_info['picture'],
         'email': user_info['email'],
         'phone': user_info['phone_number'],
         'updated_at': user_info['updated_at'],
@@ -20,7 +20,11 @@ def save_auth_user_info(user_info):
 
 
 def sync_user_info(user: MyUser, user_info):
-    if user.id == user_info['id'] and user.register_source != user_info.get('registerSource'):
+    if user.id == user_info['id'] and (
+        user.register_source != user_info.get('registerSource')
+        or user.avatar != user_info.get('photo')
+    ):
         user.register_source = user_info['registerSource']
+        user.avatar = user_info['photo']
         user.save()
     return user

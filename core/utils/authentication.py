@@ -43,7 +43,7 @@ def check_token(request):
                     user.email != user_info['email']
                     or user.phone != user_info['phone_number']
                     or user.nickname != user_info['nickname']
-                    or user.avatar != user_info['picture']
+                    # or user.avatar != user_info['picture']
                 ):
                     user = save_auth_user_info(user_info)
             else:

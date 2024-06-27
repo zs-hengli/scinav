@@ -3,10 +3,8 @@ import os
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-from drf_spectacular.utils import extend_schema_serializer, OpenApiExample
 from rest_framework import serializers
 
-from bot.rag_service import Document as RagDocument
 from collection.models import Collection
 from document.models import Document, DocumentLibrary
 
@@ -18,11 +16,50 @@ class BaseModelSerializer(serializers.ModelSerializer):
     updated_at = serializers.DateTimeField(required=False, format="%Y-%m-%d %H:%M:%S")
 
 
+class SearchQuerySerializer(serializers.Serializer):
+    class OrderBy(models.TextChoices):
+        RELEVANCY = 'relevancy', _('relevancy')
+        PUB_DATE = 'pub_date', _('pub_date')
+    content = serializers.CharField(required=True, max_length=4096, allow_blank=True, trim_whitespace=False)
+    page_size = serializers.IntegerField(default=10)
+    page_num = serializers.IntegerField(default=1)
+    limit = serializers.IntegerField(default=100)
+    begin_date = serializers.DateField(required=False, default=None)
+    end_date = serializers.DateField(required=False, default=None)
+    order_by = serializers.ChoiceField(required=False, choices=OrderBy.choices, default=OrderBy.RELEVANCY)
+    sources = serializers.ListSerializer(
+        required=False, child=serializers.CharField(required=False, max_length=1024), default=None)
+    authors = serializers.ListSerializer(
+        required=False, child=serializers.CharField(required=False, max_length=512), default=None)
+
+
+class SearchDocuments4AddQuerySerializer(serializers.Serializer):
+    content = serializers.CharField(required=False, max_length=4096, allow_blank=True, trim_whitespace=False)
+    author_id = serializers.IntegerField(required=False)
+    limit = serializers.IntegerField(default=None)
+    begin_date = serializers.DateField(required=False, default=None)
+    end_date = serializers.DateField(required=False, default=None)
+    sources = serializers.ListSerializer(
+        required=False, child=serializers.CharField(required=False, max_length=1024), default=None)
+    authors = serializers.ListSerializer(
+        required=False, child=serializers.CharField(required=False, max_length=512), default=None)
+
+    def validate(self, attrs):
+        if attrs.get('content') is None and not attrs.get('author_id'):
+            raise serializers.ValidationError('content and author_id cannot be empty at the same time')
+        if attrs.get('content') is not None and not attrs.get('limit'):
+            attrs['limit'] = 100
+        if attrs.get('author_id') and not attrs.get('limit'):
+            attrs['limit'] = 1000
+
+        return super().validate(attrs)
+
+
 class AuthorsSearchQuerySerializer(serializers.Serializer):
     content = serializers.CharField(required=True, max_length=4096, allow_blank=True, trim_whitespace=False)
     page_size = serializers.IntegerField(default=10)
     page_num = serializers.IntegerField(default=1)
-    topn = serializers.IntegerField(default=100)
+    limit = serializers.IntegerField(default=100)
 
 
 class AuthorsDetailSerializer(serializers.Serializer):
@@ -38,6 +75,15 @@ class AuthorsDetailSerializer(serializers.Serializer):
 class AuthorsDocumentsQuerySerializer(serializers.Serializer):
     page_size = serializers.IntegerField(default=10)
     page_num = serializers.IntegerField(default=1)
+    limit = serializers.IntegerField(default=1000)
+    begin_date = serializers.DateField(required=False, default=None)
+    end_date = serializers.DateField(required=False, default=None)
+    order_by = serializers.ChoiceField(
+        required=False, choices=SearchQuerySerializer.OrderBy.choices, default=SearchQuerySerializer.OrderBy.RELEVANCY)
+    sources = serializers.ListSerializer(
+        required=False, child=serializers.CharField(required=False, max_length=1024), default=None)
+    authors = serializers.ListSerializer(
+        required=False, child=serializers.CharField(required=False, max_length=512), default=None)
 
 
 class DocumentApaListSerializer(serializers.ModelSerializer):
@@ -48,7 +94,6 @@ class DocumentApaListSerializer(serializers.ModelSerializer):
         return obj.get_csl_formate('apa')
         # source = obj.journal if obj.journal else obj.conference if obj.conference else obj.venue
         # return Document.get_doc_apa(obj.authors, obj.year, obj.title, source)
-
 
     class Meta:
         model = Document
@@ -138,6 +183,8 @@ class DocumentRagCreateSerializer(BaseModelSerializer):
     title = serializers.CharField(required=True, allow_null=True, allow_blank=True)
     abstract = serializers.CharField(required=True, allow_null=True, allow_blank=True)
     authors = serializers.ListField(required=True, child=serializers.CharField(allow_blank=True), allow_null=True)
+    author_names_ids = serializers.ListField(
+        required=True, child=serializers.JSONField(allow_null=True), allow_null=True)
     doi = serializers.CharField(required=True, allow_null=True)
     categories = serializers.JSONField(required=True, allow_null=True)
     pages = serializers.IntegerField(required=False, allow_null=True, default=None)
@@ -160,7 +207,8 @@ class DocumentRagCreateSerializer(BaseModelSerializer):
 
     class Meta:
         model = Document
-        fields = ['id', 'doc_id', 'user_id', 'collection_type', 'collection_id', 'title', 'abstract', 'authors', 'doi',
+        fields = ['id', 'doc_id', 'user_id', 'collection_type', 'collection_id', 'title', 'abstract',
+                  'authors', 'author_names_ids', 'doi',
                   'categories', 'pages', 'year', 'pub_date', 'pub_type', 'venue', 'journal', 'conference',
                   'keywords', 'full_text_accessible', 'citation_count', 'reference_count',
                   'state', 'object_path', 'source_url', 'checksum', 'ref_collection_id', 'ref_doc_id']
@@ -195,91 +243,6 @@ class DocumentDetailSerializer(BaseModelSerializer):
                 ] else 'failed'
             )
         return status
-
-    @staticmethod
-    def get_citations(obj: Document):
-        if obj.collection_type == Document.TypeChoices.PERSONAL:
-            if obj.ref_doc_id and obj.ref_collection_id:
-                citations = RagDocument.citations('public', obj.ref_collection_id, obj.ref_doc_id)
-            else:
-                citations = []
-        else:
-            citations = RagDocument.citations(obj.collection_type, obj.collection_id, obj.doc_id)
-        if citations:
-            ret_data = []
-            for i, c in enumerate(citations):
-                # title = c['title']
-                # year = c['year']
-                # source = c['journal'] if c['journal'] else c['conference'] if c['conference'] else c['venue']
-                # doc_apa = Document.get_doc_apa(c['authors'], year, title, source)
-                document = Document(
-                    collection_type=c['collection_type'],
-                    collection_id=c['collection_id'],
-                    doc_id=c['doc_id'],
-                    title=c['title'],
-                    authors=c['authors'],
-                    year=c['year'],
-                    pub_date=c['pub_date'],
-                    pub_type=c['pub_type'],
-                    venue=c['venue'],
-                    journal=c['journal'],
-                    conference=c['conference'],
-                    pages=c['pages'],
-                    citation_count=c['citation_count'],
-                )
-                doc_apa = document.get_csl_formate('apa')
-                ret_data.append({
-                    'doc_id': c['doc_id'],
-                    'collection_id': c['collection_id'],
-                    'collection_type': c['collection_type'],
-                    'title': c['title'],
-                    'doc_apa': doc_apa
-                })
-            return ret_data
-        return []
-
-    @staticmethod
-    def get_references(obj: Document):
-        if obj.collection_type == Document.TypeChoices.PERSONAL:
-            if obj.ref_doc_id and obj.ref_collection_id:
-                references = RagDocument.references('public', obj.ref_collection_id, obj.ref_doc_id)
-            else:
-                references = []
-        else:
-            references = RagDocument.references(obj.collection_type, obj.collection_id, obj.doc_id)
-        if references:
-            ret_data = []
-            for i, r in enumerate(references):
-                # title = r['title']
-                # year = r['year']
-                # source = r['journal'] if r['journal'] else r['conference'] if r['conference'] else r['venue']
-                # doc_apa = Document.get_doc_apa(r['authors'], year, title, source)
-
-                document = Document(
-                    collection_type=r['collection_type'],
-                    collection_id=r['collection_id'],
-                    doc_id=r['doc_id'],
-                    title=r['title'],
-                    authors=r['authors'],
-                    year=r['year'],
-                    pub_date=r['pub_date'],
-                    pub_type=r['pub_type'],
-                    venue=r['venue'],
-                    journal=r['journal'],
-                    conference=r['conference'],
-                    pages=r['pages'],
-                    citation_count=r['citation_count'],
-                )
-                doc_apa = document.get_csl_formate('apa')
-                ret_data.append({
-                    'doc_id': r['doc_id'],
-                    'collection_id': r['collection_id'],
-                    'collection_type': r['collection_type'],
-                    'title': r['title'],
-                    'doc_apa': doc_apa
-                })
-            return ret_data
-        return []
 
     class Meta:
         model = Document
@@ -378,6 +341,7 @@ class DocLibAddQuerySerializer(serializers.Serializer):
     author_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     keyword = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
     search_limit = serializers.IntegerField(required=False, default=100)
+    search_info = SearchDocuments4AddQuerySerializer(required=False, default=None)
 
     def validate(self, attrs):
         if (
@@ -401,7 +365,19 @@ class DocLibAddQuerySerializer(serializers.Serializer):
         ):
             raise serializers.ValidationError('bot_id is required')
 
-        return attrs
+        if attrs.get('search_content'):
+            if not attrs.get('search_info'):
+                attrs['search_info'] = {}
+            attrs['search_info']['content'] = attrs['search_content']
+            attrs['search_info']['limit'] = attrs.get('limit', 100)
+
+        if attrs.get('author_id'):
+            if not attrs.get('search_info'):
+                attrs['search_info'] = {}
+            attrs['search_info']['author_id'] = attrs['author_id']
+            attrs['search_info']['limit'] = attrs.get('limit', 1000)
+
+        return super().validate(attrs)
 
 
 class DocLibDeleteQuerySerializer(serializers.Serializer):
