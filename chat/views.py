@@ -16,6 +16,7 @@ from chat.serializers import ConversationCreateSerializer, ConversationUpdateSer
 from chat.service import chat_query, conversation_create, conversation_detail, conversation_list, conversation_update, \
     conversation_menu_list, question_list, conversation_share_create, conversation_create_by_share
 from core.utils.views import extract_json, my_json_response, streaming_response, ServerSentEventRenderer
+# from document.service import update_chat_references
 
 logger = logging.getLogger(__name__)
 
@@ -218,7 +219,12 @@ class ConversationShares(APIView):
         share = ConversationShare.objects.filter(id=share_id).first()
         if not share:
             return my_json_response({}, code=100002, msg='conversation share not found')
-        return my_json_response(ConversationShareDetailSerializer(share).data)
+        detail = ConversationShareDetailSerializer(share).data
+        # if detail['questions']:
+        #     for index, question in enumerate(detail['questions']):
+        #         if question['references']:
+        #             detail['questions']['answer']['references'] = update_chat_references(question['references'])
+        return my_json_response(detail)
 
     @staticmethod
     def post(request, *args, **kwargs):

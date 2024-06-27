@@ -209,6 +209,8 @@ class QuestionReferenceSerializer(serializers.Serializer):
     content_type = serializers.CharField(required=False, min_length=1, max_length=64)
     collection_id = serializers.CharField(required=True, min_length=1, max_length=36)
     collection_type = serializers.CharField(required=False, min_length=1, max_length=36)
+    title = serializers.CharField(required=False, min_length=1, max_length=1024)
+    authors = serializers.JSONField(required=False)
 
 
 def update_chat_references(references):
@@ -239,8 +241,10 @@ class QuestionListSerializer(serializers.ModelSerializer):
         data = []
         if obj.stream and obj.stream.get('output'):
             data = [QuestionReferenceSerializer(o).data for o in obj.stream['output'] if 'bbox' in o]
-            papers = {}
-            data = update_chat_references(data)
+            for i, d in enumerate(data):
+                data[i]['doc_apa'] = d.get('title', '')
+            # papers = {}
+            # data = update_chat_references(data)
         return data
 
     class Meta:
@@ -423,7 +427,8 @@ class ConversationShareDetailSerializer(BaseModelSerializer):
         questions = obj.content['questions']
         for question in questions:
             if question.get('references'):
-                question['references'] = update_chat_references(question['references'])
+                question['references']['apa_title'] = question['references'].get('title', '')
+        #         question['references'] = update_chat_references(question['references'])
         return questions
 
     @staticmethod

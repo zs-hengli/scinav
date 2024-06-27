@@ -346,7 +346,11 @@ class DocumentsUrl(APIView):
                 'ref_doc_id', 'ref_collection_id'
             ).first()
             if not document:
-                document = document_update_from_rag(None, collection_id, doc_id)
+                new_document = document_update_from_rag(None, collection_id, doc_id)
+                document = Document.objects.filter(new_document.id).values(
+                    'id', 'title', 'object_path', 'collection_id', 'doc_id', 'collection_type',
+                    'ref_doc_id', 'ref_collection_id'
+                ).first()
         else:
             return my_json_response(code=100001, msg=f'document_id or (collection_id, doc_id) not found')
         if not document:
