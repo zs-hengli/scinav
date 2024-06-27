@@ -427,6 +427,9 @@ class Conversations:
                         stream = Conversations.update_stream(stream, line_data)
                         if line_data['event'] == 'tool_end':
                             line_data['output'] = stream['output'] if stream['output'] else []
+                            for i, item in enumerate(line_data['output']):
+                                if item.get('title'):
+                                    line_data['output'][i]['doc_apa'] = item['title']
                             # line_data['output'] = update_chat_references(line_data['output'])
                         yield json.dumps(line_data) + '\n'
         except Exception as exc:
