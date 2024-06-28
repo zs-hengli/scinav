@@ -125,16 +125,14 @@ def conversation_create_by_share(user_id, conversation_share: ConversationShare,
     )
     title = conversation_share.title
     public_collection_ids = vd.get('public_collection_ids')
+    documents = None
+    collections = vd.get('collections')
     if chat_type == Conversation.TypeChoices.BOT_COV:
         bot_id = validated_data.get('bot_id')
         bot = Bot.objects.get(pk=bot_id)
         agent_id = bot.agent_id
-        documents = None
-        collections = vd.get('collections')
     else:
         agent_id = None
-        documents = vd.get('documents')
-        collections = vd.get('collections')
     # 创建 Conversation
     all_document_ids = []
     paper_ids = []
@@ -146,6 +144,8 @@ def conversation_create_by_share(user_id, conversation_share: ConversationShare,
             'doc_id': p['doc_id'],
             'full_text_accessible': p['full_text_accessible']
         })
+    if not vd.get('bot_id') and not vd.get('collections'):
+        documents = all_document_ids
     # 收藏夹对话分享，在收藏夹中自动创建一个自建收藏夹，收录该对话对应文献内容，默认不下载全文，在收藏夹下拉菜单中选中该收藏夹
     if not vd.get('bot_id') and vd.get('collections') and user_id != conversation_share.user_id:
         if all_document_ids:
@@ -291,7 +291,7 @@ def conversation_detail(conversation_id):
     all_collection_ids = (conversation.collections if conversation.collections else []) + public_collection_ids
     collections = (
         Collection.objects.filter(id__in=all_collection_ids, del_flag=False).values('id', 'type', 'total_public').all()
-        if conversation.collections else []
+        if all_collection_ids else []
     )
     collection_ids = [c['id'] for c in collections]
     public_collection_papers_num = sum([c['total_public'] for c in collections if c['type'] == Collection.TypeChoices.PUBLIC])

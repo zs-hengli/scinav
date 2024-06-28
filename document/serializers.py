@@ -59,6 +59,7 @@ class SearchQuerySerializer(serializers.Serializer):
 
 class SearchDocuments4AddQuerySerializer(serializers.Serializer):
     content = serializers.CharField(required=False, max_length=4096, allow_blank=True, trim_whitespace=False)
+    search_content = serializers.CharField(required=False, max_length=4096, allow_blank=True, trim_whitespace=False)
     author_id = serializers.IntegerField(required=False)
     limit = serializers.IntegerField(default=None)
     begin_date = serializers.CharField(required=False, default=None, allow_blank=True)
@@ -400,12 +401,6 @@ class DocLibAddQuerySerializer(serializers.Serializer):
             raise serializers.ValidationError('collection_id and bot_id cannot be set at the same time')
 
         if (
-            attrs.get('add_type') and not attrs.get('collection_id') and not attrs.get('bot_id')
-            and not attrs.get('search_content') and not attrs.get('author_id')
-        ):
-            raise serializers.ValidationError('collection_id or bot_id or search_content is required')
-
-        if (
             attrs.get('add_type') == DocLibAddQuerySerializer.AddTypeChoices.COLLECTION_SUBSCRIBE_FULL_TEXT
             and not attrs.get('bot_id')
         ):
@@ -422,6 +417,17 @@ class DocLibAddQuerySerializer(serializers.Serializer):
                 attrs['search_info'] = {}
             attrs['search_info']['author_id'] = attrs['author_id']
             attrs['search_info']['limit'] = attrs.get('limit', 1000)
+        if (
+            attrs.get('search_info') and attrs['search_info'].get('search_content')
+            and not attrs['search_info'].get('content')
+        ):
+            attrs['search_info']['content'] = attrs['search_info']['search_content']
+
+        if (
+            attrs.get('add_type') and not attrs.get('collection_id') and not attrs.get('bot_id')
+            and not attrs.get('search_info')
+        ):
+            raise serializers.ValidationError('collection_id or bot_id or search_info is required')
 
         return super().validate(attrs)
 

@@ -450,7 +450,10 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1, keyw
             document_title = document.title if document else '-'
             filename = doc_lib.filename if doc_lib.filename else document_title
             if document:
-                if document.ref_doc_id and document.ref_collection_id:
+                if (
+                    document.ref_doc_id and document.ref_collection_id
+                    and document.collection_type == Collection.TypeChoices.PERSONAL
+                ):
                     ref_type = 'reference'
                     if document.full_text_accessible:
                         ref_type = 'reference&full_text_accessible'
@@ -645,6 +648,8 @@ def document_library_add(
     if add_type == DocLibAddQuerySerializer.AddTypeChoices.DOCUMENT_SEARCH or (
         search_info and search_info.get('content')
     ):
+        search_info['page_num'] = 1
+        search_info['page_size'] = search_info.get('limit', 100)
         search_result = search(user_id, search_info)
         if search_result:
             all_document_ids = [d['id'] for d in search_result['list']]

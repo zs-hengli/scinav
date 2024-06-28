@@ -241,8 +241,8 @@ class QuestionListSerializer(serializers.ModelSerializer):
         data = []
         if obj.stream and obj.stream.get('output'):
             data = [QuestionReferenceSerializer(o).data for o in obj.stream['output'] if 'bbox' in o]
-            for i, d in enumerate(data):
-                data[i]['doc_apa'] = d.get('title', '')
+            # for i, d in enumerate(data):
+            #     data[i]['doc_apa'] = d.get('title', '')
             # papers = {}
             # data = update_chat_references(data)
         return data
@@ -348,7 +348,7 @@ def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
                 'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
                 'ref_collection_id', 'ref_doc_id', 'object_path',
             ).all()
-            documents += ref_documents
+            documents += list(ref_documents)
             # 订阅了专题广场里面的非本人专题
             if bot.type == Bot.TypeChoices.PUBLIC:
                 ref_text_accessible_ds = [
@@ -375,8 +375,25 @@ def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
             'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
             'ref_collection_id', 'ref_doc_id', 'object_path',
         ).all()
+    # 非本人个人文献 转为关联公共文献
+    other_personal_documents = [
+        d for d in documents if d['collection_type'] == 'personal' and d['collection_id'] != user_id
+    ]
+    ref_docs = [{'id': None, 'collection_id': d['ref_collection_id'], 'doc_id': d['ref_doc_id']}
+                for d in other_personal_documents if d['ref_doc_id'] and d['ref_collection_id']]
+    if ref_docs:
+        ref_documents_raw = Document.raw_by_docs(ref_docs, fileds='id')
+        ref_document_ids = [d.id for d in ref_documents_raw]
+        if ref_document_ids:
+            ref_documents = Document.objects.filter(id__in=ref_document_ids).values(
+                'id', 'user_id', 'title', 'collection_type', 'collection_id', 'doc_id', 'full_text_accessible',
+                'ref_collection_id', 'ref_doc_id', 'object_path',
+            ).all()
+            documents = list(documents) + list(ref_documents)
 
     for d in documents:
+        if d['collection_type'] == 'personal' and d['collection_id'] != user_id:
+            continue
         ret_data.append({
             'collection_type': d['collection_type'],
             'collection_id': d['collection_id'],
@@ -425,10 +442,11 @@ class ConversationShareDetailSerializer(BaseModelSerializer):
     @staticmethod
     def get_questions(obj: ConversationShare):
         questions = obj.content['questions']
-        for question in questions:
-            if question.get('references'):
-                question['references']['apa_title'] = question['references'].get('title', '')
-        #         question['references'] = update_chat_references(question['references'])
+        # for question in questions:
+        #     if question.get('references'):
+        #         for i,ref in enumerate(question['references']):
+        #             question['references'][i]['doc_apa'] = ref.get('title', '')
+        # #         question['references'] = update_chat_references(question['references'])
         return questions
 
     @staticmethod
@@ -459,5 +477,5 @@ class ChatDocumentsTotalQuerySerializer(serializers.Serializer):
         if not attrs.get('bot_id') and not attrs.get('collections'):
             raise serializers.ValidationError('bot_id or collections is required')
         if attrs.get('collections'):
-            attrs['collection_ids'] = ','.split(attrs['collections'])
+            attrs['collection_ids'] = attrs['collections'].split(',')
         return super().validate(attrs)
