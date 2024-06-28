@@ -553,7 +553,7 @@ def bulk_insert_ignore_duplicates(model: models.Model, data):
 
 
 class SearchHistoryCache:
-    def __init__(self, key, limit=10):
+    def __init__(self, key, limit=5):
         self.conn = get_redis_connection('default')
         self.key = key
         self.limit = limit
@@ -563,13 +563,13 @@ class SearchHistoryCache:
         now = time.time()
         self.conn.zadd(self.key, {content: now})
         self.conn.zremrangebyrank(self.key, 0, -self.max_len)
-        data = self.conn.zrevrange(self.key, 0, self.limit)
+        data = self.conn.zrevrange(self.key, 0, max(self.limit - 1, 0))
         if data:
             data = [d.decode() for d in data]
         return data
 
     def get(self):
-        data = self.conn.zrevrange(self.key, 0, self.limit)
+        data = self.conn.zrevrange(self.key, 0, max(self.limit - 1, 0))
         if data:
             data = [d.decode() for d in data]
         return data

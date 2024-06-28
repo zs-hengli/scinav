@@ -47,8 +47,6 @@ class CollectionCreateSerializer(serializers.ModelSerializer):
             and not attrs.get('search_content') and not attrs.get('author_id')
         ):
             raise serializers.ValidationError(_('Please provide a name or document_ids or search_content'))
-        if attrs.get('is_all') and not attrs.get('search_content') and not attrs.get('author_id'):
-            raise serializers.ValidationError(_('Please provide a search_content or author_id'))
         if attrs.get('title') and len(attrs['title']) > 255:
             attrs['title'] = attrs['title'][:255]
 
@@ -63,6 +61,11 @@ class CollectionCreateSerializer(serializers.ModelSerializer):
                 attrs['search_info'] = {}
             attrs['search_info']['author_id'] = attrs['author_id']
             attrs['search_info']['limit'] = attrs.get('limit', 1000)
+
+        if attrs.get('is_all') and (not attrs.get('search_info') or (
+            not attrs.get('search_info').get('author_id') and not attrs.get('search_info').get('content'))
+        ):
+            raise serializers.ValidationError(_('Please provide a search_content or author_id'))
 
         return super().validate(attrs)
 

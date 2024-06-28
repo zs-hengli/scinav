@@ -11,11 +11,13 @@ from bot.models import Bot
 from chat.models import Conversation, ConversationShare
 from chat.serializers import ConversationCreateSerializer, ConversationUpdateSerializer, ChatQuerySerializer, \
     QuestionAnswerSerializer, ConversationsMenuQuerySerializer, QuestionUpdateAnswerQuerySerializer, \
-    QuestionListQuerySerializer, ConversationShareListQuerySerializer, ConversationShareCreateQuerySerializer, \
-    ConversationShareDetailSerializer
+    QuestionListQuerySerializer, ConversationShareCreateQuerySerializer, \
+    ConversationShareDetailSerializer, ChatDocumentsTotalQuerySerializer
 from chat.service import chat_query, conversation_create, conversation_detail, conversation_list, conversation_update, \
-    conversation_menu_list, question_list, conversation_share_create, conversation_create_by_share
+    conversation_menu_list, question_list, conversation_share_create, conversation_create_by_share, \
+    chat_papers_total
 from core.utils.views import extract_json, my_json_response, streaming_response, ServerSentEventRenderer
+
 # from document.service import update_chat_references
 
 logger = logging.getLogger(__name__)
@@ -237,4 +239,19 @@ class ConversationShares(APIView):
         if not conversation:
             return my_json_response({}, code=100002, msg='conversation not found')
         data = conversation_share_create(request.user.id, vd, conversation)
+        return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+class ChatPapersTotal(APIView):
+    @staticmethod
+    def get(request, *args, **kwargs):
+        query = request.query_params.dict()
+        serial = ChatDocumentsTotalQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        validated_data = serial.validated_data
+        total = chat_papers_total(request.user.id, validated_data.get('bot_id'), validated_data.get('collection_ids'))
+        data = {'papers_total': total}
         return my_json_response(data)

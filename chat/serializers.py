@@ -450,3 +450,14 @@ class ConversationShareDetailSerializer(BaseModelSerializer):
         ]
 
 
+class ChatDocumentsTotalQuerySerializer(serializers.Serializer):
+    bot_id = serializers.CharField(required=False, max_length=36)
+    collections = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    collection_ids = serializers.ListField(required=False, child=serializers.CharField(max_length=36))
+
+    def validate(self, attrs):
+        if not attrs.get('bot_id') and not attrs.get('collections'):
+            raise serializers.ValidationError('bot_id or collections is required')
+        if attrs.get('collections'):
+            attrs['collection_ids'] = ','.split(attrs['collections'])
+        return super().validate(attrs)

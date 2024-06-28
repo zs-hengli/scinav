@@ -7,13 +7,14 @@ from django.db.models import Q
 from dateutil.relativedelta import relativedelta
 from operator import itemgetter
 
-from bot.models import Bot
+from bot.models import Bot, BotCollection
 from bot.rag_service import Conversations as RagConversation
 from chat.models import Conversation, Question, ConversationShare
 from chat.serializers import ConversationCreateSerializer, ConversationDetailSerializer, ConversationListSerializer, \
     QuestionListSerializer, ConversationShareCreateQuerySerializer
 from collection.base_service import update_conversation_by_collection
 from collection.models import Collection, CollectionDocument
+from collection.serializers import CollectionDocumentListSerializer
 from collection.service import create_collection_by_documents
 from core.utils.common import cmp_ignore_order
 from document.models import DocumentLibrary, Document
@@ -286,14 +287,19 @@ def update_simple_conversation(conversation: Conversation):
 def conversation_detail(conversation_id):
     conversation = Conversation.objects.get(pk=conversation_id)
     conversation = update_simple_conversation(conversation)
+    public_collection_ids = conversation.public_collection_ids if conversation.public_collection_ids else []
+    all_collection_ids = (conversation.collections if conversation.collections else []) + public_collection_ids
     collections = (
-        Collection.objects.filter(id__in=conversation.collections, del_flag=False).values('id').all()
+        Collection.objects.filter(id__in=all_collection_ids, del_flag=False).values('id', 'type', 'total_public').all()
         if conversation.collections else []
     )
-    public_collection_ids = conversation.public_collection_ids if conversation.public_collection_ids else []
-    collections = [c['id'] for c in collections] + public_collection_ids
-    conversation.collections = list(set(collections))
-    return ConversationDetailSerializer(conversation).data
+    collection_ids = [c['id'] for c in collections]
+    public_collection_papers_num = sum([c['total_public'] for c in collections if c['type'] == Collection.TypeChoices.PUBLIC])
+    conversation.collections = list(set(collection_ids))
+    detail = ConversationDetailSerializer(conversation).data
+    detail['papers_total'] = public_collection_papers_num + (
+        len(conversation.paper_ids) if conversation.paper_ids else 0)
+    return detail
 
 
 def question_list(conversation_id, page_num, page_size):
@@ -433,3 +439,17 @@ def chat_query(user_id, validated_data, openapi_key_id=None):
         conversation_id = validated_data['conversation_id']
     return RagConversation.query(
         user_id, conversation_id, validated_data['content'], validated_data.get('question_id'), openapi_key_id)
+
+
+def chat_papers_total(user_id, bot_id=None, collection_ids=None):
+    if bot_id:
+        collection_ids = BotCollection.objects.filter(
+            bot_id=bot_id, del_flag=False).values_list('collection_id',flat=True).all()
+    collections = Collection.objects.filter(
+        id__in=collection_ids, del_flag=False).values('id', 'type', 'total_public').all()
+    pub_coll_papers_total = sum([c['total_public'] for c in collections if c['type'] == Collection.TypeChoices.PUBLIC])
+    bot = Bot.objects.filter(id=bot_id).first()
+    query_set, d1, d2, ref_ds = CollectionDocumentListSerializer.get_collection_documents(
+        user_id, collection_ids, 'all', bot=bot)
+    doc_total = query_set.count() + len(ref_ds)
+    return pub_coll_papers_total + doc_total

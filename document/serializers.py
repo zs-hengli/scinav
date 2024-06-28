@@ -45,8 +45,8 @@ class SearchDocuments4AddQuerySerializer(serializers.Serializer):
         required=False, child=serializers.CharField(required=False, max_length=512), default=None)
 
     def validate(self, attrs):
-        if attrs.get('content') is None and not attrs.get('author_id'):
-            raise serializers.ValidationError('content and author_id cannot be empty at the same time')
+        # if attrs.get('content') is None and not attrs.get('author_id'):
+        #     raise serializers.ValidationError('content and author_id cannot be empty at the same time')
         if attrs.get('content') is not None and not attrs.get('limit'):
             attrs['limit'] = 100
         if attrs.get('author_id') and not attrs.get('limit'):

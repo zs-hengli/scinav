@@ -18,4 +18,5 @@ urlpatterns = [
     path('chat/share', views.ConversationShares.as_view()),
     path('chat/share/<str:share_id>', views.ConversationShares.as_view()),
 
+    path('chat/papers/total', views.ChatPapersTotal.as_view()),
 ]

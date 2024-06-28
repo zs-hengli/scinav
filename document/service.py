@@ -152,23 +152,24 @@ def advance_search(documents, validated_data):
                and any(author in [t.strip() for t in d['authors']] for author in [t.strip() for t in vd['authors']])
         ]
 
-    if isinstance(vd['begin_date'], str):
-        if vd.get('begin_date'):
-            vd['begin_date'] = datetime.datetime.strptime(vd['begin_date'], '%Y-%m-%d')
+    if vd.get('begin_date'):
+        if isinstance(vd['begin_date'], str):
+            vd['begin_date'] = datetime.datetime.strptime(vd['begin_date'], '%Y-%m-%d').date()
         documents = [
             d for d in documents
             if d['pub_date'] and str2date(d['pub_date']) >= vd['begin_date']
         ]
     if vd.get('end_date'):
         if isinstance(vd['end_date'], str):
-            vd['end_date'] = datetime.datetime.strptime(vd['end_date'], '%Y-%m-%d')
+            vd['end_date'] = datetime.datetime.strptime(vd['end_date'], '%Y-%m-%d').date()
         documents = [
             d for d in documents
             if d['pub_date'] and str2date(d['pub_date']) <= vd['end_date']
         ]
     if vd.get('order_by') and vd.get('order_by') != SearchQuerySerializer.OrderBy.RELEVANCY:
         if vd['order_by'] == SearchQuerySerializer.OrderBy.PUB_DATE:
-            documents = sorted(documents, key=lambda x: (x['pub_date'] is None, x['pub_date']), reverse=True)
+            documents = sorted(
+                documents, key=lambda x: x['pub_date'] if x['pub_date'] is not None else '', reverse=True)
     return documents, counter_sources, counter_authors
 
 
@@ -641,11 +642,15 @@ def document_library_add(
     all_document_ids, ref_ds, bot = [], [], None
     if bot_id:
         bot = Bot.objects.filter(id=bot_id, del_flag=False).first()
-    if add_type == DocLibAddQuerySerializer.AddTypeChoices.DOCUMENT_SEARCH or search_info.get('content'):
+    if add_type == DocLibAddQuerySerializer.AddTypeChoices.DOCUMENT_SEARCH or (
+        search_info and search_info.get('content')
+    ):
         search_result = search(user_id, search_info)
         if search_result:
             all_document_ids = [d['id'] for d in search_result['list']]
-    elif add_type == DocLibAddQuerySerializer.AddTypeChoices.AUTHOR_SEARCH or search_info.get('author_id'):
+    elif add_type == DocLibAddQuerySerializer.AddTypeChoices.AUTHOR_SEARCH or (
+        search_info and search_info.get('author_id')
+    ):
         search_result = author_documents(user_id, search_info.get('author_id'), search_info)
         if search_result:
             all_document_ids = [d['id'] for d in search_result['list']]
