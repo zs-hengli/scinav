@@ -455,7 +455,7 @@ def get_document_library_list(user_id, list_type, page_size=10, page_num=1, keyw
                     if document.full_text_accessible:
                         ref_type = 'reference&full_text_accessible'
                 elif document.collection_type == Collection.TypeChoices.PUBLIC:
-                    ref_type = 'public'
+                    ref_type = document.collection_id
 
             stat_comp = DocumentLibrary.TaskStatusChoices.COMPLETED
             stat_queue = DocumentLibrary.TaskStatusChoices.QUEUEING

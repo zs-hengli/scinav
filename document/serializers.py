@@ -1,3 +1,4 @@
+import datetime
 import logging
 import os
 
@@ -24,21 +25,44 @@ class SearchQuerySerializer(serializers.Serializer):
     page_size = serializers.IntegerField(default=10)
     page_num = serializers.IntegerField(default=1)
     limit = serializers.IntegerField(default=100)
-    begin_date = serializers.DateField(required=False, default=None)
-    end_date = serializers.DateField(required=False, default=None)
+    begin_date = serializers.CharField(required=False, default=None, allow_blank=True)
+    end_date = serializers.CharField(required=False, default=None, allow_blank=True)
     order_by = serializers.ChoiceField(required=False, choices=OrderBy.choices, default=OrderBy.RELEVANCY)
     sources = serializers.ListSerializer(
         required=False, child=serializers.CharField(required=False, max_length=1024), default=None)
     authors = serializers.ListSerializer(
         required=False, child=serializers.CharField(required=False, max_length=512), default=None)
 
+    def validate(self, attrs):
+        year = datetime.datetime.now().year
+        if attrs.get('begin_date'):
+            mini_year = 1900
+            max_year = 2099
+            mini_date = datetime.datetime.strptime('1900-01-01', '%Y-%m-%d').date()
+            try:
+                attrs['begin_date'] = datetime.datetime.strptime(attrs.get('begin_date'), '%Y-%m-%d').date()
+                if attrs['begin_date'].year < mini_year:
+                    attrs['begin_date'] = mini_date
+                elif attrs['begin_date'].year > max_year:
+                    attrs['begin_date'] = datetime.datetime.strptime(
+                        f'{year}-01-01', '%Y-%m-%d').date()
+            except:
+                attrs['begin_date'] = mini_date
+
+        if attrs.get('end_date'):
+            try:
+                attrs['end_date'] = datetime.datetime.strptime(attrs.get('end_date'), '%Y-%m-%d').date()
+            except:
+                attrs['end_date'] = datetime.datetime.strptime(f'{year}-12-31', '%Y-%m-%d').date()
+        return super().validate(attrs)
+
 
 class SearchDocuments4AddQuerySerializer(serializers.Serializer):
     content = serializers.CharField(required=False, max_length=4096, allow_blank=True, trim_whitespace=False)
     author_id = serializers.IntegerField(required=False)
     limit = serializers.IntegerField(default=None)
-    begin_date = serializers.DateField(required=False, default=None)
-    end_date = serializers.DateField(required=False, default=None)
+    begin_date = serializers.CharField(required=False, default=None, allow_blank=True)
+    end_date = serializers.CharField(required=False, default=None, allow_blank=True)
     sources = serializers.ListSerializer(
         required=False, child=serializers.CharField(required=False, max_length=1024), default=None)
     authors = serializers.ListSerializer(
@@ -51,6 +75,28 @@ class SearchDocuments4AddQuerySerializer(serializers.Serializer):
             attrs['limit'] = 100
         if attrs.get('author_id') and not attrs.get('limit'):
             attrs['limit'] = 1000
+
+        year = datetime.datetime.now().year
+        if attrs.get('begin_date'):
+            mini_year = 1900
+            max_year = 2099
+            mini_date = datetime.datetime.strptime('1900-01-01', '%Y-%m-%d').date()
+            try:
+                attrs['begin_date'] = datetime.datetime.strptime(attrs.get('begin_date'), '%Y-%m-%d').date()
+                if attrs['begin_date'].year < mini_year:
+                    attrs['begin_date'] = mini_date
+                elif attrs['begin_date'].year > max_year:
+                    attrs['begin_date'] = datetime.datetime.strptime(
+                        f'{year}-01-01', '%Y-%m-%d').date()
+            except:
+                attrs['begin_date'] = mini_date
+
+        if attrs.get('end_date'):
+            try:
+                attrs['end_date'] = datetime.datetime.strptime(attrs.get('end_date'), '%Y-%m-%d').date()
+            except:
+                year = datetime.datetime.now().year
+                attrs['end_date'] = datetime.datetime.strptime(f'{year}-12-31', '%Y-%m-%d').date()
 
         return super().validate(attrs)
 
