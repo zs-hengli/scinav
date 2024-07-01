@@ -1,3 +1,5 @@
+import copy
+import datetime
 import json
 import logging
 
@@ -21,6 +23,11 @@ def update_document_lib(user_id, document_ids, keyword=None):
     document_ids = Document.objects.filter(filter_query).values_list('id', flat=True).all()
     document_libraries = []
     for doc_id in document_ids:
+        if old_document_library := DocumentLibrary.objects.filter(
+            user_id=user_id, document_id=doc_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
+        ).first():
+            document_libraries.append(old_document_library)
+            continue
         data = {
             'user_id': user_id,
             'document_id': doc_id,
@@ -30,7 +37,10 @@ def update_document_lib(user_id, document_ids, keyword=None):
             'task_id': None,
             'error': None,
         }
-        document_library, _ = DocumentLibrary.objects.update_or_create(data, user_id=user_id, document_id=doc_id)
+        update_defaults = copy.deepcopy(data)
+        update_defaults['created_at'] = datetime.datetime.now()
+        document_library, _ = DocumentLibrary.objects.update_or_create(
+            defaults=update_defaults, create_defaults=data, user_id=user_id, document_id=doc_id)
         document_libraries.append(document_library)
     return document_libraries
 
