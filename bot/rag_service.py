@@ -9,8 +9,6 @@ from django.conf import settings
 from requests import RequestException
 
 from chat.models import Question, Conversation
-# from chat.serializers import update_chat_references
-from document.models import Document as ModelDocument
 from openapi.base_service import record_openapi_log
 from openapi.models import OpenapiLog
 
@@ -430,7 +428,7 @@ class Conversations:
                             for i, item in enumerate(line_data['output']):
                                 if item.get('title'):
                                     line_data['output'][i]['doc_apa'] = item['title']
-                            # line_data['output'] = update_chat_references(line_data['output'])
+                            # line_data['output'] = update_chat_references(user_id, line_data['output'])
                         yield json.dumps(line_data) + '\n'
         except Exception as exc:
             logger.error(f'query exception: {exc}')

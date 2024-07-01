@@ -1,16 +1,15 @@
 import logging
-import os
 
 from django.db import models
 from django.db.models import Q
-from rest_framework import serializers
 from django.utils.translation import gettext_lazy as _
+from rest_framework import serializers
 
 from bot.models import BotCollection, Bot, BotSubscribe
 from chat.models import Conversation, Question, ConversationShare
 from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionDocumentListSerializer
-from document.models import Document, DocumentLibrary
+from document.models import Document
 
 logger = logging.getLogger(__name__)
 
@@ -211,26 +210,6 @@ class QuestionReferenceSerializer(serializers.Serializer):
     collection_type = serializers.CharField(required=False, min_length=1, max_length=36)
     title = serializers.CharField(required=False, min_length=1, max_length=1024)
     authors = serializers.JSONField(required=False)
-
-
-def update_chat_references(references):
-    data_dict = {
-        f"{o['collection_id']}__{o['doc_id']}": 1
-        for o in references if o.get('doc_id') and o.get('collection_id')
-    }
-    docs = []
-    for d in data_dict.keys():
-        collection_id, doc_id = d.split('__')
-        docs.append({'doc_id': doc_id, 'collection_id': collection_id})
-    documents = Document.raw_by_docs(docs) if docs else []
-    doc_apas, doc_titles = {}, {}
-    for d in documents:
-        doc_apas[f"{d.collection_id}__{d.doc_id}"] = d.get_csl_formate('apa')
-        doc_titles[f"{d.collection_id}__{d.doc_id}"] = d.title
-    for index, d in enumerate(references):
-        references[index]['doc_apa'] = doc_apas.get(f"{d['collection_id']}__{d['doc_id']}", '')
-        references[index]['title'] = doc_titles.get(f"{d['collection_id']}__{d['doc_id']}", '')
-    return references
 
 
 class QuestionListSerializer(serializers.ModelSerializer):

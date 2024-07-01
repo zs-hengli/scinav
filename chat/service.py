@@ -18,6 +18,7 @@ from collection.serializers import CollectionDocumentListSerializer
 from collection.service import create_collection_by_documents
 from core.utils.common import cmp_ignore_order
 from document.models import DocumentLibrary, Document
+from document.service import document_update_from_rag
 from document.tasks import async_update_conversation_share_content
 
 logger = logging.getLogger(__name__)
@@ -205,6 +206,7 @@ def conversation_create_by_share(user_id, conversation_share: ConversationShare,
     else:
         conv_questions = []
         for q in questions:
+            q['references'] = update_share_chat_references(user_id, q['references'])
             conv_questions.append(Question(
                 conversation=conversation,
                 content=q['content'],
@@ -453,3 +455,40 @@ def chat_papers_total(user_id, bot_id=None, collection_ids=None):
         user_id, collection_ids, 'all', bot=bot)
     doc_total = query_set.count() + len(ref_ds)
     return pub_coll_papers_total + doc_total
+
+
+def update_share_chat_references(user_id, references):
+    """
+    分享的关联文献如果是个人上传文献 转为公共文献的信息
+    :param user_id:
+    :param references:g
+    :return:
+    """
+    data_dict = {
+        f"{o['collection_id']}__{o['doc_id']}": o
+        for o in references if o.get('doc_id') and o.get('collection_id')
+    }
+    docs = []
+    for d, ref in data_dict.items():
+        collection_id, doc_id = d.split('__')
+        if collection_id != user_id and collection_id not in ['s2', 'arxiv']:
+            docs.append({'doc_id': doc_id, 'collection_id': collection_id})
+    documents = Document.raw_by_docs(docs, where="ref_collection_id != '' and ref_doc_id >0") if docs else []
+    tobe_update_docs = {f"{d.collection_id}__{d.doc_id}": d for d in documents}
+    doc_apas, doc_titles = {}, {}
+    for d in documents:
+        doc_apas[f"{d.collection_id}__{d.doc_id}"] = d.get_csl_formate('apa')
+        doc_titles[f"{d.collection_id}__{d.doc_id}"] = d.title
+    for i, d in enumerate(references):
+        if to_be_update_doc := tobe_update_docs.get(f"{d['collection_id']}__{d['doc_id']}"):
+            ref_docs = [{'doc_id': to_be_update_doc.ref_doc_id, 'collection_id': to_be_update_doc.ref_collection_id}]
+            if ref_doc := Document.raw_by_docs(ref_docs):
+                ref_document = ref_doc[0]
+            else:
+                ref_document = document_update_from_rag(None, d['collection_id'], d['doc_id'])
+            references[i]['collection type'] = ref_document.collection_type
+            references[i]['collection_id'] = ref_document.collection_id
+            references[i]['doc_id'] = ref_document.doc_id
+            references[i]['id'] = ref_document.id
+            references[i]['title'] = ref_document.title
+    return references
