@@ -1,4 +1,5 @@
 import logging
+from time import sleep
 
 from django.core.cache import cache
 from django.db.models import Q
@@ -11,16 +12,18 @@ from rest_framework.views import APIView
 from bot.rag_service import Document as RagDocument
 from collection.models import Collection
 from core.utils.views import check_keys, extract_json, my_json_response
-from document.models import Document, DocumentLibrary
+from document.models import Document, DocumentLibrary, SearchHistoryCache
 from document.serializers import DocumentDetailSerializer, GenPresignedUrlQuerySerializer, \
     DocumentUploadQuerySerializer, \
     DocumentLibraryListQuerySerializer, DocumentRagUpdateSerializer, DocLibUpdateNameQuerySerializer, \
     DocLibAddQuerySerializer, DocLibDeleteQuerySerializer, DocLibCheckQuerySerializer, DocumentRagCreateSerializer, \
-    ImportPapersToCollectionSerializer, AuthorsSearchQuerySerializer, AuthorsDocumentsQuerySerializer
+    ImportPapersToCollectionSerializer, AuthorsSearchQuerySerializer, AuthorsDocumentsQuerySerializer, \
+    DocumentUploadResultSerializer, SearchQuerySerializer
 from document.service import search, presigned_url, document_personal_upload, \
     get_document_library_list, document_library_add, document_library_delete, doc_lib_batch_operation_check, \
     get_url_by_object_path, get_reference_formats, update_exist_documents, import_papers_to_collection, \
-    document_update_from_rag, search_authors, author_detail, author_documents, get_csl_reference_formats
+    document_update_from_rag, search_authors, author_detail, author_documents, get_csl_reference_formats, get_citations, \
+    get_references
 from document.tasks import async_add_user_operation_log
 
 logger = logging.getLogger(__name__)
@@ -60,20 +63,46 @@ class Search(APIView):
     def post(self, request, *args, **kwargs):  # noqa
         body = request.data
         user_id = request.user.id
-        check_keys(body, ['content'])
-        post_data = {
-            'content': body['content'],
-            'page_size': int(body.get('page_size', 10)),
-            'page_num': int(body.get('page_num', 1)),
-            'topn': int(body.get('topn', 100))
-        }
-        data = search(user_id, body['content'], post_data['page_size'], post_data['page_num'], topn=post_data['topn'])
+        serial = SearchQuerySerializer(data=body)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        post_data = serial.validated_data
+        data = search(user_id, post_data)
         async_add_user_operation_log.apply_async(kwargs={
             'user_id': user_id,
             'operation_type': 'search',
             'operation_content': body['content'],
         })
+        # add search history
+        if data:
+            history_key = f"scinav:paper:search_history:{user_id}"
+            search_history_cache = SearchHistoryCache(history_key, 5)
+            search_history_cache.add(body['content'])
         return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['POST', 'GET', "DELETE"]), name='dispatch')
+class SearchHistory(APIView):
+
+    @staticmethod
+    def get(request, *args, **kwargs):  # noqa
+        user_id = request.user.id
+        history_key = f"scinav:paper:search_history:{user_id}"
+        search_history_cache = SearchHistoryCache(history_key, 5)
+        history = search_history_cache.get()
+        return my_json_response({'history': history})
+
+    @staticmethod
+    def delete(request, index, *args, **kwargs):
+        user_id = request.user.id
+        history_key = f"scinav:paper:search_history:{user_id}"
+        search_history_cache = SearchHistoryCache(history_key, 5)
+        history = search_history_cache.get()
+        if index >= len(history) or index < 0:
+            return my_json_response({'history': search_history_cache.get()})
+        search_history_cache.delete(content=history[index])
+        return my_json_response({'history': search_history_cache.get()})
 
 
 @method_decorator([extract_json], name='dispatch')
@@ -98,7 +127,7 @@ class AuthorsSearch(APIView):
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         vd = serial.validated_data
         data = search_authors(
-            user_id, vd['content'], vd['page_size'], vd['page_num'], topn=vd['topn'])
+            user_id, vd['content'], vd['page_size'], vd['page_num'], limit=vd['limit'])
         return my_json_response(data)
 
 
@@ -112,7 +141,17 @@ class AuthorsDocuments(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         vd = serial.validated_data
-        data = author_documents(user_id, author_id, vd['page_size'], vd['page_num'])
+        data = author_documents(user_id, author_id, vd)
+        return my_json_response(data)
+
+    def post(self, request, author_id, *args, **kwargs):  # noqa
+        user_id = request.user.id
+        query = request.data
+        serial = AuthorsDocumentsQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        vd = serial.validated_data
+        data = author_documents(user_id, author_id, vd)
         return my_json_response(data)
 
 
@@ -173,7 +212,7 @@ class DocumentsCitations(APIView):
         document = Document.objects.filter(id=document_id).first()
         if not document:
             return my_json_response(code=100002, msg=f'document not found by document_id={document_id}')
-        citations = DocumentDetailSerializer.get_citations(document)
+        citations = get_citations(document)
         data = {
             'list': citations,
             'total': len(citations)
@@ -190,7 +229,7 @@ class DocumentsReferences(APIView):
         document = Document.objects.filter(id=document_id).first()
         if not document:
             return my_json_response(code=100002, msg=f'document not found by document_id={document_id}')
-        references = DocumentDetailSerializer.get_references(document)
+        references = get_references(document)
         data = {
             'list': references,
             'total': len(references)
@@ -220,16 +259,37 @@ class DocumentsReferencesFormats(APIView):
 @method_decorator(require_http_methods(['GET', "POST", 'PUT', 'DELETE']), name='dispatch')
 class DocumentsLibrary(APIView):
     @staticmethod
-    def get(request, *args, **kwargs):
+    def get(request, document_library_id=None, *args, **kwargs):
         """
         get documents by user_id
         """
         user_id = request.user.id
-        serial = DocumentLibraryListQuerySerializer(data=request.query_params)
-        if not serial.is_valid():
-            return my_json_response(serial.errors, code=100001, msg='invalid query data')
-        vd = serial.validated_data
-        data = get_document_library_list(user_id, vd['list_type'], vd['page_size'], vd['page_num'])
+        if document_library_id:
+            document_library = DocumentLibrary.objects.filter(id=document_library_id).first()
+            if not document_library:
+                return my_json_response(code=100002, msg=f'document_library not found by id={document_library_id}')
+            status = (
+                'completed' if document_library.task_status == DocumentLibrary.TaskStatusChoices.COMPLETED
+                else 'in_progress' if document_library.task_status in [
+                    DocumentLibrary.TaskStatusChoices.PENDING,
+                    DocumentLibrary.TaskStatusChoices.QUEUEING,
+                    DocumentLibrary.TaskStatusChoices.IN_PROGRESS
+                ] else 'failed'
+            )
+            data = {
+                'id': document_library_id,
+                'status': status,
+                'document_id': document_library.document_id,
+                'task_type': document_library.task_type,
+                'task_id': document_library.task_id,
+                'object_path': document_library.object_path,
+            }
+        else:
+            serial = DocumentLibraryListQuerySerializer(data=request.query_params)
+            if not serial.is_valid():
+                return my_json_response(serial.errors, code=100001, msg='invalid query data')
+            vd = serial.validated_data
+            data = get_document_library_list(user_id, vd['list_type'], vd['page_size'], vd['page_num'], vd['keyword'])
         return my_json_response(data)
 
     @staticmethod
@@ -239,11 +299,12 @@ class DocumentsLibrary(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg='invalid post data')
         vd = serial.validated_data
-        document_library_add(
+        document_libraries = document_library_add(
             request.user.id, vd['document_ids'], vd['collection_id'], vd['bot_id'], vd['add_type'],
-            vd['search_content'], vd['author_id']
+            keyword=vd['keyword'], search_info=vd['search_info']
         )
-        return my_json_response({})
+        data = DocumentUploadResultSerializer(document_libraries, many=True).data
+        return my_json_response({'list': data})
 
     @staticmethod
     def put(request, document_library_id, *args, **kwargs):
@@ -298,8 +359,9 @@ class DocumentsPersonal(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg='invalid post data')
         validated_data = serial.validated_data
-        document_personal_upload(validated_data)
-        return my_json_response(validated_data)
+        document_libraries = document_personal_upload(validated_data)
+        data = DocumentUploadResultSerializer(document_libraries, many=True).data
+        return my_json_response({'list': data})
 
 
 @method_decorator([extract_json], name='dispatch')
@@ -321,13 +383,17 @@ class DocumentsUrl(APIView):
                 'ref_doc_id', 'ref_collection_id'
             ).first()
             if not document:
-                document = document_update_from_rag(None, collection_id, doc_id)
+                new_document = document_update_from_rag(None, collection_id, doc_id)
+                document = Document.objects.filter(id=new_document.id).values(
+                    'id', 'title', 'object_path', 'collection_id', 'doc_id', 'collection_type',
+                    'ref_doc_id', 'ref_collection_id'
+                ).first()
         else:
             return my_json_response(code=100001, msg=f'document_id or (collection_id, doc_id) not found')
         if not document:
             return my_json_response(code=100002, msg=f'document not found')
         url_document = None
-        if is_paper_chat and not DocumentLibrary.objects.filter(
+        if is_paper_chat and document['collection_id'] != 'arxiv' and not DocumentLibrary.objects.filter(
                 user_id=user_id, document_id=document['id'], del_flag=False,
                 task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
         ).exists():
@@ -404,3 +470,13 @@ class DocumentsRagUpdate(APIView):
         )
         data = DocumentRagUpdateSerializer(document).data
         return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+class DocumentsLibraryStatus(APIView):
+
+    @staticmethod
+    def get(request, document_id, *args, **kwargs):
+        status = DocumentDetailSerializer.get_document_library_status(request.user.id, document_id)
+        return my_json_response({'status': status})

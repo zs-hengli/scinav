@@ -8,13 +8,17 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from bot.models import Bot
-from chat.models import Conversation
+from chat.models import Conversation, ConversationShare
 from chat.serializers import ConversationCreateSerializer, ConversationUpdateSerializer, ChatQuerySerializer, \
     QuestionAnswerSerializer, ConversationsMenuQuerySerializer, QuestionUpdateAnswerQuerySerializer, \
-    QuestionListQuerySerializer
+    QuestionListQuerySerializer, ConversationShareCreateQuerySerializer, \
+    ConversationShareDetailSerializer, ChatDocumentsTotalQuerySerializer
 from chat.service import chat_query, conversation_create, conversation_detail, conversation_list, conversation_update, \
-    conversation_menu_list, question_list
+    conversation_menu_list, question_list, conversation_share_create, conversation_create_by_share, \
+    chat_papers_total
 from core.utils.views import extract_json, my_json_response, streaming_response, ServerSentEventRenderer
+
+# from document.service import update_chat_references
 
 logger = logging.getLogger(__name__)
 
@@ -69,17 +73,41 @@ class Conversations(APIView):
     @staticmethod
     def post(request, *args, **kwargs):
         query_data = request.data
+        conversation_share = None
+        if query_data.get('share_id'):
+            conversation_share = ConversationShare.objects.filter(id=query_data['share_id'], del_flag=False).first()
+            if not conversation_share:
+                return my_json_response({}, code=100002, msg='conversation share not found')
+            query_data['bot_id'] = conversation_share.bot_id
+            query_data['collections'] = conversation_share.collections
+            if conversation_share.documents:
+                query_data['documents'] = conversation_share.documents
+            if not query_data.get('model'):
+                query_data['model'] = conversation_share.model
         serial = ConversationCreateSerializer(data=query_data)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         validated_data = serial.validated_data
-        if (
-            validated_data.get('bot_id')
-            and not Bot.objects.filter(id=validated_data['bot_id'], del_flag=False).exists()
-        ):
-            return my_json_response({}, code=100002, msg='bot not found')
-        conversation_id = conversation_create(request.user.id, serial.validated_data)
-        return my_json_response({'conversation_id': conversation_id})
+        bot_be_deleted = False
+        if validated_data.get('bot_id'):
+            bot = Bot.objects.filter(id=validated_data.get('bot_id')).first()
+            if bot and bot.del_flag:
+                # return my_json_response({}, code=120003, msg='专题被删除，无法创建对话')
+                bot_be_deleted = True
+            if not bot:
+                return my_json_response({}, code=100002, msg='bot not found')
+        if query_data.get('share_id'):
+            if bot_be_deleted:
+                validated_data['doc_ids'] = []
+                validated_data['all_document_ids'] = []
+            conversation = conversation_create_by_share(request.user.id, conversation_share, validated_data)
+        else:
+            conversation = conversation_create(request.user.id, validated_data)
+        data = {
+            'conversation_id': conversation.id,
+            'title': conversation.title,
+        }
+        return my_json_response(data)
 
     @staticmethod
     def delete(request, conversation_id, *args, **kwargs):
@@ -185,4 +213,45 @@ class QuestionUpdateAnswer(APIView):
         return my_json_response(data)
 
 
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET', 'POST']), name='dispatch')
+class ConversationShares(APIView):
+    @staticmethod
+    def get(request, share_id, *args, **kwargs):
+        share = ConversationShare.objects.filter(id=share_id).first()
+        if not share:
+            return my_json_response({}, code=100002, msg='conversation share not found')
+        detail = ConversationShareDetailSerializer(share).data
+        # if detail['questions']:
+        #     for index, question in enumerate(detail['questions']):
+        #         if question['references']:
+        #             detail['questions']['answer']['references'] = update_chat_references(question['references'])
+        return my_json_response(detail)
 
+    @staticmethod
+    def post(request, *args, **kwargs):
+        query = request.data
+        serial = ConversationShareCreateQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        vd = serial.validated_data
+        conversation = Conversation.objects.filter(id=vd['conversation_id'], user_id=request.user.id).first()
+        if not conversation:
+            return my_json_response({}, code=100002, msg='conversation not found')
+        data = conversation_share_create(request.user.id, vd, conversation)
+        return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+class ChatPapersTotal(APIView):
+    @staticmethod
+    def get(request, *args, **kwargs):
+        query = request.query_params.dict()
+        serial = ChatDocumentsTotalQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        validated_data = serial.validated_data
+        total = chat_papers_total(request.user.id, validated_data.get('bot_id'), validated_data.get('collection_ids'))
+        data = {'papers_total': total}
+        return my_json_response(data)

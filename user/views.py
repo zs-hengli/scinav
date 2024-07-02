@@ -8,6 +8,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from core.utils.views import extract_json, my_json_response
+from user.serializers import UserSyncQuerySerializer
+from user.service import sync_user_info
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,23 @@ class Index(APIView):
         data = {'desc': 'user index'}
 
         return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['PUT']), name='dispatch')
+# @permission_classes([AllowAny])
+class Users(APIView):
+
+    @staticmethod
+    def put(request, *args, **kwargs):
+        data = {}
+        query = request.data
+        serial = UserSyncQuerySerializer(data=query)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, 100001, f'validate error, {list(serial.errors.keys())}')
+        vd = serial.validated_data
+        sync_user_info(request.user, vd)
+        return my_json_response({})
 
 
 @method_decorator([extract_json], name='dispatch')

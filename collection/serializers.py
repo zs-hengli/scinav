@@ -1,4 +1,3 @@
-import json
 import logging
 
 from django.db.models import F
@@ -8,9 +7,8 @@ from rest_framework import serializers
 
 from bot.models import BotCollection, Bot
 from collection.models import Collection, CollectionDocument
-from core.utils.common import str_hash
 from document.models import Document, DocumentLibrary
-from django.core.cache import cache
+from document.serializers import SearchDocuments4AddQuerySerializer
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +35,11 @@ class CollectionCreateSerializer(serializers.ModelSerializer):
     document_ids = serializers.ListField(required=False, child=serializers.CharField(min_length=32, max_length=36))
     search_content = serializers.CharField(required=False)
     author_id = serializers.IntegerField(required=False)
+    search_info = SearchDocuments4AddQuerySerializer(required=False, default=None)
     type = serializers.ChoiceField(choices=Collection.TypeChoices.choices, default=Collection.TypeChoices.PERSONAL)
     document_titles = serializers.ListField(required=False, child=serializers.CharField(max_length=255))
     is_all = serializers.BooleanField(required=False, default=False)
+    search_limit = serializers.IntegerField(required=False, default=100)
 
     def validate(self, attrs):
         if (
@@ -47,16 +47,59 @@ class CollectionCreateSerializer(serializers.ModelSerializer):
             and not attrs.get('search_content') and not attrs.get('author_id')
         ):
             raise serializers.ValidationError(_('Please provide a name or document_ids or search_content'))
-        if attrs.get('is_all') and not attrs.get('search_content') and not attrs.get('author_id'):
-            raise serializers.ValidationError(_('Please provide a search_content or author_id'))
         if attrs.get('title') and len(attrs['title']) > 255:
             attrs['title'] = attrs['title'][:255]
 
-        return attrs
+        if attrs.get('search_content'):
+            if not attrs.get('search_info'):
+                attrs['search_info'] = {}
+            attrs['search_info']['content'] = attrs['search_content']
+            attrs['search_info']['limit'] = attrs.get('limit', 100)
+
+        if attrs.get('author_id'):
+            if not attrs.get('search_info'):
+                attrs['search_info'] = {}
+            attrs['search_info']['author_id'] = attrs['author_id']
+            attrs['search_info']['limit'] = attrs.get('limit', 1000)
+
+        if attrs.get('is_all') and (not attrs.get('search_info') or (
+            not attrs.get('search_info').get('author_id') and not attrs.get('search_info').get('content'))
+        ):
+            raise serializers.ValidationError(_('Please provide a search_content or author_id'))
+
+        return super().validate(attrs)
 
     class Meta:
         model = Collection
         fields = '__all__'
+
+
+class AddDocument2CollectionQuerySerializer(serializers.Serializer):
+    document_ids = serializers.ListField(required=False, child=serializers.CharField(min_length=32, max_length=36))
+    action = serializers.ChoiceField(required=False, choices=['add', 'delete'], default='add')
+    is_all = serializers.BooleanField(required=False, default=False)
+    search_content = serializers.CharField(required=False)
+    author_id = serializers.IntegerField(required=False)
+    search_info = SearchDocuments4AddQuerySerializer(required=False, default=None)
+    list_type = serializers.ChoiceField(
+        required=False, choices=['s2', 'arxiv', 'document_library', 'all'], default=None)
+    search_limit = serializers.IntegerField(required=False, default=100)
+
+    def validate(self, attrs):
+
+        if attrs.get('search_content'):
+            if not attrs.get('search_info'):
+                attrs['search_info'] = {}
+            attrs['search_info']['content'] = attrs['search_content']
+            attrs['search_info']['limit'] = attrs.get('limit', 100)
+
+        if attrs.get('author_id'):
+            if not attrs.get('search_info'):
+                attrs['search_info'] = {}
+            attrs['search_info']['author_id'] = attrs['author_id']
+            attrs['search_info']['limit'] = attrs.get('limit', 1000)
+
+        return super().validate(attrs)
 
 
 class CollectionCreateByDocLibSerializer(BaseModelSerializer):
@@ -220,9 +263,7 @@ class CollectionDocUpdateSerializer(serializers.Serializer):
     def validate(self, attrs):
         if not attrs.get('document_ids') and not attrs.get('is_all') and not attrs.get('list_type'):
             raise serializers.ValidationError(f"document_ids and list_type {_('cannot be empty at the same time')}")
-        if (attrs.get('is_all') or attrs.get('list_type')
-        ) and attrs.get('action') == 'add' and not attrs.get('search_content') and not attrs.get('author_id'):
-            raise serializers.ValidationError("search_content or author_id required")
+
         return attrs
 
     @staticmethod
@@ -290,6 +331,10 @@ class CollectionDocumentListSerializer(serializers.Serializer):
         p_documents, ref_documents = [], []
         if bot and user_id != bot.user_id:
             p_documents, ref_documents = bot_subscribe_personal_document_num(bot.user_id, bot=bot)
+        elif collection_ids:
+            p_documents = collection_sub_personal_documents(user_id, collection_ids)
+            if p_documents:
+                ref_documents = get_ref_document_ids(p_documents)
         doc_lib_document_ids, sub_bot_document_ids = None, None
         if list_type in ['all', 'all_documents']:
             filter_query = Q(collection_id__in=collection_ids, del_flag=False)
@@ -447,3 +492,32 @@ def bot_subscribe_personal_document_num(bot_user_id, bot_collections=None, bot=N
         & set([pd['document_id'] for pd in personal_doc_libs])
     )
     return list(document_set), ref_document_ids
+
+
+def collection_sub_personal_documents(user_id, collection_ids) -> list:
+    """
+    非本人收藏夹列表中包括的个人文献id列表
+    :param user_id:
+    :param collection_ids:
+    :return:
+    """
+    collection_ids = '\'' + '\', \''.join(collection_ids) + '\''
+    sql = ("select d.id from collection_document cd "
+           "left join document d on d.id = cd.document_id "
+           "left join collection c on cd.collection_id=c.id "
+           f"where cd.collection_id in ({collection_ids}) and cd.del_flag=false "
+           f"and c.user_id != '{user_id}' and c.del_flag=false "
+           f"and d.collection_type='personal'")
+    result = Document.raw_sql(sql)
+    document_ids = [d.id for d in result]
+    return document_ids
+
+
+def get_ref_document_ids(document_ids) -> list:
+    document_ids = '\'' + '\', \''.join(document_ids) + '\''
+    sql = ("select dr.id from document d "
+           "left join document dr on d.ref_collection_id=dr.collection_id and d.ref_doc_id=dr.doc_id "
+           f"where d.id in ({document_ids})")
+    result = Document.raw_sql(sql)
+    ref_document_ids = [d.id for d in result]
+    return ref_document_ids

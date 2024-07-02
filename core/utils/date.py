@@ -56,3 +56,22 @@ def date_len(start, end, format='%Y-%m-%dT%H:%M:%SZ', unit='second'):
         return interval.days
     else:
         return None
+
+
+def str2date(date_str, split_str='-'):
+    """
+    :param date_str: 2024; 2024-01; 2024-06-29
+    :param split_str:
+    :return 2024-01-01; 2024-01-01; 2024-06-29:
+    """
+    dates = date_str.split(' ')
+    date = dates[0]
+    split_list = date.split(split_str)
+    ret_date = None
+    if len(split_list) == 1:
+        ret_date = datetime.strptime(date, '%Y').date()
+    if len(split_list) == 2:
+        ret_date = datetime.strptime(date, '%Y-%m').date()
+    if len(split_list) == 3:
+        ret_date = datetime.strptime(date, '%Y-%m-%d').date()
+    return ret_date

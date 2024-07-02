@@ -241,10 +241,27 @@ class Document:
         resp = resp.json()
         return resp
 
+    @staticmethod
+    def complete_abstract(user_id, collection_id, doc_id):
+        url = RAG_HOST + f'/api/v1/tasks/paper-abstract-completion'
+        post_data = {
+            'user_id': user_id,
+            'collection_id': collection_id,
+            'doc_id': doc_id
+        }
+        resp = rag_requests(url, json=post_data, method='POST')
+        logger.info(f'url: {url}, post_data: {post_data}, response: {resp.text}')
+        resp = resp.json()
+        return resp
+
+
 
 class Conversations:
     @staticmethod
-    def create(user_id, conversation_id, agent_id=None, paper_ids=None, public_collection_ids=None, llm_name=None):
+    def create(
+        user_id, conversation_id, agent_id=None, paper_ids=None, public_collection_ids=None,
+        llm_name=None, history_messages=None
+    ):
         url = RAG_HOST + '/api/v1/conversations'
         post_data = {
             'id': conversation_id,
@@ -254,6 +271,8 @@ class Conversations:
             'public_collection_ids': public_collection_ids,
             'llm_name': llm_name,
         }
+        if history_messages:
+            post_data['history_messages'] = history_messages
         resp = rag_requests(url, json=post_data, method='POST')
         logger.info(f'url: {url}, response: {resp.text}')
         resp = resp.json()
@@ -366,7 +385,7 @@ class Conversations:
             question.save()
 
         try:
-            resp = rag_requests(url, json=post_data, method='POST', timeout=15, stream=True)
+            resp = rag_requests(url, json=post_data, method='POST', timeout=30, stream=True)
         except requests.exceptions.RequestException as e:
             logger.error(f'Request error: {e}')
             yield json.dumps({'event': 'on_error', 'error_code': 120001, 'error': error_msg, "detail": str(e)}) + "\n"
@@ -405,7 +424,11 @@ class Conversations:
                     if line_data and line_data.get('event'):
                         stream = Conversations.update_stream(stream, line_data)
                         if line_data['event'] == 'tool_end':
-                            line_data['output'] = stream['output']
+                            line_data['output'] = stream['output'] if stream['output'] else []
+                            for i, item in enumerate(line_data['output']):
+                                if item.get('title'):
+                                    line_data['output'][i]['doc_apa'] = item['title']
+                            # line_data['output'] = update_chat_references(user_id, line_data['output'])
                         yield json.dumps(line_data) + '\n'
         except Exception as exc:
             logger.error(f'query exception: {exc}')

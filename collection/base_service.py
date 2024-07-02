@@ -1,10 +1,11 @@
 from operator import itemgetter
 
-from bot.rag_service import Conversations as RagConversation
+from bot.rag_service import Conversations as RagConversations
 from chat.models import Conversation
 from chat.serializers import chat_paper_ids
 from collection.models import Collection, CollectionDocument
 from core.utils.common import cmp_ignore_order
+from document.base_service import search_result_from_cache
 from document.models import Document
 
 
@@ -18,6 +19,9 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
         # 'public_collection_ids': public_collection_ids,
         # 'llm_name': model,
     }
+    all_collections = list(
+        set(conversation.collections if conversation.collections else [])
+        | set(conversation.public_collection_ids if conversation.public_collection_ids else []))
     if collection_ids:
         collections = Collection.objects.filter(id__in=collection_ids).all()
         public_collection_ids = [c.id for c in collections if c.type == Collection.TypeChoices.PUBLIC]
@@ -43,20 +47,25 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
                 'full_text_accessible': p['full_text_accessible'],
             })
 
-        if not cmp_ignore_order(conversation.paper_ids, papers_info, sort_fun=itemgetter('collection_id', 'doc_id')):
+        if (
+            not cmp_ignore_order(conversation.paper_ids, papers_info, sort_fun=itemgetter('collection_id', 'doc_id'))
+            or conversation.public_collection_ids != public_collection_ids
+            or conversation.collections != personal_collection_ids
+        ):
             update_data['paper_ids'] = paper_ids
             update_data['public_collection_ids'] = public_collection_ids
             conversation.paper_ids = papers_info
             conversation.public_collection_ids = public_collection_ids
-            conversation.collections = collection_ids
+            conversation.collections = personal_collection_ids
             if collection_ids and not conversation.bot_id:
                 conversation.type = (
                     Conversation.TypeChoices.COLLECTION_COV
                     if len(collection_ids) == 1 else Conversation.TypeChoices.COLLECTIONS_COV
                 )
             conversation.save()
-            RagConversation.update(**update_data)
-    elif collection_ids is not None and collection_ids != conversation.collections:
+            RagConversations.update(**update_data)
+
+    elif collection_ids is not None and collection_ids != all_collections:
         paper_ids = []
         update_data['paper_ids'] = paper_ids
         update_data['public_collection_ids'] = []
@@ -65,11 +74,23 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
         conversation.collections = []
         conversation.type = None
         conversation.save()
-        RagConversation.update(**update_data)
+        RagConversations.update(**update_data)
 
     if model:
         update_data['llm_name'] = model
         conversation.model = model
         conversation.save()
-        RagConversation.update(**update_data)
+        RagConversations.update(**update_data)
     return conversation
+
+
+def generate_collection_title(content=None, document_titles=None):
+    if content:
+        search_result = search_result_from_cache(content, 200, 1)
+        titles = [
+            sr['title'] for sr in search_result['list']
+        ] if search_result and search_result.get('list') else [content]
+    else:
+        titles = document_titles
+    title = RagConversations.generate_favorite_title(titles)
+    return title[:255]

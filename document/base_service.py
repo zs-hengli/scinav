@@ -1,20 +1,33 @@
+import copy
+import datetime
+import json
 import logging
 
+from django.db.models import Q
 from django.core.cache import cache
 
 from collection.models import Collection, CollectionDocument
+from core.utils.common import str_hash
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentRagCreateSerializer
 from bot.rag_service import Document as RagDocument
+from django_redis import get_redis_connection
 
 logger = logging.getLogger(__name__)
 
 
-def update_document_lib(user_id, document_ids):
-    document_ids = Document.objects.filter(
-        id__in=document_ids, del_flag=False, collection_type=Document.TypeChoices.PUBLIC
-    ).values_list('id', flat=True).all()
+def update_document_lib(user_id, document_ids, keyword=None):
+    filter_query = Q(id__in=document_ids, del_flag=False, collection_type=Document.TypeChoices.PUBLIC)
+    if keyword:
+        filter_query &= Q(title__contains=keyword)
+    document_ids = Document.objects.filter(filter_query).values_list('id', flat=True).all()
+    document_libraries = []
     for doc_id in document_ids:
+        if old_document_library := DocumentLibrary.objects.filter(
+            user_id=user_id, document_id=doc_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
+        ).first():
+            document_libraries.append(old_document_library)
+            continue
         data = {
             'user_id': user_id,
             'document_id': doc_id,
@@ -24,8 +37,12 @@ def update_document_lib(user_id, document_ids):
             'task_id': None,
             'error': None,
         }
-        DocumentLibrary.objects.update_or_create(data, user_id=user_id, document_id=doc_id)
-    return True
+        update_defaults = copy.deepcopy(data)
+        update_defaults['created_at'] = datetime.datetime.now()
+        document_library, _ = DocumentLibrary.objects.update_or_create(
+            defaults=update_defaults, create_defaults=data, user_id=user_id, document_id=doc_id)
+        document_libraries.append(document_library)
+    return document_libraries
 
 
 def document_update_from_rag_ret(rag_ret):
@@ -83,17 +100,38 @@ def search_result_delete_cache(user_id):
     return True
 
 
-def bot_documents(user_id, bot, collections=None):
-    if not collections:
-        collections = Collection.objects.filter(
-            bot_id=bot.id, del_flag=False, type=Collection.TypeChoices.PERSONAL).all()
-    collection_ids = [coll.id for coll in collections]
-    coll_docs = CollectionDocument.objects.filter(collection_id__in=collection_ids, del_flag=False).all()
-    document_ids = [d.document_id for d in coll_docs]
-    if user_id == bot.user_id:
-        return document_ids
-    documents = Document.objects.filter(id__in=document_ids, del_flag=False).all()
-    pub_documents = [d for d in documents if d.collection_type == Collection.TypeChoices.PUBLIC]
-    personal_documents = [d for d in documents if d.collection_type == Collection.TypeChoices.PERSONAL]
-    documents = DocumentLibrary.objects.filter(
-        user_id=user_id, collection_id__in=collection_ids, del_flag=False).values_list('document_id', flat=True).all()
+def search_result_from_cache(user_id, content, page_size=10, page_num=1, search_type='paper', limit=100):
+    if search_type == 'paper':
+        doc_search_redis_key_prefix = f'scinav:{search_type}:search:{user_id}:{limit}'
+    else:
+        doc_search_redis_key_prefix = f'scinav:{search_type}:search:{user_id}'
+    content_hash = str_hash(f'{content}')
+    redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
+    search_cache = cache.get(redis_key)
+
+    start_num = page_size * (page_num - 1)
+    logger.info(f"limit: [{start_num}: {page_size * page_num}]")
+    if search_cache:
+        logger.info(f'search resp from cache: {redis_key}')
+        all_cache = json.loads(search_cache)
+        total = len(all_cache)
+        return {
+            'list': json.loads(search_cache)[start_num:(page_size * page_num)] if total > start_num else [],
+            'total': total
+        }
+
+
+def search_result_cache_data(user_id, content, search_type='paper', limit=100):
+    if search_type == 'paper':
+        doc_search_redis_key_prefix = f'scinav:{search_type}:search:{user_id}:{limit}'
+    else:
+        doc_search_redis_key_prefix = f'scinav:{search_type}:search:{user_id}'
+    content_hash = str_hash(f'{content}')
+    redis_key = f'{doc_search_redis_key_prefix}:{content_hash}'
+    search_cache = cache.get(redis_key)
+
+    if search_cache:
+        logger.info(f'search resp from cache: {redis_key}')
+        all_cache = json.loads(search_cache)
+        return all_cache
+    return None

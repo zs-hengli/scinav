@@ -99,14 +99,14 @@ class Search(APIView):
     "{OPENAPI_BASE_URL}/openapi/v1/papers/search?content=LLM&limit=100" \\
     --header 'X-API-KEY: ••••••'
 \n'''},
-            {'lang': 'python', 'label': 'Python', 'source': '''import os
+            {'lang': 'python', 'label': 'Python', 'source': f'''import os
 import requests
 
-headers = {
+headers = {{
   'X-API-KEY': '••••••'
-}
-openapi_base_url = os.environ.get('OPENAPI_BASE_URL', 'openapi-base-url')
-url = f"{openapi_base_url}/openapi/v1/papers/search?content=LLM&limit=100"
+}}
+openapi_base_url = '{OPENAPI_BASE_URL}'
+url = f"{{openapi_base_url}}/openapi/v1/papers/search?content=LLM&limit=100"
 
 response = requests.get(url, headers=headers)
 
@@ -155,14 +155,14 @@ class PersonalLibrary(APIView):
     --header 'X-API-KEY: ••••••'
 '''
              },
-            {'lang': 'python', 'label': 'Python', 'source': '''import os
+            {'lang': 'python', 'label': 'Python', 'source': f'''import os
 import requests
             
-headers = {
+headers = {{
   'X-API-KEY': '••••••'
-}
-openapi_base_url = os.environ.get('OPENAPI_BASE_URL', 'openapi-base-url')
-url = f"{openapi_base_url}/openapi/v1/personal/library?status=completed&limit=100"
+}}
+openapi_base_url = '{OPENAPI_BASE_URL}'
+url = f"{{openapi_base_url}}/openapi/v1/personal/library?status=completed&limit=100"
 
 response = requests.get(url, headers=headers)
 
@@ -231,16 +231,16 @@ class UploadPaper(APIView):
     --header 'Content-Type: application/octet-stream' \\
     --header 'X-API-KEY: ••••••'\n
 '''},
-            {'lang': 'python', 'label': 'Python', 'source': '''import os
+            {'lang': 'python', 'label': 'Python', 'source': f'''import os
 import requests
 
-headers = {
+headers = {{
   'Content-Type': 'application/octet-stream',
   'X-API-KEY': '••••••'
-}
+}}
 file_path = '<path>/xxx.pdf'
-openapi_base_url = os.environ.get('OPENAPI_BASE_URL', 'openapi-base-url')
-url = f"{openapi_base_url}/openapi/v1/papers/upload/xxx.pdf"
+openapi_base_url = '{OPENAPI_BASE_URL}'
+url = f"{{openapi_base_url}}/openapi/v1/papers/upload/xxx.pdf"
 with open(file_path, "rb") as file:
     response = requests.put(url, headers=headers, data=file)
 
@@ -292,14 +292,14 @@ class TopicPlaza(APIView):
     --header 'X-API-KEY: ••••••'
 '''
              },
-            {'lang': 'python', 'label': 'Python', 'source': '''import os
+            {'lang': 'python', 'label': 'Python', 'source': f'''import os
 import requests
             
-headers = {
+headers = {{
   'X-API-KEY': '••••••'
-}
-openapi_base_url = os.environ.get('OPENAPI_BASE_URL', 'openapi-base-url')
-url = f"{openapi_base_url}/openapi/v1/topics/plaza?limit=100"
+}}
+openapi_base_url = '{OPENAPI_BASE_URL}'
+url = f"{{openapi_base_url}}/openapi/v1/topics/plaza?limit=100"
 
 response = requests.get(url, headers=headers)
 
@@ -340,14 +340,14 @@ class MineTopics(APIView):
     --header 'X-API-KEY: ••••••'
 '''
              },
-            {'lang': 'python', 'label': 'Python', 'source': '''import os
+            {'lang': 'python', 'label': 'Python', 'source': f'''import os
 import requests
             
-headers = {
+headers = {{
   'X-API-KEY': '••••••'
-}
-openapi_base_url = os.environ.get('OPENAPI_BASE_URL', 'openapi-base-url')
-url = f"{openapi_base_url}/openapi/v1/topics/mine?limit=100"
+}}
+openapi_base_url = '{OPENAPI_BASE_URL}'
+url = f"{{openapi_base_url}}/openapi/v1/topics/mine?limit=100"
 
 response = requests.get(url, headers=headers)
 
@@ -388,14 +388,14 @@ class MineCollection(APIView):
     --header 'X-API-KEY: ••••••'
 '''
              },
-            {'lang': 'python', 'label': 'Python', 'source': '''import os
+            {'lang': 'python', 'label': 'Python', 'source': f'''import os
 import requests
 
-headers = {
+headers = {{
   'X-API-KEY': '••••••'
-}
-openapi_base_url = os.environ.get('OPENAPI_BASE_URL', 'openapi-base-url')
-url = f"{openapi_base_url}/openapi/v1/collections/mine?limit=100"
+}}
+openapi_base_url = '{OPENAPI_BASE_URL}'
+url = f"{{openapi_base_url}}/openapi/v1/collections/mine?limit=100"
 
 response = requests.get(url, headers=headers)
 
@@ -478,21 +478,21 @@ class Chat(APIView):
         "topic_id": "367a4c84-8738-444b-856d-90e6196c6fe6"
     }}' 
 \n'''},
-            {'lang': 'python', 'label': 'Python', 'source': '''import os
+            {'lang': 'python', 'label': 'Python', 'source': f'''import os
 import requests
 import json
 
-payload = json.dumps({
+payload = json.dumps({{
   "content": "what is LLM",
   "conversation_id": "d02df0c9-9df2-4d3b-9c32-2cc3ab27f726",
   "topic_id": "367a4c84-8738-444b-856d-90e6196c6fe6"
-})
-headers = {
+}})
+headers = {{
   'Content-Type': 'application/json',
   'X-API-KEY': '••••••'
-}
-openapi_base_url = os.environ.get('OPENAPI_BASE_URL', 'openapi-base-url')
-url = f"{openapi_base_url}/openapi/v1/chat"
+}}
+openapi_base_url = '{OPENAPI_BASE_URL}'
+url = f"{{openapi_base_url}}/openapi/v1/chat"
 
 response = requests.post(url, headers=headers, data=payload, stream=True)
 for line in response.iter_lines():

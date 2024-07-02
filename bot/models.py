@@ -12,6 +12,7 @@ class Bot(models.Model):
         PERSONAL = 'personal', _('personal'),
         IN_PROGRESS = 'in_progress', _('in_progress'),
         PUBLIC = 'public', _('public')
+        SHARE = 'share', _('share')
 
     id = models.CharField(max_length=36, primary_key=True, default=uuid.uuid4)
     agent_id = models.CharField(null=True, blank=True, max_length=36)

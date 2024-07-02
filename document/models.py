@@ -1,15 +1,19 @@
+import datetime
+import json
 import logging
 import re
+import time
 import traceback
 import uuid
 
 from citeproc import CitationStylesStyle, CitationStylesBibliography, formatter, Citation, CitationItem
 from citeproc.source.json import CiteProcJSON
-from django.db import models
+from django.db import models, connection
 from django.utils.translation import gettext_lazy as _
 # from pybtex.database import BibliographyData, Entry
 
 from core.utils.statics import EN_FIRST_NAMES
+from django_redis import get_redis_connection
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +31,7 @@ PUB_TYPE_2_CSL_TYPE = {
     "Book": "book",
     "BookSection": "chapter"
 }
+
 
 class Document(models.Model):
     class TypeChoices(models.TextChoices):
@@ -52,6 +57,7 @@ class Document(models.Model):
     title = models.CharField(null=True, blank=True, db_index=True, max_length=512, default=None, db_default=None)
     abstract = models.TextField(null=True, blank=True, db_default=None)
     authors = models.JSONField(null=True)
+    author_names_ids = models.JSONField(null=True)
     doi = models.CharField(null=True, blank=True, max_length=256, default=None, db_default=None)
     categories = models.JSONField(null=True)
     pages = models.IntegerField(null=True)
@@ -80,12 +86,18 @@ class Document(models.Model):
 
     @staticmethod
     def raw_by_docs(docs, fileds='*', where=None):
+        if not docs:
+            return []
         if fileds != '*' and isinstance(fileds, list):
             fileds = ','.join(fileds)
         doc_ids_str = ','.join([f"('{d['collection_id']}', {d['doc_id']})" for d in docs])
         sql = f"SELECT {fileds} FROM document WHERE (collection_id, doc_id) IN ({doc_ids_str})"
         if where:
             sql += f"and {where}"
+        return Document.objects.raw(sql)
+
+    @staticmethod
+    def raw_sql(sql):
         return Document.objects.raw(sql)
 
     @staticmethod
@@ -396,17 +408,17 @@ class Document(models.Model):
         else:
             paper_type = PUB_TYPE_2_CSL_TYPE[pub_type]
         paper_type_2_bibtex_type = {
-            "book":"book",
-            "report":"techreport",
-            "article":"article",
-            "article-journal":"article",
-            "article-newspaper":"article",
-            "paper-conference":"inproceedings",
-            "chapter":"inbook",
-            "dataset":"misc",
-            "document":"misc",
-            "review":"misc",
-            "post":"misc",
+            "book": "book",
+            "report": "techreport",
+            "article": "article",
+            "article-journal": "article",
+            "article-newspaper": "article",
+            "paper-conference": "inproceedings",
+            "chapter": "inbook",
+            "dataset": "misc",
+            "document": "misc",
+            "review": "misc",
+            "post": "misc",
         }
         bibtex_type = paper_type_2_bibtex_type[paper_type]
         if self.authors:
@@ -519,3 +531,49 @@ class DocumentLibraryFolder(models.Model):
     class Meta:
         db_table = 'document_library_folder'
         verbose_name = 'document_library_folder'
+
+
+def bulk_insert_ignore_duplicates(model: models.Model, data):
+    table_name = model._meta.db_table
+    columns = data[0].keys()
+    column_names = ', '.join(columns)
+    values_list = ', '.join(
+        '({})'.format(', '.join('%s' for _ in columns)) for _ in data
+    )
+    values = [json.dumps(item) if isinstance(item, list | dict) else item for sublist in data for item in
+              sublist.values()]
+
+    sql = f"""
+    INSERT INTO {table_name} ({column_names}) VALUES {values_list}
+    ON CONFLICT DO NOTHING;
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(sql, values)
+
+
+class SearchHistoryCache:
+    def __init__(self, key, limit=5):
+        self.conn = get_redis_connection('default')
+        self.key = key
+        self.limit = limit
+        self.max_len = limit * 2
+
+    def add(self, content):
+        now = time.time()
+        self.conn.zadd(self.key, {content: now})
+        self.conn.zremrangebyrank(self.key, 0, -self.max_len)
+        data = self.conn.zrevrange(self.key, 0, max(self.limit - 1, 0))
+        if data:
+            data = [d.decode() for d in data]
+        return data
+
+    def get(self):
+        data = self.conn.zrevrange(self.key, 0, max(self.limit - 1, 0))
+        if data:
+            data = [d.decode() for d in data]
+        return data
+
+    def delete(self, content):
+        self.conn.zrem(self.key, content)
+        return True

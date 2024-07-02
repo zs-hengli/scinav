@@ -1,23 +1,23 @@
 import copy
 import datetime
-import json
 import logging
 
-from django.core.cache import cache
 from django.db.models import Q, F
 from django.utils.translation import gettext_lazy as _
 
 from bot.models import BotCollection, BotSubscribe, Bot
-from bot.rag_service import Collection as RagCollection, Conversations as RagConversations
+from bot.rag_service import Collection as RagCollection
+from collection.base_service import generate_collection_title
 from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionPublicSerializer, CollectionListSerializer, \
     CollectionRagPublicListSerializer, \
-    CollectionSubscribeSerializer, CollectionDocumentListSerializer, bot_subscribe_personal_document_num
-from core.utils.common import str_hash
+    CollectionSubscribeSerializer, CollectionDocumentListSerializer, bot_subscribe_personal_document_num, \
+    CollectionDocUpdateSerializer
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentApaListSerializer, CollectionDocumentListCollectionSerializer
-from document.service import search_result_from_cache, search, author_documents
-from document.tasks import async_ref_document_to_document_library, async_update_conversation_by_collection
+from document.service import search, author_documents
+from document.tasks import async_update_conversation_by_collection, async_ref_document_to_document_library, \
+    async_complete_abstract
 
 logger = logging.getLogger(__name__)
 
@@ -32,15 +32,17 @@ def collection_list(user_id, list_type, page_size, page_num, keyword=None):
         public_collections = [pc | {'updated_at': pc['update_time']} for pc in public_collections]
         pub_serial = CollectionRagPublicListSerializer(data=public_collections, many=True)
         pub_serial.is_valid(raise_exception=True)
-        public_total = len(pub_serial.data)
+        public_collection_list = pub_serial.data
+        public_collection_list.sort(key=lambda obj: obj.get('id'))
+        public_total = len(public_collection_list)
         if start_num == 0:
-            coll_list = pub_serial.data
-            ids = [c['id'] for c in public_collections]
-            _save_public_collection(Collection.objects.filter(id__in=ids).all(), public_collections)
+            coll_list = public_collection_list
+            _save_public_collection(Collection.objects.filter(type=Collection.TypeChoices.PUBLIC).all(),
+                                    public_collections)
     # 2 submit bot collections
     bots_dict, sub_bot_infos = {}, {}
     if 'subscribe' in list_type:
-        sub_list_data, bots_dict, sub_bot_infos = _bot_subscribe_collection_list(user_id)
+        sub_list_data, bots_dict, sub_bot_infos = _bot_subscribe_collection_list(user_id, keyword)
         sub_serial = CollectionSubscribeSerializer(data=sub_list_data, many=True)
         sub_serial.is_valid()
         subscribe_total = len(sub_serial.data)
@@ -101,7 +103,8 @@ def _is_collection_in_published_bot(collection_ids):
     bot_titles = None
     if is_in_published_bot:
         bots = BotCollection.objects.filter(
-            collection_id__in=collection_ids, del_flag=False, bot__type=Bot.TypeChoices.PUBLIC).values('bot__title').all()
+            collection_id__in=collection_ids, del_flag=False, bot__type=Bot.TypeChoices.PUBLIC).values(
+            'bot__title').all()
         bot_titles = [b['bot__title'] for b in bots]
     return is_in_published_bot, bot_titles
 
@@ -128,10 +131,15 @@ def _is_collection_docs_all_in_document_library(collection_id, user_id):
         return True
 
 
-def _bot_subscribe_collection_list(user_id):
+def _bot_subscribe_collection_list(user_id, keyword=None):
     bot_sub = BotSubscribe.objects.filter(user_id=user_id, del_flag=False).all()
     bot_ids = [bc.bot_id for bc in bot_sub]
-    bots = Bot.objects.filter(id__in=bot_ids)
+    if keyword:
+        filter_query = Q(id__in=bot_ids, del_flag=False, title__icontains=keyword) & ~Q(user_id=user_id)
+    else:
+        filter_query = Q(id__in=bot_ids, del_flag=False) & ~Q(user_id=user_id)
+    bots = Bot.objects.filter(filter_query).all()
+    bot_ids = [b.id for b in bots]
     bots_dict = {b.id: b for b in bots}
     bot_collections = BotCollection.objects.filter(
         bot_id__in=bot_ids, del_flag=False).order_by('bot_id', '-updated_at').all()
@@ -193,18 +201,6 @@ def _bot_subscribe_collection_list(user_id):
     return list_data, bots_dict, sub_bot_infos
 
 
-def generate_collection_title(content=None, document_titles=None):
-    if content:
-        search_result = search_result_from_cache(content, 200, 1)
-        titles = [
-            sr['title'] for sr in search_result['list']
-        ] if search_result and search_result.get('list') else [content]
-    else:
-        titles = document_titles
-    title = RagConversations.generate_favorite_title(titles)
-    return title[:255]
-
-
 def collection_detail(user_id, collection_id):
     pass
 
@@ -247,16 +243,45 @@ def collection_document_add(validated_data):
     ):
         async_ref_document_to_document_library.apply_async(args=[document_ids])
     async_update_conversation_by_collection.apply_async(args=[vd['collection_id']])
+    async_complete_abstract.apply_async(args=[vd['user_id'], document_ids])
     return True
 
 
-def get_search_documents_4_all_selected(user_id, document_ids, content=None, author_id=None, page_size=1000, page_num=1):
-    if not content and not author_id:
-        return []
-    if content:
-        documents = search(user_id, content, page_size, page_num)
+def create_collection_by_documents(user_id, document_ids, title=None):
+    if not title:
+        document_titles = Document.objects.filter(pk__in=document_ids).values_list('title', flat=True).all()
+        title = generate_collection_title(document_titles=document_titles)
+    collection_data = {
+        'title': title,
+        'user_id': user_id,
+        'type': Collection.TypeChoices.PERSONAL,
+        'updated_at': datetime.datetime.now()
+    }
+    collection = Collection.objects.create(**collection_data)
+    # update collection document
+    update_data = {
+        'user_id': user_id,
+        'collection_id': str(collection.id),
+        'document_ids': document_ids,
+        'is_all': False,
+        'action': 'add',
+    }
+    # update_serial = CollectionDocUpdateSerializer(data=update_data)
+    # update_serial.is_valid(raise_exception=True)
+    collection_document_add(update_data)
+    return collection
+
+
+def get_search_documents_4_all_selected(user_id, document_ids, search_info):
+
+    if search_info.get('content'):
+        search_info['page_num'] = 1
+        search_info['page_size'] = search_info.get('limit', 100)
+        documents = search(user_id, search_info)
     else:
-        documents = author_documents(user_id, author_id, page_size, page_num)
+        search_info['page_num'] = 1
+        search_info['page_size'] = search_info.get('limit', 1000)
+        documents = author_documents(user_id, search_info['author_id'], search_info)
     documents_dict = {d['id']: d for d in documents['list']}
     if document_ids:
         for d_id in document_ids:
@@ -323,6 +348,7 @@ def collections_delete(validated_data):
 
 def _save_public_collection(saved_collections, public_collections):
     saved_collections_dict = {c.id: c for c in saved_collections}
+    public_collections_dict = {c['id']: c for c in public_collections}
     for pc in public_collections:
         coll_data = {
             'id': pc['id'],
@@ -337,13 +363,22 @@ def _save_public_collection(saved_collections, public_collections):
         serial = CollectionPublicSerializer(data=coll_data)
         if not serial.is_valid():
             logger.error(f"public collection data is invalid: {serial.errors}")
-        if pc['id'] not in saved_collections_dict.keys():
+        if pc['id'] not in saved_collections_dict:
             # create
             serial.save()
         else:
             # update
             collection = saved_collections_dict[pc['id']]
-            serial.update(collection, coll_data)
+            if (
+                collection.total_public != coll_data['total_public']
+                or collection.title != coll_data['title']
+                or collection.del_flag
+            ):
+                serial.update(collection, coll_data)
+    for saved_collection in saved_collections:
+        if saved_collection.id not in public_collections_dict:
+            # delete
+            Collection.objects.filter(id=saved_collection.id).update(del_flag=True)
 
 
 def collections_docs(user_id, validated_data):
@@ -351,6 +386,7 @@ def collections_docs(user_id, validated_data):
     collection_ids = vd['collection_ids']
     page_size = vd['page_size']
     page_num = vd['page_num']
+    keyword = vd['keyword']
     res_data = []
     public_count, need_public_count = 0, 0
     public_collections = Collection.objects.filter(id__in=collection_ids, type=Collection.TypeChoices.PUBLIC).all()
@@ -358,6 +394,8 @@ def collections_docs(user_id, validated_data):
     if page_num == 1 and vd['list_type'] == 'all':
         need_public_count = public_count
         for c in public_collections:
+            if keyword and c.title.find(keyword) == -1:
+                continue
             res_data.append({
                 'id': None,
                 'collection_id': c.id,
@@ -366,10 +404,8 @@ def collections_docs(user_id, validated_data):
                 'title': f"{_('公共库')}: {c.title}",
                 'has_full_text': False,
             })
-    query_set, d1, d2, d3 = CollectionDocumentListSerializer.get_collection_documents(
+    query_set, d1, d2, ref_ds = CollectionDocumentListSerializer.get_collection_documents(
         vd['user_id'], collection_ids, vd['list_type'])
-    query_total = query_set.count()
-    total = query_total + public_count
     start_num = page_size * (page_num - 1)
     logger.info(f"limit: [{start_num}: {page_size * page_num}]")
     # 没有按照titles名称升序排序
@@ -378,16 +414,26 @@ def collections_docs(user_id, validated_data):
     # 按照名称升序排序
     all_c_docs = query_set.all()
     start = start_num - (public_count % page_size if not need_public_count and start_num else 0)
-    filter_query = Q(id__in=[cd['document_id'] for cd in all_c_docs])
+    document_ids = [cd['document_id'] for cd in all_c_docs]
+    if ref_ds:
+        document_ids += ref_ds
+    filter_query = Q(id__in=document_ids)
     if vd.get('keyword'):
         filter_query &= Q(title__icontains=vd['keyword'])
-    docs = Document.objects.filter(filter_query).order_by('title')[
-           start:(page_size * page_num - need_public_count)
-    ]
+    doc_query_set = Document.objects.filter(filter_query).order_by('title')
+    docs = doc_query_set[start:(page_size * page_num - need_public_count)]
+
+    query_total = doc_query_set.count()
+    total = query_total + public_count
 
     if vd['list_type'] == 'all':
         docs_data = DocumentApaListSerializer(docs, many=True).data
         data_dict = {d['id']: d for d in docs_data}
+        document_ids = [d['id'] for d in docs_data]
+        doc_lib_document_ids = DocumentLibrary.objects.filter(
+            document_id__in=document_ids, del_flag=False, user_id=user_id,
+            task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
+        ).values_list('document_id', flat=True).all()
         temp_res_data = []
         for d in docs:
             temp = {
@@ -399,12 +445,10 @@ def collections_docs(user_id, validated_data):
                 'has_full_text': False,
             }
             # 本人个人库列表
-            if ((
-                DocumentLibrary.objects.filter(
-                    document_id=d.id, del_flag=False, user_id=user_id,
-                    task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
-                ).exists() or d.collection_id == user_id
-            ) and d.object_path):
+            if (
+                (d.id in doc_lib_document_ids or d.collection_id == user_id or d.collection_id == 'arxiv')
+                and d.object_path
+            ):
                 temp['has_full_text'] = True
             temp_res_data.append(temp)
         res_data += temp_res_data

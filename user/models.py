@@ -14,7 +14,7 @@ class MyUser(AbstractUser):
     email = models.EmailField(null=True, max_length=254, default=None, db_default=None)
     phone = models.CharField(null=True, max_length=14, default=None, db_default=None)
     nickname = models.CharField(null=True, max_length=128, default=None, db_default=None)
-    avatar = models.CharField(null=True, max_length=256, default=None, db_default=None)
+    avatar = models.CharField(null=True, max_length=4096, default=None, db_default=None)
     first_name = models.CharField(null=True, max_length=150, verbose_name='first name')
     last_name = models.CharField(null=True, max_length=150, verbose_name='last name')
     password = models.CharField(null=True, max_length=128, verbose_name='password')
@@ -25,6 +25,7 @@ class MyUser(AbstractUser):
     updated_at = models.DateTimeField(null=True, auto_now=True, verbose_name='Last update time')
     date_joined = models.DateTimeField(null=True, auto_now_add=True, verbose_name='date joined')
     description = models.TextField(null=True, db_default=None)
+    register_source = models.JSONField(null=True, max_length=64, default=None, db_default=None)
 
     class Meta:
         db_table = 'my_user'

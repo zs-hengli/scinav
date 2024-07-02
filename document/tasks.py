@@ -1,5 +1,6 @@
 import datetime
 import logging
+from time import sleep
 
 from celery import shared_task
 from django.db.models import Q
@@ -7,7 +8,8 @@ from django.db.models import Q
 from bot.base_service import recreate_bot, bot_detail, bot_documents
 from bot.models import BotCollection, Bot
 from bot.rag_service import Document as RagDocument
-from chat.models import Conversation
+from chat.models import Conversation, Question, ConversationShare
+from chat.serializers import QuestionListSerializer
 from collection.base_service import update_conversation_by_collection
 from collection.models import Collection
 from collection.serializers import bot_subscribe_personal_document_num
@@ -71,6 +73,8 @@ def update_document_library_task(doc_lib: DocumentLibrary):
     elif task_status == DocumentLibrary.TaskStatusChoices.COMPLETED:
         if rag_ret.get('paper'):
             rag_ret['paper']['state'] = task_status
+        else:
+            return doc_lib, rag_ret
         update_openapi_log_upload_status(task_id, OpenapiLog.Status.SUCCESS)
         try:
             document = document_update_from_rag_ret(rag_ret['paper']) if rag_ret['paper'] else None
@@ -111,7 +115,7 @@ def async_schedule_publish_bot_task(self, task_id=None):
 def async_update_document(self, document_ids):
     documents = Document.objects.filter(pk__in=document_ids).all()
     fileds = [
-        'title', 'abstract', 'authors', 'doi', 'categories',
+        'title', 'abstract', 'authors', 'author_names_ids', 'doi', 'categories',
         'year', 'pub_date', 'pub_type', 'venue', 'journal', 'conference', 'keywords',  # 'full_text_accessible',
         'pages', 'citation_count', 'reference_count', 'object_path', 'source_url', 'checksum',
         'ref_collection_id', 'ref_doc_id',
@@ -172,7 +176,10 @@ def async_update_conversation_by_collection(self, collection_id):
 
         conversations = Conversation.objects.filter(collections__contains=collection_id, del_flag=False).all()
         for conv in conversations:
-            update_conversation_by_collection(collection.user_id, conv, conv.collections)
+            all_collections = list(
+                set(conv.collections if conv.collections else [])
+                | set(conv.public_collection_ids if conv.public_collection_ids else []))
+            update_conversation_by_collection(collection.user_id, conv, all_collections)
     return True
 
 
@@ -209,3 +216,59 @@ def _bot_detail_to_log(user_id, bot_id):
         'bot_detail': detail,
         'documents': documents,
     }
+
+
+@shared_task(bind=True)
+def async_update_conversation_share_content(self, conversation_share_id, conversation_id, selected_questions):
+    logger.info(
+        f'async_update_conversation_share_content, {conversation_share_id}, {conversation_id},{selected_questions}')
+    conversation_share = ConversationShare.objects.filter(pk=conversation_share_id).first()
+    if not conversation_share:
+        logger.warning(
+            f'async_update_conversation_share_content, not find conversation_share by id: {conversation_share_id}'
+        )
+        return False
+    selected_questions_dict = {q['id']:q for q in selected_questions}
+    filter_query = Q(conversation_id=conversation_id, del_flag=False)
+    # filter_query &= ~Q(id__in=selected_question_ids)
+    query_set = Question.objects.filter(filter_query).all()
+    question_data = QuestionListSerializer(query_set, many=True).data
+    new_question_data = []
+    for index, q in enumerate(question_data):
+        if q['id'] in selected_questions_dict:
+            sq = selected_questions_dict[q['id']]
+            if (
+                not sq['has_answer'] and sq['has_answer'] is not None
+                and not sq['has_question'] and sq['has_question'] is not None
+            ):
+                continue
+            if not sq['has_answer'] and sq['has_answer'] is not None:
+                q['answer'] = None
+                q['references'] = None
+            if not sq['has_question'] and sq['has_question'] is not None:
+                q['content'] = None
+            new_question_data.append(q)
+        else:
+            new_question_data.append(q)
+    conversation_share.content = {
+        'questions': new_question_data,
+    }
+    conversation_share.num = len(new_question_data)
+    conversation_share.save()
+    logger.info(f'async_update_conversation_share_content success ({len(selected_questions)}), {conversation_share_id}')
+    return True
+
+
+@shared_task(bind=True)
+def async_complete_abstract(self, user_id, document_ids):
+    documents = Document.objects.filter(pk__in=document_ids).all()
+    for d in documents:
+        ret, times = None, 0
+        while not ret and times < 3:
+            try:
+                ret = RagDocument.complete_abstract(user_id, d.collection_id, d.doc_id)
+            except Exception as e:
+                logger.error(f'async_complete_abstract error: {e}')
+                sleep(5)
+    return True
+

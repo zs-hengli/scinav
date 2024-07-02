@@ -252,7 +252,7 @@ class BotDocuments(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         vd = serial.validated_data
-        docs = bot_documents(request.user.id, bot, vd['list_type'], vd['page_size'], vd['page_num'])
+        docs = bot_documents(request.user.id, bot, vd['list_type'], vd['page_size'], vd['page_num'], vd['keyword'])
         return my_json_response(docs)
 
 

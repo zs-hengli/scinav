@@ -55,6 +55,10 @@ class CollectionDocument(models.Model):
             sql += f"and {where}"
         return CollectionDocument.objects.raw(sql)
 
+    @staticmethod
+    def raw_sql(sql):
+        return CollectionDocument.objects.raw(sql)
+
     class Meta:
         db_table = 'collection_document'
         verbose_name = 'collection_document'

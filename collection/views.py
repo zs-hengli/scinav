@@ -15,8 +15,9 @@ from collection.serializers import (CollectionCreateSerializer,
                                     CollectionUpdateSerializer, CollectionDeleteQuerySerializer,
                                     CollectionDocumentListQuerySerializer, CollectionCheckQuerySerializer,
                                     CollectionCreateBotCheckQuerySerializer, CollectionDocumentSelectedQuerySerializer,
-                                    CollectionListQuerySerializer)
-from collection.service import (collection_list, collections_docs, generate_collection_title,
+                                    CollectionListQuerySerializer, AddDocument2CollectionQuerySerializer)
+from collection.base_service import generate_collection_title
+from collection.service import (collection_list, collections_docs,
                                 collections_delete, collection_chat_operation_check, collection_delete_operation_check,
                                 collections_published_bot_titles, collections_create_bot_check,
                                 collections_reference_bot_titles, collection_document_add, collection_document_delete,
@@ -76,8 +77,7 @@ class Collections(APIView):
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         vd = serial.validated_data
         if vd.get('is_all'):
-            documents = get_search_documents_4_all_selected(
-                user_id, vd.get('document_ids'), vd.get('search_content'), vd.get('author_id'))
+            documents = get_search_documents_4_all_selected(user_id, vd.get('document_ids'), vd['search_info'])
             vd['document_ids'] = [doc['id'] for doc in documents]
             vd['document_titles'] = [doc['title'] for doc in documents]
         else:
@@ -104,13 +104,9 @@ class Collections(APIView):
             'is_all': vd.get('is_all', False),
             'action': 'add',
         }
-        if vd.get('search_content'):
-            update_data['search_content'] = vd['search_content']
-        if vd.get('author_id'):
-            update_data['author_id'] = vd['author_id']
-        update_serial = CollectionDocUpdateSerializer(data=update_data)
-        update_serial.is_valid(raise_exception=True)
-        collection_document_add(update_serial.validated_data)
+        # update_serial = CollectionDocUpdateSerializer(data=update_data)
+        # update_serial.is_valid(raise_exception=True)
+        collection_document_add(update_data)
 
         data = CollectionDetailSerializer(collection).data
         return my_json_response(data)
@@ -190,20 +186,24 @@ class CollectionDocuments(APIView):
             return my_json_response({}, code=100003, msg='此收藏夹不支持添加文献')
 
         post_data = request.data
-        post_data['user_id'] = user_id
-        post_data['collection_id'] = collection_id
-        if post_data.get('search_content') or post_data.get('author_id'):
-            documents = get_search_documents_4_all_selected(
-                user_id, post_data.get('document_ids'), post_data.get('search_content'), post_data.get('author_id')
-            )
-            post_data['document_ids'] = [doc['id'] for doc in documents]
-        serial = CollectionDocUpdateSerializer(data=post_data)
+        serial = AddDocument2CollectionQuerySerializer(data=post_data)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
-        if serial.validated_data['action'] == 'add':
-            collection_document_add(serial.validated_data)
+        validated_data = serial.validated_data
+        validated_data['user_id'] = user_id
+        validated_data['collection_id'] = collection_id
+        if validated_data.get('search_into') and (
+            validated_data['search_into'].get('content') or validated_data['search_into'].get('author_id')
+        ):
+            documents = get_search_documents_4_all_selected(user_id, validated_data.get('document_ids'), validated_data)
+            validated_data['document_ids'] = [doc['id'] for doc in documents]
+        # serial = CollectionDocUpdateSerializer(data=validated_data)
+        # if not serial.is_valid():
+        #     return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
+        if serial.validated_data['action'] != 'delete':
+            collection_document_add(validated_data)
         else:
-            collection_document_delete(serial.validated_data)
+            collection_document_delete(validated_data)
 
         return my_json_response({})
 

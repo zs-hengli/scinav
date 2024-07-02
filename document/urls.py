@@ -11,6 +11,7 @@ urlpatterns = [
     path('documents/library', views.DocumentsLibrary.as_view()),
     path('documents/library/operation/check', views.DocumentsLibraryOperationCheck.as_view()),
     path('documents/library/<str:document_library_id>', views.DocumentsLibrary.as_view()),
+    path('documents/library/<str:document_id>/status', views.DocumentsLibraryStatus.as_view()),
 
     path('documents/<str:document_id>', views.Documents.as_view()),
     path('documents/<str:document_id>/url', views.DocumentsUrl.as_view()),
@@ -26,6 +27,8 @@ urlpatterns = [
 
 
     path('search', views.Search.as_view()),
+    path('search/history', views.SearchHistory.as_view()),
+    path('search/history/<int:index>', views.SearchHistory.as_view()),
     path('authors/search', views.AuthorsSearch.as_view()),
     path('authors/<int:author_id>', views.Authors.as_view()),
     path('authors/<int:author_id>/documents', views.AuthorsDocuments.as_view()),
