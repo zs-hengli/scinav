@@ -215,9 +215,10 @@ def collection_document_add(validated_data):
         user_id=vd['user_id'], del_flag=False, document_id__in=vd['document_ids']
     ).values_list('document_id', flat=True)
     collection_document_ids = [{'collection_id': vd['collection_id'], 'document_id': d_id} for d_id in document_ids]
-
-    exist_coll_docs = CollectionDocument.raw_by_docs(
-        collection_document_ids, ['id', 'collection_id', 'document_id', 'full_text_accessible'])
+    exist_coll_docs = []
+    if collection_document_ids:
+        exist_coll_docs = CollectionDocument.raw_by_docs(
+            collection_document_ids, ['id', 'collection_id', 'document_id', 'full_text_accessible'])
     exist_coll_docs_dict = {cd.document_id: cd for cd in exist_coll_docs}
     non_exist_coll_docs = []
     for d_id in document_ids:
@@ -477,6 +478,7 @@ def collection_documents_select_list(user_id, validated_data):
     vd = validated_data
     collection_ids = vd['collection_ids']
     list_type = vd['list_type']
+    keyword = vd['keyword']
     bot, ref_doc_lib_ids, ref_ds = None, None, []
     if vd.get('bot_id'):
         bot = Bot.objects.filter(id=vd['bot_id'], del_flag=False).first()
@@ -505,8 +507,11 @@ def collection_documents_select_list(user_id, validated_data):
     document_ids = list(set([cd['document_id'] for cd in all_c_docs] + ref_ds))
     if vd.get('document_ids'):
         document_ids = list(set(document_ids) - set(vd['document_ids']))
+    if keyword:
+        document_ids = Document.objects.filter(
+            id__in=document_ids, title__icontains=keyword).values_list('id', flat=True).all()
     return {
-        'document_ids': document_ids,
+        'document_ids': list(document_ids),
         'total': len(document_ids),
     }
 

@@ -656,6 +656,8 @@ def document_library_add(
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.AUTHOR_SEARCH or (
         search_info and search_info.get('author_id')
     ):
+        search_info['page_num'] = 1
+        search_info['page_size'] = search_info.get('limit', 1000)
         search_result = author_documents(user_id, search_info.get('author_id'), search_info)
         if search_result:
             all_document_ids = [d['id'] for d in search_result['list']]

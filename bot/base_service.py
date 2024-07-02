@@ -43,31 +43,17 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
     collections = [bc.collection for bc in bot_collections]
     collection_ids = [c.id for c in collections]
     bot_is_subscribed = is_subscribed(user_id, bot)
-    # query_set = CollectionDocument.objects.filter(
-    #     collection_id__in=collection_ids).distinct().values('document_id').order_by('document_id')
     public_count, need_public, need_public_count, personal_count, public_collections = 0, False, 0, 0, []
     all_public_collections = Collection.objects.filter(id__in=collection_ids, type=Collection.TypeChoices.PUBLIC).all()
-    all_public_collection_ids = [c.id for c in all_public_collections]
     if page_num == 1 and list_type in ['all', 'all_documents']:
+        need_public = True
         need_public_count = len(all_public_collections)
         public_collections = all_public_collections
-    elif page_num == 1 and list_type == 's2':
-        if 's2' in all_public_collection_ids:
-            need_public_count = 1
-            public_collections = [pc for pc in all_public_collections if pc.id == 's2']
-    elif page_num == 1 and list_type == 'arxiv':
-        if 'arxiv' in all_public_collection_ids:
-            need_public_count = 1
-            public_collections = [pc for pc in all_public_collections if pc.id == 'arxiv']
-    if page_num == 1 and list_type in ['all', 'all_documents', 's2', 'arxiv']:
-        need_public = True
     public_count = len(public_collections)
 
     query_set, d1, d2, ref_ds = CollectionDocumentListSerializer.get_collection_documents(
         user_id, collection_ids, list_type, bot)
     start_num = page_size * (page_num - 1)
-    doc_ids = []
-    show_total = 0
     # 个人上传文件库 关联的文献
     # 未发布专题 显示未公共库文献， 专题广场专题显示为订阅全文
     ref_doc_lib_ids = (
@@ -90,25 +76,23 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
             ref_ds = list(Document.objects.filter(
                 id__in=ref_ds, full_text_accessible=True, del_flag=False).values_list('id', flat=True).all())
             ref_ds = list(set(ref_ds) - set(ref_doc_lib_ids))
-        doc_ids = ref_ds[start_num:(page_size * page_num - need_public_count)]
-        need_public_count += len(doc_ids)
-        public_count += len(ref_ds)
-        show_total += len(ref_ds)
-    personal_count = query_set.count()
-    total = public_count + personal_count
-    show_total += personal_count
-    logger.info(f"limit: [{start_num}:{page_size * page_num}], personal_count: {personal_count}")
-    if page_size * page_num > public_count:
-        start = start_num - (public_count % page_size if not need_public_count and start_num else 0)
-        c_docs = query_set[start:(page_size * page_num - need_public_count)] if total > start_num else []
-        doc_ids += [cd['document_id'] for cd in c_docs]
-    filter_query = Q(id__in=doc_ids)
+
+    all_c_docs = query_set.all()
+    start = start_num - (public_count % page_size if not need_public_count and start_num else 0)
+    document_ids = [cd['document_id'] for cd in all_c_docs]
+    if ref_ds:
+        document_ids += ref_ds
+    filter_query = Q(id__in=document_ids)
     if keyword:
         filter_query &= Q(title__icontains=keyword)
-    docs = Document.objects.filter(filter_query).all()
-    # docs = [cd.document for cd in c_docs]
+    doc_query_set = Document.objects.filter(filter_query).order_by('title')
+    docs = doc_query_set[start:(page_size * page_num - need_public_count)]
+    query_total = doc_query_set.count()
+    total = query_total + public_count
+    show_total = query_total
+
     res_data = []
-    if list_type in ['all', 'all_documents', 's2', 'arxiv'] and public_collections and need_public:
+    if list_type in ['all', 'all_documents'] and public_collections and need_public:
         for p_c in public_collections:
             res_data.append({
                 'id': None,
@@ -141,8 +125,7 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
             all_full_text_docs += list(full_text_ref_documents)
         for doc in docs:
             has_full_text = (
-                True
-                if doc.id in all_full_text_docs or (
+                True if doc.id in all_full_text_docs or (
                     doc.id in ref_ds and doc.object_path and bot.type == Bot.TypeChoices.PUBLIC)
                 else False
             )
