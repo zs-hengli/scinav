@@ -531,7 +531,10 @@ def collection_chat_operation_check(user_id, validated_data):
     public_collections = RagCollection.list()
     public_collection_ids = [pc['id'] for pc in public_collections]
     if vd.get('is_all'):
-        personal_collections = Collection.objects.filter(user_id=user_id, del_flag=False).all()
+        filter_query = Q(user_id=user_id, del_flag=False)
+        if vd.get('keyword'):
+            filter_query &= Q(title__icontains=vd['keyword']) & Q
+        personal_collections = Collection.objects.filter(filter_query).all()
         real_collection_ids = [c.id for c in personal_collections] + public_collection_ids
         ids = list(set(real_collection_ids) - set(ids))
     return 0, {'collection_ids': ids}
@@ -544,6 +547,8 @@ def collection_delete_operation_check(user_id, validated_data):
         filter_query = Q(user_id=user_id, del_flag=False)
         if vd.get('ids'):
             filter_query &= ~Q(id__in=vd['ids'])
+        if vd.get('keyword'):
+            filter_query &= Q(title__icontains=vd['keyword'])
         all_colls = Collection.objects.filter(filter_query).all()
         ids = [c.id for c in all_colls]
     has_reference_bots, bot_titles = _collection_ref_bots(user_id, ids)

@@ -442,6 +442,7 @@ class CollectionDocumentListSerializer(serializers.Serializer):
 class CollectionCheckQuerySerializer(serializers.Serializer):
     ids = serializers.ListField(required=False, child=serializers.CharField(), default=None)
     is_all = serializers.BooleanField(required=False, default=False)
+    keyword = serializers.CharField(required=False, default=None, allow_blank=True, trim_whitespace=False)
 
     def validate(self, attrs):
         if not attrs.get('is_all') and not attrs.get('ids'):
