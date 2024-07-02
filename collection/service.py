@@ -334,6 +334,8 @@ def collections_delete(validated_data):
         query_filter = Q(user_id=vd['user_id'], del_flag=False)
         if vd.get('ids'):
             query_filter &= ~Q(id__in=vd['ids'])
+        if vd.get('keyword'):
+            query_filter &= Q(title__icontains=vd['keyword'])
         collections = Collection.objects.filter(query_filter)
 
     else:

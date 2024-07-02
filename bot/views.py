@@ -11,10 +11,11 @@ from bot.base_service import bot_detail, bot_documents
 from bot.models import Bot, HotBot, BotTools
 from bot.rag_service import Bot as RagBot
 from bot.serializers import BotCreateSerializer, BotListQuerySerializer, BotDocumentsQuerySerializer, \
-    BotToolsCreateQuerySerializer, BotToolsUpdateQuerySerializer, BotToolsDeleteQuerySerializer, BotDetailSerializer
+    BotToolsCreateQuerySerializer, BotToolsUpdateQuerySerializer, BotToolsDeleteQuerySerializer, BotDetailSerializer, \
+    MyBotListAllSerializer
 from bot.service import (bot_create, bot_delete, bot_publish, bot_subscribe, bot_update, hot_bots, get_bot_list,
                          bot_tools_create, bot_tools_update, formate_bot_tools, del_invalid_bot_tools,
-                         bot_tools_add_bot_id, bot_user_full_text_document_ids)
+                         bot_tools_add_bot_id, bot_user_full_text_document_ids, bots_plaza)
 from document.tasks import async_add_user_operation_log
 from core.utils.exceptions import ValidationError
 from core.utils.views import extract_json, my_json_response
@@ -262,6 +263,37 @@ class BotDocuments(APIView):
 class BotPublish(APIView):
 
     @staticmethod
+    def get(request, bot_id, order=0, *args, **kwargs):
+        if isinstance(order, str) and not order.isdigit():
+            return my_json_response({}, code=100001, msg='order must be int')
+        order = int(order)
+        code, msg, data = bot_publish(bot_id, order=order)
+        return my_json_response(code=code, msg=msg, data=data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+@permission_classes([AllowAny])
+class BotUnPublish(APIView):
+
+    @staticmethod
     def get(request, bot_id, *args, **kwargs):
-        code, msg = bot_publish(bot_id)
-        return my_json_response(code=code, msg=msg, data={})
+        bot = Bot.objects.filter(pk=bot_id).first()
+        if not bot:
+            return my_json_response({}, 100002, 'bot not exists')
+        bot.type = Bot.TypeChoices.PERSONAL
+        bot.pub_date = None
+        bot.order = 0
+        bot.save()
+        return my_json_response(MyBotListAllSerializer(bot).data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+@permission_classes([AllowAny])
+class BotsPlaza(APIView):
+
+    @staticmethod
+    def get(request, *args, **kwargs):
+        data = bots_plaza()
+        return my_json_response(data)

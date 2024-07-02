@@ -327,7 +327,7 @@ class DocumentsLibrary(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg='invalid query data')
         vd = serial.validated_data
-        document_library_delete(user_id, vd.get('ids'), vd.get('list_type'))
+        document_library_delete(user_id, vd.get('ids'), vd.get('list_type'), vd.get('keyword'))
         return my_json_response({})
 
 

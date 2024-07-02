@@ -775,7 +775,7 @@ def doc_lib_batch_operation_check(user_id, validated_data):
     return 0, {'document_ids': document_ids}, ''
 
 
-def document_library_delete(user_id, ids, list_type):
+def document_library_delete(user_id, ids, list_type, keyword=None):
     if list_type:
         if list_type == DocumentLibraryListQuerySerializer.ListTypeChoices.ALL:
             filter_query = Q(user_id=user_id, del_flag=False)
@@ -793,6 +793,8 @@ def document_library_delete(user_id, ids, list_type):
             filter_query &= ~Q(id__in=ids)
     else:
         filter_query = Q(user_id=user_id, del_flag=False, id__in=ids)
+    if keyword:
+        filter_query &= (Q(document_title__icontains=keyword) | Q(filename__icontains=keyword))
     doc_libs = DocumentLibrary.objects.filter(filter_query)
     all_doc_libs = doc_libs.all()
     user_per_document_ids = [doclib.document_id for doclib in all_doc_libs if doclib.document_id and doclib.filename]

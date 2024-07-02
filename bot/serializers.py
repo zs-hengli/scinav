@@ -126,7 +126,7 @@ class MyBotListAllSerializer(BaseModelSerializer):
 
     class Meta:
         model = Bot
-        fields = ['id', 'author', 'title', 'description', 'updated_at', 'user_id']
+        fields = ['id', 'author', 'title', 'description', 'updated_at', 'user_id', 'order']
 
 
 class BotListAllSerializer(BaseModelSerializer):
@@ -139,7 +139,13 @@ class BotListAllSerializer(BaseModelSerializer):
 
     class Meta:
         model = Bot
-        fields = ['id', 'author', 'title', 'description', 'doc_total', 'updated_at', 'user_id']
+        fields = ['id', 'author', 'title', 'description', 'doc_total', 'updated_at', 'user_id', 'order']
+
+
+class BotsPlazaResultsSerializer(BaseModelSerializer):
+    class Meta:
+        model = Bot
+        fields = ['id', 'title', 'updated_at', 'order']
 
 
 class BotListMySerializer(BaseModelSerializer):

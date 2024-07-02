@@ -238,6 +238,7 @@ class CollectionDeleteQuerySerializer(serializers.Serializer):
         required=False, child=serializers.CharField(required=True, max_length=36, min_length=1)
     )
     is_all = serializers.BooleanField(required=False, default=False)
+    keyword = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
 
     def validate(self, attrs):
         if attrs.get('ids'):
