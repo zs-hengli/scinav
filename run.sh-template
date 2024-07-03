@@ -16,8 +16,8 @@ export DB_PASSWORD=''
 export DB_HOST='127.0.0.1'
 export DB_PORT='5432'
 # connection pool
-export DB_POOL_MAX_CONNS='20'
-export DB_POOL_REUSE_CONNS='10'
+export DB_POOL_MAX_CONNS=20
+export DB_POOL_REUSE_CONNS=10
 
 # redis
 export REDIS_HOST='127.0.0.1'

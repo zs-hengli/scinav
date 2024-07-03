@@ -106,8 +106,8 @@ DATABASES_ALL = {
         'ATOMIC_REQUESTS': False,
         'CONN_MAX_AGE': 0,
         "OPTIONS": {
-            'MAX_CONNS': os.environ.get('DB_POOL_MAX_CONNS', 20),
-            'REUSE_CONNS': os.environ.get('DB_POOL_REUSE_CONNS', 10)
+            'MAX_CONNS': int(os.environ.get('DB_POOL_MAX_CONNS', 20)),
+            'REUSE_CONNS': int(os.environ.get('DB_POOL_REUSE_CONNS', 10)),
         },
     }
 }
