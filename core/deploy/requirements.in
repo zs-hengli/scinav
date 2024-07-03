@@ -40,4 +40,3 @@ qrcode
 # gunicorn
 gunicorn
 gevent
->>>>>>> gunicorn
