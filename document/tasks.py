@@ -4,6 +4,7 @@ from time import sleep
 
 from celery import shared_task
 from django.db.models import Q
+# from django_db_geventpool.utils import close_connection
 
 from bot.base_service import recreate_bot, bot_detail, bot_documents
 from bot.models import BotCollection, Bot
@@ -24,6 +25,7 @@ logger = logging.getLogger('celery')
 
 
 @shared_task(bind=True)
+# @close_connection
 def async_document_library_task(self, task_id=None):
     # no task_id
     logger.info(f'xxxxx async_document_library_task, {self}, {task_id}')
@@ -93,6 +95,7 @@ def update_document_library_task(doc_lib: DocumentLibrary):
 
 
 @shared_task(bind=True)
+# @close_connection
 def async_schedule_publish_bot_task(self, task_id=None):
     logger.info(f'xxxxx async_schedule_publish_bot_task, {self}, {task_id}')
     bots = Bot.objects.filter(type=Bot.TypeChoices.IN_PROGRESS).all()
@@ -112,6 +115,7 @@ def async_schedule_publish_bot_task(self, task_id=None):
 
 
 @shared_task(bind=True)
+# @close_connection
 def async_update_document(self, document_ids):
     documents = Document.objects.filter(pk__in=document_ids).all()
     fileds = [
@@ -140,6 +144,7 @@ def async_update_document(self, document_ids):
 
 
 @shared_task(bind=True)
+# @close_connection
 def async_ref_document_to_document_library(self, document_ids):
     """
     下载个人上传的关联文献
@@ -154,6 +159,7 @@ def async_ref_document_to_document_library(self, document_ids):
 
 
 @shared_task(bind=True)
+# @close_connection
 def async_update_conversation_by_collection(self, collection_id):
     """
     收藏夹有调整 更新相关问答 和专题
@@ -184,6 +190,7 @@ def async_update_conversation_by_collection(self, collection_id):
 
 
 @shared_task(bind=True)
+# @close_connection
 def async_add_user_operation_log(
     self, user_id, operation_type, operation_content=None, obj_id1=None, obj_id2=None, obj_id3=None, source=None
 ):
@@ -219,6 +226,7 @@ def _bot_detail_to_log(user_id, bot_id):
 
 
 @shared_task(bind=True)
+# @close_connection
 def async_update_conversation_share_content(self, conversation_share_id, conversation_id, selected_questions):
     logger.info(
         f'async_update_conversation_share_content, {conversation_share_id}, {conversation_id},{selected_questions}')
@@ -260,6 +268,7 @@ def async_update_conversation_share_content(self, conversation_share_id, convers
 
 
 @shared_task(bind=True)
+# @close_connection
 def async_complete_abstract(self, user_id, document_ids):
     documents = Document.objects.filter(pk__in=document_ids).all()
     for d in documents:

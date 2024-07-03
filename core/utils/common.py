@@ -187,6 +187,16 @@ def cmp_ignore_order(src=None, dst=None, sort_fun=None):
         return src == dst
 
 
+def send_email(subject, content, to_emails, from_email=None):
+    from django.core.mail import send_mail
+    res = send_mail(subject, content, from_email, to_emails)
+    if res:
+        logger.info(f'Send email to {to_emails} success')
+    else:
+        logger.error(f'Send email to {to_emails} failed')
+    return res
+
+
 if __name__ == '__main__':
     from operator import itemgetter
     l1 = [{"read": False, "write": "100"}, {"write": "100", "read": False, 'id': 12}]

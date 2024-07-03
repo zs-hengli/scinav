@@ -68,6 +68,7 @@ django==5.0.3
     #   django-celery-beat
     #   django-celery-results
     #   django-cors-headers
+    #   django-db-geventpool
     #   django-log-request-id
     #   django-redis
     #   django-timezone-field
@@ -78,6 +79,8 @@ django-celery-beat==2.6.0
 django-celery-results==2.5.1
     # via -r core/deploy/requirements.in
 django-cors-headers==4.3.1
+    # via -r core/deploy/requirements.in
+django-db-geventpool==4.0.5
     # via -r core/deploy/requirements.in
 django-log-request-id==2.1.0
     # via -r core/deploy/requirements.in
@@ -93,12 +96,18 @@ drf-spectacular==0.27.2
     # via -r core/deploy/requirements.in
 filelock==3.13.1
     # via virtualenv
+gevent==24.2.1
+    # via -r core/deploy/requirements.in
 gql==2.0.0
     # via authing
 graphql-core==2.3.2
     # via
     #   authing
     #   gql
+greenlet==3.0.3
+    # via gevent
+gunicorn==22.0.0
+    # via -r core/deploy/requirements.in
 identify==2.5.35
     # via pre-commit
 idna==3.6
@@ -122,7 +131,9 @@ lxml==5.2.2
 nodeenv==1.8.0
     # via pre-commit
 packaging==23.2
-    # via build
+    # via
+    #   build
+    #   gunicorn
 pip-tools==7.4.1
     # via -r core/deploy/requirements.in
 platformdirs==4.2.0
@@ -215,6 +226,10 @@ wcwidth==0.2.13
     # via prompt-toolkit
 wheel==0.42.0
     # via pip-tools
+zope-event==5.0
+    # via gevent
+zope-interface==6.4.post2
+    # via gevent
 
 # The following packages are considered to be unsafe in a requirements file:
 # pip

@@ -3,7 +3,8 @@
 
 export DEBUG='false'  # true false
 export LOG_LEVEL='INFO'  # INFO DEBUG WARNING ERROR
-export LOG_FILE='sci-nav.log'
+export LOG_FILE='logs/sci-nav.log'
+export CELERY_LOG_FILE='logs/celery.log'
 
 #export DJANGO_SETTINGS_MODULE='core.settings'
 export DJANGO_DB='postgresql'
@@ -14,6 +15,9 @@ export DB_USER='db_user'
 export DB_PASSWORD=''
 export DB_HOST='127.0.0.1'
 export DB_PORT='5432'
+# connection pool
+export DB_POOL_MAX_CONNS='20'
+export DB_POOL_REUSE_CONNS='10'
 
 # redis
 export REDIS_HOST='127.0.0.1'
@@ -53,4 +57,5 @@ python3 manage.py migrate
 
 
 # Start the server in development mode at http://localhost:8300
-python3 manage.py runserver 0.0.0.0:8300  --noreload
+#python3 manage.py runserver 0.0.0.0:8300  --noreload
+gunicorn core.wsgi -c core/gunicorn/prod.py -b 0.0.0.0:8300

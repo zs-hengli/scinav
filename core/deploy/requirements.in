@@ -7,7 +7,10 @@ django_redis
 requests
 
 # pgsql
+# psycopg[binary,pool]
+# psycopg[c]
 psycopg2-binary
+django_db_geventpool
 
 # S3
 boto3==1.34.58
@@ -29,3 +32,7 @@ authing==4.5.18
 # cls(citation style language) styles format
 citeproc-py
 pybtex
+
+# gunicorn
+gunicorn
+gevent
