@@ -6,7 +6,8 @@ urlpatterns = [
     path('bot/index', views.Index.as_view()),
 
     path('bots/hot', views.HotBots.as_view()),
-    path('bots/hot/<str:bot_id>', views.HotBots.as_view()),
+    path('bots/<str:bot_id>/hot', views.HotBots.as_view()),
+    path('bots/<str:bot_id>/hot/order/<int:order>', views.HotBots.as_view()),
 
     path('bots', views.Bots.as_view()),
     path('bots/tools', views.BotsTools.as_view()),

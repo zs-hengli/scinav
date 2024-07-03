@@ -809,7 +809,8 @@ def document_library_delete(user_id, ids, list_type, keyword=None):
             collection_id=coll_id,
         ).update(del_flag=True)
         if effect_num:
-            Collection.objects.filter(id=coll_id).update(total_personal=F('total_personal') - effect_num)
+            coll_documents_total = CollectionDocument.objects.filter(collection_id=coll_id, del_flag=False).count()
+            Collection.objects.filter(id=coll_id).update(total_personal=coll_documents_total)
             async_update_conversation_by_collection.apply_async(args=(coll_id,))
     effect_pub_coll_ids = CollectionDocument.objects.filter(
         collection_id__in=user_collection_ids, document_id__in=user_pub_doc_ids

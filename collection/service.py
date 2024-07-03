@@ -236,8 +236,9 @@ def collection_document_add(validated_data):
     # bulk_insert
     CollectionDocument.objects.bulk_create(non_exist_coll_docs)
     if created_num + updated_num:
-        Collection.objects.filter(id=vd['collection_id']).update(
-            total_personal=F('total_personal') + created_num + updated_num)
+        coll_documents_total = CollectionDocument.objects.filter(
+            collection_id=vd['collection_id'], del_flag=False).count()
+        Collection.objects.filter(id=vd['collection_id']).update(total_personal=coll_documents_total)
     if (
         document_ids and
         Collection.objects.filter(id=vd['collection_id'], type=Collection.TypeChoices.PUBLIC).exists()
@@ -314,15 +315,14 @@ def collection_document_delete(validated_data):
         document_ids = [d['document_id'] for d in query_set.all()]
         if vd.get('document_ids'):
             document_ids = list(set(document_ids) - set(vd['document_ids']))
-        effect_num, deleted = CollectionDocument.objects.filter(
-            collection_id=vd['collection_id'], document_id__in=document_ids, del_flag=False
-        ).delete()
-        Collection.objects.filter(id=vd['collection_id']).update(total_personal=F('total_personal') - effect_num)
     else:
-        effect_num, deleted = CollectionDocument.objects.filter(
-            collection_id=vd['collection_id'], document_id__in=vd['document_ids'], del_flag=False
-        ).delete()
-        Collection.objects.filter(id=vd['collection_id']).update(total_personal=F('total_personal') - effect_num)
+        document_ids = vd['document_ids']
+    CollectionDocument.objects.filter(
+        collection_id=vd['collection_id'], document_id__in=document_ids, del_flag=False
+    ).delete()
+    coll_documents_total = CollectionDocument.objects.filter(
+        collection_id=vd['collection_id'], del_flag=False).count()
+    Collection.objects.filter(id=vd['collection_id']).update(total_personal=coll_documents_total)
     async_update_conversation_by_collection.apply_async(args=[vd['collection_id']])
     return validated_data
 

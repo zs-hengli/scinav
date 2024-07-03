@@ -19,6 +19,15 @@ logger = logging.getLogger(__name__)
 def bot_detail(user_id, bot):
     # bot = Bot.objects.get(pk=bot_id)
     bot_data = BotDetailSerializer(bot).data
+    if bot_data['collections']:
+        collections = Collection.objects.filter(id__in=bot_data['collections']).all()
+        for collection in collections:
+            if collection.id in ['s2', 'arxiv']:
+                continue
+            coll_doc_total = CollectionDocument.objects.filter(collection_id=collection.id, del_flag=False).count()
+            if collection.total_personal != coll_doc_total:
+                collection.total_personal = coll_doc_total
+                collection.save()
     if is_subscribed(user_id, bot):
         bot_data['subscribed'] = True
     else:

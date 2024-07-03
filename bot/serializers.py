@@ -99,14 +99,19 @@ class BotDetailSerializer(BaseModelSerializer):
 
 class HotBotListSerializer(BaseModelSerializer):
     title = serializers.SerializerMethodField()
+    order = serializers.SerializerMethodField()
 
     @staticmethod
     def get_title(obj: HotBot):
         return obj.bot.title
 
+    @staticmethod
+    def get_order(obj: HotBot):
+        return obj.order_num
+
     class Meta:
         model = HotBot
-        fields = ['bot_id', 'order_num', 'title', 'updated_at']
+        fields = ['bot_id', 'order', 'order_num', 'title', 'updated_at']
 
 
 class BotListQuerySerializer(serializers.Serializer):
