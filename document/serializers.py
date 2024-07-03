@@ -386,7 +386,7 @@ class DocLibAddQuerySerializer(serializers.Serializer):
     add_type = serializers.ChoiceField(required=False, choices=AddTypeChoices, default=None)
     search_content = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
     author_id = serializers.IntegerField(required=False, allow_null=True, default=None)
-    keyword = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
+    keyword = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
     search_limit = serializers.IntegerField(required=False, default=100)
     search_info = SearchDocuments4AddQuerySerializer(required=False, default=None)
 
@@ -438,6 +438,7 @@ class DocLibDeleteQuerySerializer(serializers.Serializer):
     # is_all = serializers.BooleanField(required=False, default=False)
     list_type = serializers.ChoiceField(
         required=False, choices=DocumentLibraryListQuerySerializer.ListTypeChoices, default=None)
+    keyword = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
 
     def validate(self, attrs):
         if attrs.get('ids'):

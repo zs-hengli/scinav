@@ -44,9 +44,9 @@ class CollectionCreateSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if (
             not attrs.get('title') and not attrs.get('document_ids')
-            and not attrs.get('search_content') and not attrs.get('author_id')
+            and not attrs.get('search_info')
         ):
-            raise serializers.ValidationError(_('Please provide a name or document_ids or search_content'))
+            raise serializers.ValidationError(_('Please provide a name or document_ids or search_info'))
         if attrs.get('title') and len(attrs['title']) > 255:
             attrs['title'] = attrs['title'][:255]
 
@@ -238,6 +238,7 @@ class CollectionDeleteQuerySerializer(serializers.Serializer):
         required=False, child=serializers.CharField(required=True, max_length=36, min_length=1)
     )
     is_all = serializers.BooleanField(required=False, default=False)
+    keyword = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
 
     def validate(self, attrs):
         if attrs.get('ids'):
@@ -306,6 +307,7 @@ class CollectionDocumentSelectedQuerySerializer(serializers.Serializer):
     list_type = serializers.ChoiceField(
         required=True, choices=['all', 'arxiv', 's2', 'subscribe_full_text', 'document_library']
     )
+    keyword = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
 
     def validate(self, attrs):
         if not attrs.get('collection_ids') and not attrs.get('bot_id'):
@@ -440,6 +442,7 @@ class CollectionDocumentListSerializer(serializers.Serializer):
 class CollectionCheckQuerySerializer(serializers.Serializer):
     ids = serializers.ListField(required=False, child=serializers.CharField(), default=None)
     is_all = serializers.BooleanField(required=False, default=False)
+    keyword = serializers.CharField(required=False, default=None, allow_blank=True, trim_whitespace=False)
 
     def validate(self, attrs):
         if not attrs.get('is_all') and not attrs.get('ids'):

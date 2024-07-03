@@ -99,14 +99,19 @@ class BotDetailSerializer(BaseModelSerializer):
 
 class HotBotListSerializer(BaseModelSerializer):
     title = serializers.SerializerMethodField()
+    order = serializers.SerializerMethodField()
 
     @staticmethod
     def get_title(obj: HotBot):
         return obj.bot.title
 
+    @staticmethod
+    def get_order(obj: HotBot):
+        return obj.order_num
+
     class Meta:
         model = HotBot
-        fields = ['bot_id', 'order_num', 'title', 'updated_at']
+        fields = ['bot_id', 'order', 'order_num', 'title', 'updated_at']
 
 
 class BotListQuerySerializer(serializers.Serializer):
@@ -126,7 +131,7 @@ class MyBotListAllSerializer(BaseModelSerializer):
 
     class Meta:
         model = Bot
-        fields = ['id', 'author', 'title', 'description', 'updated_at', 'user_id']
+        fields = ['id', 'author', 'title', 'description', 'updated_at', 'user_id', 'order']
 
 
 class BotListAllSerializer(BaseModelSerializer):
@@ -139,7 +144,13 @@ class BotListAllSerializer(BaseModelSerializer):
 
     class Meta:
         model = Bot
-        fields = ['id', 'author', 'title', 'description', 'doc_total', 'updated_at', 'user_id']
+        fields = ['id', 'author', 'title', 'description', 'doc_total', 'updated_at', 'user_id', 'order']
+
+
+class BotsPlazaResultsSerializer(BaseModelSerializer):
+    class Meta:
+        model = Bot
+        fields = ['id', 'title', 'updated_at', 'order']
 
 
 class BotListMySerializer(BaseModelSerializer):

@@ -29,6 +29,7 @@ class Bot(models.Model):
     type = models.CharField(null=True, blank=True, max_length=32, default=TypeChoices.PERSONAL,
                             db_default=TypeChoices.PERSONAL, choices=TypeChoices)
     pub_date = models.DateField(null=True)
+    order = models.IntegerField(null=False, default=0, db_default=0)
     extension = models.JSONField(null=True)
     del_flag = models.BooleanField(default=False, db_default=False)
     updated_at = models.DateTimeField(null=True, auto_now=True)

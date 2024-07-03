@@ -215,9 +215,10 @@ def collection_document_add(validated_data):
         user_id=vd['user_id'], del_flag=False, document_id__in=vd['document_ids']
     ).values_list('document_id', flat=True)
     collection_document_ids = [{'collection_id': vd['collection_id'], 'document_id': d_id} for d_id in document_ids]
-
-    exist_coll_docs = CollectionDocument.raw_by_docs(
-        collection_document_ids, ['id', 'collection_id', 'document_id', 'full_text_accessible'])
+    exist_coll_docs = []
+    if collection_document_ids:
+        exist_coll_docs = CollectionDocument.raw_by_docs(
+            collection_document_ids, ['id', 'collection_id', 'document_id', 'full_text_accessible'])
     exist_coll_docs_dict = {cd.document_id: cd for cd in exist_coll_docs}
     non_exist_coll_docs = []
     for d_id in document_ids:
@@ -235,8 +236,9 @@ def collection_document_add(validated_data):
     # bulk_insert
     CollectionDocument.objects.bulk_create(non_exist_coll_docs)
     if created_num + updated_num:
-        Collection.objects.filter(id=vd['collection_id']).update(
-            total_personal=F('total_personal') + created_num + updated_num)
+        coll_documents_total = CollectionDocument.objects.filter(
+            collection_id=vd['collection_id'], del_flag=False).count()
+        Collection.objects.filter(id=vd['collection_id']).update(total_personal=coll_documents_total)
     if (
         document_ids and
         Collection.objects.filter(id=vd['collection_id'], type=Collection.TypeChoices.PUBLIC).exists()
@@ -313,15 +315,14 @@ def collection_document_delete(validated_data):
         document_ids = [d['document_id'] for d in query_set.all()]
         if vd.get('document_ids'):
             document_ids = list(set(document_ids) - set(vd['document_ids']))
-        effect_num, deleted = CollectionDocument.objects.filter(
-            collection_id=vd['collection_id'], document_id__in=document_ids, del_flag=False
-        ).delete()
-        Collection.objects.filter(id=vd['collection_id']).update(total_personal=F('total_personal') - effect_num)
     else:
-        effect_num, deleted = CollectionDocument.objects.filter(
-            collection_id=vd['collection_id'], document_id__in=vd['document_ids'], del_flag=False
-        ).delete()
-        Collection.objects.filter(id=vd['collection_id']).update(total_personal=F('total_personal') - effect_num)
+        document_ids = vd['document_ids']
+    CollectionDocument.objects.filter(
+        collection_id=vd['collection_id'], document_id__in=document_ids, del_flag=False
+    ).delete()
+    coll_documents_total = CollectionDocument.objects.filter(
+        collection_id=vd['collection_id'], del_flag=False).count()
+    Collection.objects.filter(id=vd['collection_id']).update(total_personal=coll_documents_total)
     async_update_conversation_by_collection.apply_async(args=[vd['collection_id']])
     return validated_data
 
@@ -333,6 +334,8 @@ def collections_delete(validated_data):
         query_filter = Q(user_id=vd['user_id'], del_flag=False)
         if vd.get('ids'):
             query_filter &= ~Q(id__in=vd['ids'])
+        if vd.get('keyword'):
+            query_filter &= Q(title__icontains=vd['keyword'])
         collections = Collection.objects.filter(query_filter)
 
     else:
@@ -477,6 +480,7 @@ def collection_documents_select_list(user_id, validated_data):
     vd = validated_data
     collection_ids = vd['collection_ids']
     list_type = vd['list_type']
+    keyword = vd['keyword']
     bot, ref_doc_lib_ids, ref_ds = None, None, []
     if vd.get('bot_id'):
         bot = Bot.objects.filter(id=vd['bot_id'], del_flag=False).first()
@@ -505,8 +509,11 @@ def collection_documents_select_list(user_id, validated_data):
     document_ids = list(set([cd['document_id'] for cd in all_c_docs] + ref_ds))
     if vd.get('document_ids'):
         document_ids = list(set(document_ids) - set(vd['document_ids']))
+    if keyword:
+        document_ids = Document.objects.filter(
+            id__in=document_ids, title__icontains=keyword).values_list('id', flat=True).all()
     return {
-        'document_ids': document_ids,
+        'document_ids': list(document_ids),
         'total': len(document_ids),
     }
 
@@ -524,7 +531,10 @@ def collection_chat_operation_check(user_id, validated_data):
     public_collections = RagCollection.list()
     public_collection_ids = [pc['id'] for pc in public_collections]
     if vd.get('is_all'):
-        personal_collections = Collection.objects.filter(user_id=user_id, del_flag=False).all()
+        filter_query = Q(user_id=user_id, del_flag=False)
+        if vd.get('keyword'):
+            filter_query &= Q(title__icontains=vd['keyword']) & Q
+        personal_collections = Collection.objects.filter(filter_query).all()
         real_collection_ids = [c.id for c in personal_collections] + public_collection_ids
         ids = list(set(real_collection_ids) - set(ids))
     return 0, {'collection_ids': ids}
@@ -537,6 +547,8 @@ def collection_delete_operation_check(user_id, validated_data):
         filter_query = Q(user_id=user_id, del_flag=False)
         if vd.get('ids'):
             filter_query &= ~Q(id__in=vd['ids'])
+        if vd.get('keyword'):
+            filter_query &= Q(title__icontains=vd['keyword'])
         all_colls = Collection.objects.filter(filter_query).all()
         ids = [c.id for c in all_colls]
     has_reference_bots, bot_titles = _collection_ref_bots(user_id, ids)

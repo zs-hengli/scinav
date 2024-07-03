@@ -77,7 +77,8 @@ class Collections(APIView):
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         vd = serial.validated_data
         if vd.get('is_all'):
-            documents = get_search_documents_4_all_selected(user_id, vd.get('document_ids'), vd['search_info'])
+            documents = get_search_documents_4_all_selected(
+                user_id, vd.get('document_ids'), vd['search_info'])
             vd['document_ids'] = [doc['id'] for doc in documents]
             vd['document_titles'] = [doc['title'] for doc in documents]
         else:

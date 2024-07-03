@@ -8,7 +8,8 @@ from bot.base_service import recreate_bot, collections_doc_ids, mine_bot_documen
 from bot.models import Bot, BotCollection, BotSubscribe, HotBot, BotTools
 from bot.rag_service import Bot as RagBot
 from bot.serializers import (BotDetailSerializer, BotListAllSerializer, HotBotListSerializer, BotListChatMenuSerializer,
-                             MyBotListAllSerializer, BotToolsDetailSerializer, BotToolsUpdateQuerySerializer)
+                             MyBotListAllSerializer, BotToolsDetailSerializer, BotToolsUpdateQuerySerializer,
+                             BotsPlazaResultsSerializer)
 from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionDocumentListSerializer, bot_subscribe_personal_document_num
 from core.utils.exceptions import InternalServerError, ValidationError
@@ -120,7 +121,7 @@ def bot_delete(bot_id):
 
 # 专题列表
 def hot_bots():
-    hot_bot = HotBot.objects.filter(del_flag=False, bot__del_flag=False).order_by('order_num').all()
+    hot_bot = HotBot.objects.filter(del_flag=False, bot__del_flag=False).order_by('order_num', '-updated_at').all()
     hot_bot_list_data = HotBotListSerializer(hot_bot, many=True).data
     return hot_bot_list_data
 
@@ -143,11 +144,25 @@ def get_bot_list(validated_data):
 def bot_list_all(user_id, page_size=10, page_num=1):
     user_subscribe_bot = BotSubscribe.objects.filter(user_id=user_id, del_flag=False).all()
     us_bot_ids = [us_b.bot_id for us_b in user_subscribe_bot]
-    query_set = Bot.objects.filter(type=Bot.TypeChoices.PUBLIC, del_flag=False).order_by('-pub_date', '-created_at')
-    filter_count = query_set.count()
+    order0_query_set = Bot.objects.filter(
+        type=Bot.TypeChoices.PUBLIC, del_flag=False, order=0).order_by('-updated_at')
+    order_query_set = Bot.objects.filter(
+        type=Bot.TypeChoices.PUBLIC, del_flag=False, order__gt=0).order_by('order', '-updated_at')
+    order_filter_count = order_query_set.count()
+    order0_filter_count = order0_query_set.count()
     start_num = page_size * (page_num - 1)
+    end_num = start_num + page_size
     logger.info(f"limit: [{start_num}: {page_size * page_num}]")
-    bots = query_set[start_num:(page_size * page_num)]
+    order_bots = list(order_query_set[start_num:end_num])
+    order0_bots = []
+    # 如果获取的 order > 0 的结果不足页大小，则补充 order = 0 的结果
+    remaining_slots = page_size - len(order_bots)
+    if remaining_slots > 0:
+        order0_bots_start = max(0, start_num - order_filter_count)
+        order0_bots_end = order0_bots_start + remaining_slots
+        order0_bots = list(order0_query_set[order0_bots_start:order0_bots_end])
+    bots = order_bots + order0_bots
+
     bot_list_data = BotListAllSerializer(bots, many=True).data
     for index, b_data in enumerate(bot_list_data):
         bot_list_data[index]['subscribed'] = False
@@ -155,8 +170,18 @@ def bot_list_all(user_id, page_size=10, page_num=1):
             bot_list_data[index]['subscribed'] = True
     return {
         'list': bot_list_data,
-        'total': filter_count
+        'total': order_filter_count + order0_filter_count
     }
+
+
+def bots_plaza():
+    order0_query_set = Bot.objects.filter(
+        type=Bot.TypeChoices.PUBLIC, del_flag=False, order=0).order_by('-updated_at')
+    order_query_set = Bot.objects.filter(
+        type=Bot.TypeChoices.PUBLIC, del_flag=False, order__gt=0).order_by('order', '-updated_at')
+    bots = list(order_query_set) + list(order0_query_set)
+    data = BotsPlazaResultsSerializer(bots, many= True).data
+    return data
 
 
 def bot_list_subscribe(user_id, page_size=10, page_num=1):
@@ -262,16 +287,17 @@ def bot_user_full_text_document_ids(bot_id=None, bot: Bot = None):
     return list(document_ids)
 
 
-def bot_publish(bot_id, action=Bot.TypeChoices.PUBLIC):
+def bot_publish(bot_id, order, action=Bot.TypeChoices.PUBLIC):
     bot = Bot.objects.filter(pk=bot_id).first()
     if not bot:
-        return 100002, 'bot not exist'
+        return 100002, 'bot not exist', {}
     if bot.type == Bot.TypeChoices.IN_PROGRESS:
-        return 110006, 'bot publish is in progress'
+        return 110006, 'bot publish is in progress', {}
 
     if action == Bot.TypeChoices.PUBLIC:
         bot.type = Bot.TypeChoices.IN_PROGRESS
         bot.pub_date = datetime.datetime.now()
+        bot.order = order
         # 个人文献 下载关联公共库文献
         p_documents, ref_documents = bot_subscribe_personal_document_num(bot.user_id, bot=bot)
         if ref_documents:
@@ -282,7 +308,7 @@ def bot_publish(bot_id, action=Bot.TypeChoices.PUBLIC):
         bot.type = Bot.TypeChoices.PERSONAL
     bot.save()
     async_schedule_publish_bot_task.apply_async()
-    return 0, ''
+    return 0, '', MyBotListAllSerializer(bot).data
 
 
 def bot_tools_create(user_id, bot_id, validated_data: dict, checked=False):

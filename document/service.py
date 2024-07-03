@@ -656,6 +656,8 @@ def document_library_add(
     elif add_type == DocLibAddQuerySerializer.AddTypeChoices.AUTHOR_SEARCH or (
         search_info and search_info.get('author_id')
     ):
+        search_info['page_num'] = 1
+        search_info['page_size'] = search_info.get('limit', 1000)
         search_result = author_documents(user_id, search_info.get('author_id'), search_info)
         if search_result:
             all_document_ids = [d['id'] for d in search_result['list']]
@@ -773,7 +775,7 @@ def doc_lib_batch_operation_check(user_id, validated_data):
     return 0, {'document_ids': document_ids}, ''
 
 
-def document_library_delete(user_id, ids, list_type):
+def document_library_delete(user_id, ids, list_type, keyword=None):
     if list_type:
         if list_type == DocumentLibraryListQuerySerializer.ListTypeChoices.ALL:
             filter_query = Q(user_id=user_id, del_flag=False)
@@ -791,6 +793,8 @@ def document_library_delete(user_id, ids, list_type):
             filter_query &= ~Q(id__in=ids)
     else:
         filter_query = Q(user_id=user_id, del_flag=False, id__in=ids)
+    if keyword:
+        filter_query &= (Q(document_title__icontains=keyword) | Q(filename__icontains=keyword))
     doc_libs = DocumentLibrary.objects.filter(filter_query)
     all_doc_libs = doc_libs.all()
     user_per_document_ids = [doclib.document_id for doclib in all_doc_libs if doclib.document_id and doclib.filename]
@@ -805,7 +809,8 @@ def document_library_delete(user_id, ids, list_type):
             collection_id=coll_id,
         ).update(del_flag=True)
         if effect_num:
-            Collection.objects.filter(id=coll_id).update(total_personal=F('total_personal') - effect_num)
+            coll_documents_total = CollectionDocument.objects.filter(collection_id=coll_id, del_flag=False).count()
+            Collection.objects.filter(id=coll_id).update(total_personal=coll_documents_total)
             async_update_conversation_by_collection.apply_async(args=(coll_id,))
     effect_pub_coll_ids = CollectionDocument.objects.filter(
         collection_id__in=user_collection_ids, document_id__in=user_pub_doc_ids

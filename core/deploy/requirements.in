@@ -7,7 +7,10 @@ django_redis
 requests
 
 # pgsql
+# psycopg[binary,pool]
+# psycopg[c]
 psycopg2-binary
+django_db_geventpool
 
 # S3
 boto3==1.34.58
@@ -33,3 +36,8 @@ pybtex
 # weichat pay
 wechatpayv3
 qrcode
+
+# gunicorn
+gunicorn
+gevent
+>>>>>>> gunicorn

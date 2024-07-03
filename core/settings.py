@@ -98,14 +98,17 @@ DJANGO_DB = 'default'
 # os.environ.setdefault('PGSERVICEFILE', f"{BASE_DIR}/.service.conf")
 DATABASES_ALL = {
     DJANGO_DB_POSTGRESQL: {
-        "ENGINE": "django.db.backends.postgresql",
+        "ENGINE": "django_db_geventpool.backends.postgresql_psycopg2",
         'NAME': os.environ.get('DB_NAME', 'db_name'),
         'USER': os.environ.get('DB_USER', 'db_user'),
         'PASSWORD': os.environ.get('DB_PASSWORD', 'db_user_password'),
         'HOST': os.environ.get('DB_HOST', '127.0.0.1'),
         'PORT': os.environ.get('DB_PORT', '5432'),
+        'ATOMIC_REQUESTS': False,
+        'CONN_MAX_AGE': 0,
         "OPTIONS": {
-            # "service": "pg_service",
+            'MAX_CONNS': int(os.environ.get('DB_POOL_MAX_CONNS', 20)),
+            'REUSE_CONNS': int(os.environ.get('DB_POOL_REUSE_CONNS', 10)),
         },
     }
 }
@@ -136,11 +139,16 @@ if os.environ.get('DEBUG', 'false').lower() == 'true':
     print(f"DATABASES: {DATABASES}")
     print(f"CACHES: {CACHES}")
 
-LOG_FILE = os.environ.get('LOG_FILE', 'all.log')
+LOG_FILE = os.environ.get('LOG_FILE', 'logs/all.log')
 if not os.path.exists(LOG_FILE):
     dirname = os.path.dirname(LOG_FILE)
     if dirname:
         os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+CELERY_LOG_FILE = os.environ.get("CELERY_LOG_FILE", "logs/celery.log")
+if not os.path.exists(CELERY_LOG_FILE):
+    dirname = os.path.dirname(CELERY_LOG_FILE)
+    if dirname:
+        os.makedirs(os.path.dirname(CELERY_LOG_FILE), exist_ok=True)
 
 LOGGING = {
     'version': 1,
@@ -174,6 +182,15 @@ LOGGING = {
             'maxBytes': 1024 * 1024 * 300,  # 300M
             'backupCount': 100,
         },
+        'celery': {
+            'level': os.getenv('LOG_LEVEL', 'INFO'),
+            'formatter': 'verbose',
+            # 此处可能需要注意celery多进程的写日志
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': CELERY_LOG_FILE,
+            'maxBytes': 1024 * 1024 * 300,
+            'backupCount': 100,
+        },
     },
     'root': {
         'handlers': ['console', 'file'],
@@ -189,7 +206,12 @@ LOGGING = {
             'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
-        }
+        },
+        'celery': {
+            'handlers': ['console', 'celery'],
+            'level': os.getenv('LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
     },
 }
 
@@ -295,6 +317,14 @@ USE_TZ = True
 
 STATIC_ROOT = 'static'
 STATIC_URL = 'static/'
+
+# email
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.feishu.cn'
+EMAIL_PORT = 465
+EMAIL_USE_SSL = True
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'hengli@zhishu-tech.com')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', 'NdTKYVO1AEguwXyS')
 
 # celery
 CELERY_BROKER_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"  # noqa

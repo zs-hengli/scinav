@@ -1,7 +1,5 @@
 import logging
-from time import sleep
 
-from django.core.cache import cache
 from django.db.models import Q
 from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
@@ -10,8 +8,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from bot.rag_service import Document as RagDocument
-from collection.models import Collection
-from core.utils.views import check_keys, extract_json, my_json_response
+from core.utils.views import extract_json, my_json_response
 from document.models import Document, DocumentLibrary, SearchHistoryCache
 from document.serializers import DocumentDetailSerializer, GenPresignedUrlQuerySerializer, \
     DocumentUploadQuerySerializer, \
@@ -327,7 +324,7 @@ class DocumentsLibrary(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg='invalid query data')
         vd = serial.validated_data
-        document_library_delete(user_id, vd.get('ids'), vd.get('list_type'))
+        document_library_delete(user_id, vd.get('ids'), vd.get('list_type'), vd.get('keyword'))
         return my_json_response({})
 
 
