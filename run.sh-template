@@ -39,6 +39,9 @@ export AUTHING_APP_REDIRECT_URI='redirect_uri'
 # opanapi
 export OPENAPI_BASE_URL='http://localhost:8300'
 
+# chat
+export CHAT_TIMEOUT=30
+
 # Start celery beat and worker
 celery -A core beat -l debug -f ./celery-beat.log  --pidfile=./celery-beat.pid --detach
 celery -A core worker -l debug -f ./celery-worker.log  --pidfile=./celery-worker.pid --detach
