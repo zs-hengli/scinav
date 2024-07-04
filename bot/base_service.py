@@ -79,7 +79,8 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
         elif list_type in ['s2', 'arxiv']:
             if bot.type == Collection.TypeChoices.PUBLIC:
                 ref_ds = Document.objects.filter(
-                    id__in=ref_ds, full_text_accessible=False, del_flag=False).values_list('id', flat=True)
+                    id__in=ref_ds, full_text_accessible=False, del_flag=False, collection_id=list_type
+                ).values_list('id', flat=True)
             ref_ds = list(set(ref_ds) - set(ref_doc_lib_ids))
         elif list_type in ['subscribe_full_text']:
             ref_ds = list(Document.objects.filter(

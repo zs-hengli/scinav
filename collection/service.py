@@ -492,13 +492,20 @@ def collection_documents_select_list(user_id, validated_data):
 
     if ref_ds and (
         list_type in ['all', 'all_documents']
-        or (list_type in ['s2', 'arxiv'] and bot.type == Collection.TypeChoices.PERSONAL)
+        or (list_type in ['s2', 'arxiv'])
         or (list_type in ['subscribe_full_text'] and bot.type == Collection.TypeChoices.PUBLIC)
         or (list_type in ['document_library'] and ref_doc_lib_ids)
     ):
         if list_type in ['document_library']:
             ref_ds = ref_doc_lib_ids
-        elif list_type in ['s2', 'arxiv', 'subscribe_full_text']:
+        elif list_type in ['s2', 'arxiv']:
+            ref_ds = Document.objects.filter(
+                id__in=ref_ds, full_text_accessible=False, del_flag=False, collection_id=list_type
+            ).values_list('id', flat=True)
+            ref_ds = list(set(ref_ds) - set(ref_doc_lib_ids))
+        elif list_type in ['subscribe_full_text']:
+            ref_ds = list(Document.objects.filter(
+                id__in=ref_ds, full_text_accessible=True, del_flag=False).values_list('id', flat=True).all())
             ref_ds = list(set(ref_ds) - set(ref_doc_lib_ids))
         else:
             ref_ds = ref_ds
