@@ -143,7 +143,7 @@ class Questions(APIView):
         if not conversation:
             return my_json_response({}, code=100002, msg='conversation not found')
         vd = serial.validated_data
-        data = question_list(conversation_id, vd['page_num'], vd['page_size'])
+        data = question_list(conversation, vd['page_num'], vd['page_size'])
         return my_json_response(data)
 
 

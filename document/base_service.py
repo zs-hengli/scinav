@@ -24,7 +24,9 @@ def update_document_lib(user_id, document_ids, keyword=None):
     document_libraries = []
     for doc_id in document_ids:
         if old_document_library := DocumentLibrary.objects.filter(
-            user_id=user_id, document_id=doc_id, del_flag=False, task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
+            user_id=user_id, document_id=doc_id, del_flag=False, task_status__in=[
+                DocumentLibrary.TaskStatusChoices.COMPLETED, DocumentLibrary.TaskStatusChoices.ERROR
+            ]
         ).first():
             document_libraries.append(old_document_library)
             continue
