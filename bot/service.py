@@ -295,15 +295,16 @@ def bot_publish(bot_id, order, action=Bot.TypeChoices.PUBLIC):
         return 110006, 'bot publish is in progress', {}
 
     if action == Bot.TypeChoices.PUBLIC:
-        bot.type = Bot.TypeChoices.IN_PROGRESS
-        bot.pub_date = datetime.datetime.now()
         bot.order = order
-        # 个人文献 下载关联公共库文献
-        p_documents, ref_documents = bot_subscribe_personal_document_num(bot.user_id, bot=bot)
-        if ref_documents:
-            update_document_lib('0000', ref_documents)
-        elif action == Bot.TypeChoices.PUBLIC:
-            bot.type = Bot.TypeChoices.PUBLIC
+        if bot.type != Bot.TypeChoices.PUBLIC:
+            bot.type = Bot.TypeChoices.IN_PROGRESS
+            bot.pub_date = datetime.datetime.now()
+            # 个人文献 下载关联公共库文献
+            p_documents, ref_documents = bot_subscribe_personal_document_num(bot.user_id, bot=bot)
+            if ref_documents:
+                update_document_lib('0000', ref_documents)
+            elif action == Bot.TypeChoices.PUBLIC:
+                bot.type = Bot.TypeChoices.PUBLIC
     else:
         bot.type = Bot.TypeChoices.PERSONAL
     bot.save()

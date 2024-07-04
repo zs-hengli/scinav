@@ -304,7 +304,8 @@ def conversation_detail(conversation_id):
     return detail
 
 
-def question_list(conversation_id, page_num, page_size):
+def question_list(conversation, page_num, page_size):
+    conversation_id = conversation.id
     filter_query = (
         Q(conversation_id=conversation_id, del_flag=False)
         & (((~Q(answer='')) & Q(answer__isnull=False)) | Q(source='share'))
@@ -312,10 +313,26 @@ def question_list(conversation_id, page_num, page_size):
     query_set = Question.objects.filter(filter_query).order_by('-updated_at')
     total = query_set.count()
     questions = query_set[(page_num - 1) * page_size: page_num * page_size]
+    questions_data = QuestionListSerializer(questions, many=True).data[::-1]
+    for i,q in enumerate(questions_data):
+        if q['references']:
+            questions_data[i]['references'] = _update_chat_references(conversation, q['references'])
     return {
-        'list': QuestionListSerializer(questions, many=True).data[::-1],
+        'list': questions_data,
         'total': total,
     }
+
+
+def _update_chat_references(conversation, references):
+    papers = {f"{p['collection_id']}--{p['doc_id']}": p for p in conversation.paper_ids}
+    for i,r in enumerate(references):
+        if r.get('collection_id') and r.get('doc_id') and (
+            f"{r['collection_id']}--{r['doc_id']}" in papers or r['collection_id'] == 'arxiv'
+        ):
+            references[i]['in_conversation'] = True
+        else:
+            references[i]['in_conversation'] = False
+    return references
 
 
 def conversation_list(validated_data):
