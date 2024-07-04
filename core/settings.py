@@ -370,3 +370,7 @@ WEIXIN_PAY_MCH_PRIVATE_KEY = os.environ.get('WEIXIN_PAY_MCH_PRIVATE_KEY', 'priva
 # https://wechatpay-api.gitbook.io/wechatpay-api-v3/chang-jian-wen-ti/zheng-shu-xiang-guan#ru-he-cha-kan-zheng-shu-xu-lie-hao
 WEIXIN_PAY_MCH_CERT_SERIAL_NO = os.environ.get('WEIXIN_PAY_MCH_CERT_SERIAL_NO', 'mch cert serial no')
 WEIXIN_PAY_NOTIFY_URL = os.environ.get('WEIXIN_PAY_NOTIFY_URL', 'https://host/path')
+
+# chat
+CHAT_TIMEOUT = os.environ.get('CHAT_TIMEOUT', 30)
+

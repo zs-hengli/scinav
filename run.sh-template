@@ -43,10 +43,6 @@ export AUTHING_APP_REDIRECT_URI='redirect_uri'
 # opanapi
 export OPENAPI_BASE_URL='http://localhost:8300'
 
-# Start celery beat and worker
-celery -A core beat -l debug -f ./celery-beat.log  --pidfile=./celery-beat.pid --detach
-celery -A core worker -l debug -f ./celery-worker.log  --pidfile=./celery-worker.pid --detach
-
 # weixin pay
 export WEIXIN_PAY_APIV3_KEY='apiv3_key'
 export WEIXIN_PAY_MCHID='mchid'
@@ -56,6 +52,14 @@ export WEIXIN_PAY_MCH_PRIVATE_KEY='private_key in application_key.pem'
 # https://wechatpay-api.gitbook.io/wechatpay-api-v3/chang-jian-wen-ti/zheng-shu-xiang-guan#ru-he-cha-kan-zheng-shu-xu-lie-hao
 export WEIXIN_PAY_MCH_CERT_SERIAL_NO='mch cert serial no'
 export WEIXIN_PAY_NOTIFY_URL='https://host/path'
+
+# chat
+export CHAT_TIMEOUT=30
+
+# Start celery beat and worker
+celery -A core beat -l debug -f ./celery-beat.log  --pidfile=./celery-beat.pid --detach
+celery -A core worker -l debug -f ./celery-worker.log  --pidfile=./celery-worker.pid --detach
+
 
 
 # Install all package dependencies
