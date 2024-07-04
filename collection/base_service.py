@@ -1,3 +1,4 @@
+import logging
 from operator import itemgetter
 
 from bot.rag_service import Conversations as RagConversations
@@ -7,6 +8,9 @@ from collection.models import Collection, CollectionDocument
 from core.utils.common import cmp_ignore_order
 from document.base_service import search_result_from_cache
 from document.models import Document
+
+
+logger = logging.getLogger(__name__)
 
 
 def update_conversation_by_collection(user_id, conversation, collection_ids, model=None):
@@ -23,7 +27,7 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
         set(conversation.collections if conversation.collections else [])
         | set(conversation.public_collection_ids if conversation.public_collection_ids else []))
     if collection_ids:
-        collections = Collection.objects.filter(id__in=collection_ids).all()
+        collections = Collection.objects.filter(id__in=collection_ids, del_flag=False).all()
         public_collection_ids = [c.id for c in collections if c.type == Collection.TypeChoices.PUBLIC]
         personal_collection_ids = [c.id for c in collections if c.type == Collection.TypeChoices.PERSONAL]
 
@@ -63,7 +67,8 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
                     if len(collection_ids) == 1 else Conversation.TypeChoices.COLLECTIONS_COV
                 )
             conversation.save()
-            RagConversations.update(**update_data)
+            if not update_data['agent_id'].startswith('default-scinav'):
+                RagConversations.update(**update_data)
 
     elif collection_ids is not None and collection_ids != all_collections:
         paper_ids = []

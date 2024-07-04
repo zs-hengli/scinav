@@ -243,9 +243,9 @@ def update_simple_conversation(conversation: Conversation):
     """
     单文献问答，考虑文献被删情况
     """
-    if not conversation or (not conversation.documents and not conversation.bot_id):
+    if not conversation or (not conversation.documents and not conversation.bot_id and not conversation.collections):
         return conversation
-    if conversation.documents:
+    elif conversation.documents:
         doc_libs = DocumentLibrary.objects.filter(
             user_id=conversation.user_id,
             document_id__in=conversation.documents,
@@ -277,7 +277,7 @@ def update_simple_conversation(conversation: Conversation):
             conversation.documents = [d.id for d in documents] if documents else []
             conversation.paper_ids = new_papers_info
             conversation.save()
-    elif conversation.bot_id:
+    elif conversation.bot_id or conversation.collections:
         all_collections = list(
             set(conversation.collections if conversation.collections else [])
             | set(conversation.public_collection_ids if conversation.public_collection_ids else []))
