@@ -372,5 +372,4 @@ WEIXIN_PAY_MCH_CERT_SERIAL_NO = os.environ.get('WEIXIN_PAY_MCH_CERT_SERIAL_NO', 
 WEIXIN_PAY_NOTIFY_URL = os.environ.get('WEIXIN_PAY_NOTIFY_URL', 'https://host/path')
 
 # chat
-CHAT_TIMEOUT = os.environ.get('CHAT_TIMEOUT', 30)
-
+CHAT_TIMEOUT = int(os.environ.get('CHAT_TIMEOUT', 30))
