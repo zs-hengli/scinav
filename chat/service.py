@@ -278,9 +278,13 @@ def update_simple_conversation(conversation: Conversation):
             conversation.paper_ids = new_papers_info
             conversation.save()
     elif conversation.bot_id or conversation.collections:
-        all_collections = list(
-            set(conversation.collections if conversation.collections else [])
-            | set(conversation.public_collection_ids if conversation.public_collection_ids else []))
+        if conversation.bot_id:
+            all_collections = BotCollection.objects.filter(bot_id=conversation.bot_id, del_flag=False).values_list(
+                'collection_id', flat=True).all()
+        else:
+            all_collections = list(
+                set(conversation.collections if conversation.collections else [])
+                | set(conversation.public_collection_ids if conversation.public_collection_ids else []))
         conversation = update_conversation_by_collection(conversation.user_id, conversation, all_collections)
 
     return conversation
