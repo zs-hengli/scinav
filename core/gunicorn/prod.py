@@ -8,9 +8,8 @@ workers = multiprocessing.cpu_count()
 # threads = 2
 preload_app = True
 # max_requests = 4096
-worker_class = 'gevent'
-# timeout = 120
-timeout = 2400
+# worker_class = 'gevent'
+timeout = 120
 
 loglevel = 'info'
 # loglevel = 'debug'

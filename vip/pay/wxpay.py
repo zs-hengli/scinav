@@ -76,9 +76,10 @@ def weixin_notify(request):
             'attach': resp.get('attach'),
             'success_time': resp.get('success_time'),
             'payer': resp.get('payer'),
-            'amount': resp.get('amount').get('total'),
+            'amount': resp.get('amount', {}),
+            # 'amount': resp.get('amount').get('total'),
         }
         return data
     else:
-        logger.warning(f"weixin pay notify failed:{result}, headers:{headers}, request_data:{request.body}")
+        logger.warning(f"weixin pay notify failed:{result}, headers:{request.headers}, request_data:{request.body}")
         return False

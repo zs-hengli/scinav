@@ -13,9 +13,12 @@ from bot.serializers import (BotDetailSerializer, BotListAllSerializer, HotBotLi
 from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionDocumentListSerializer, bot_subscribe_personal_document_num
 from core.utils.exceptions import InternalServerError, ValidationError
+from customadmin.models import GlobalConfig
 from document.base_service import update_document_lib
 from document.models import Document, DocumentLibrary
 from document.tasks import async_schedule_publish_bot_task, async_ref_document_to_document_library
+from vip.models import Member
+from vip.serializers import MemberInfoSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -356,3 +359,29 @@ def bot_tools_add_bot_id(bot_id, tools):
 def del_invalid_bot_tools(bot_id, valid_tool_ids):
     filter_query = Q(bot_id=bot_id, del_flag=False) & ~Q(id__in=valid_tool_ids)
     BotTools.objects.filter(filter_query).update(del_flag=True)
+
+
+def bots_advance_share_info(user_id, bot=None):
+    can_advance_share = False
+    limit, advance_count = None, None
+    if bot and bot.advance_share:
+        can_advance_share = True
+    member = Member.objects.filter(user_id=user_id).first()
+    member_type = MemberInfoSerializer.get_member_type(member)
+    if member_type == MemberInfoSerializer.Type.VIP:
+        can_advance_share = True
+    elif member_type == MemberInfoSerializer.Type.FREE:
+        can_advance_share = False
+    else:
+        config = GlobalConfig.objects.filter(
+            config_type=member_type, sub_type=GlobalConfig.SubType.LIMIT).first()
+        limit_info = config.value if config else {}
+        limit = int(limit_info.get('limit_advanced_share', 0))
+    advance_count = Bot.objects.filter(user_id=user_id, advance_share=True, del_flag=False).count()
+    if limit is not None and limit > advance_count:
+        can_advance_share = True
+    return {
+        'can_advance_share': can_advance_share,
+        'limit': limit,
+        'advance_share_count': advance_count
+    }

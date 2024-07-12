@@ -51,10 +51,15 @@ export WEIXIN_PAY_MCH_PRIVATE_KEY='private_key in application_key.pem'
 # 商户 API 证书序列号
 # https://wechatpay-api.gitbook.io/wechatpay-api-v3/chang-jian-wen-ti/zheng-shu-xiang-guan#ru-he-cha-kan-zheng-shu-xu-lie-hao
 export WEIXIN_PAY_MCH_CERT_SERIAL_NO='mch cert serial no'
-export WEIXIN_PAY_NOTIFY_URL='https://host/path'
+export WEIXIN_PAY_NOTIFY_URL='https://{host}/api/v1/pay/notify'
+# 人民币元兑换代币的兑换汇率 10表示 1元兑换10代币
+export EXCHANGE_RATE_CNY2TOKENS=10
 
-# chat
+# chat 超时时间
 export CHAT_TIMEOUT=30
+
+# admin
+export ADMIN_API_KEY='eyJzdWIiOiI2NjFlMjUyMDY3OTU3MWNmMWVkYzViNjQiLCJhdWQiOiI2NjI1ZmNlN2YwY2I4MDRk'
 
 # Start celery beat and worker
 celery -A core beat -l debug -f ./celery-beat.log  --pidfile=./celery-beat.pid --detach

@@ -15,7 +15,7 @@ from bot.serializers import BotCreateSerializer, BotListQuerySerializer, BotDocu
     MyBotListAllSerializer
 from bot.service import (bot_create, bot_delete, bot_publish, bot_subscribe, bot_update, hot_bots, get_bot_list,
                          bot_tools_create, bot_tools_update, formate_bot_tools, del_invalid_bot_tools,
-                         bot_tools_add_bot_id, bot_user_full_text_document_ids, bots_plaza)
+                         bot_tools_add_bot_id, bot_user_full_text_document_ids, bots_plaza, bots_advance_share_info)
 from document.tasks import async_add_user_operation_log
 from core.utils.exceptions import ValidationError
 from core.utils.views import extract_json, my_json_response
@@ -306,4 +306,22 @@ class BotsPlaza(APIView):
     @staticmethod
     def get(request, *args, **kwargs):
         data = bots_plaza()
+        return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+@permission_classes([AllowAny])
+class BotsAdvanceShare(APIView):
+
+    @staticmethod
+    def get(request, *args, **kwargs):
+        query = request.query_params.dict()
+        bot_id = query.get('bot_id', None)
+        bot = None
+        if bot_id:
+            bot = Bot.objects.filter(pk=bot_id).first()
+            if not bot:
+                return my_json_response({}, 100002, 'bot not exists')
+        data = bots_advance_share_info(request.user.id, bot)
         return my_json_response(data)

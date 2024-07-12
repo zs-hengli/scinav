@@ -20,6 +20,7 @@ from document.models import DocumentLibrary, Document
 from openapi.base_service import update_openapi_log_upload_status
 from openapi.models import OpenapiLog
 from user.models import UserOperationLog
+from vip.models import MemberUsageLog
 
 logger = logging.getLogger('celery')
 
@@ -45,6 +46,16 @@ def async_document_library_task(self, task_id=None):
             if i.task_status == DocumentLibrary.TaskStatusChoices.ERROR:
                 i.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_code']}
             i.save()
+            if i.task_status != DocumentLibrary.TaskStatusChoices.ERROR:
+                # add record to MemberUsageLog
+                MemberUsageLog.objects.create(
+                    user_id=i.user_id,
+                    openapi_key_id=None,
+                    type=MemberUsageLog.UType.EMBEDDING,
+                    obj_id1=i.id,
+                    obj_id2=i.task_id,
+                    status=MemberUsageLog.Status.UNKNOWN,
+                )
     # in progress
     if instances := DocumentLibrary.objects.filter(task_status__in=[
         DocumentLibrary.TaskStatusChoices.IN_PROGRESS, DocumentLibrary.TaskStatusChoices.QUEUEING,
@@ -70,14 +81,17 @@ def update_document_library_task(doc_lib: DocumentLibrary):
             Document.objects.filter(pk=doc_lib.document_id).update(state='error')
         doc_lib.error = {'error_code': rag_ret['error_code'], 'error_message': rag_ret['error_message']}
         update_openapi_log_upload_status(task_id, OpenapiLog.Status.FAILED)
+        _update_member_usage_upload_status(doc_lib.id, doc_lib.task_id, MemberUsageLog.Status.FAILED)
     elif task_status == DocumentLibrary.TaskStatusChoices.CANCELLED:
         update_openapi_log_upload_status(task_id, OpenapiLog.Status.FAILED)
+        _update_member_usage_upload_status(doc_lib.id, doc_lib.task_id, MemberUsageLog.Status.FAILED)
     elif task_status == DocumentLibrary.TaskStatusChoices.COMPLETED:
         if rag_ret.get('paper'):
             rag_ret['paper']['state'] = task_status
         else:
             return doc_lib, rag_ret
         update_openapi_log_upload_status(task_id, OpenapiLog.Status.SUCCESS)
+        _update_member_usage_upload_status(doc_lib.id, doc_lib.task_id, MemberUsageLog.Status.SUCCESS)
         try:
             document = document_update_from_rag_ret(rag_ret['paper']) if rag_ret['paper'] else None
             doc_lib.document = document
@@ -92,6 +106,12 @@ def update_document_library_task(doc_lib: DocumentLibrary):
     if doc_lib.task_status == DocumentLibrary.TaskStatusChoices.COMPLETED and doc_lib.task_type == 'personal':
         search_result_delete_cache(doc_lib.user_id)
     return doc_lib, rag_ret
+
+
+def _update_member_usage_upload_status(obj_id1, obj_id2, status):
+    MemberUsageLog.objects.filter(
+        obj_id1=obj_id1, obj_id2=obj_id2, type=MemberUsageLog.UType.EMBEDDING,
+    ).update(status=status)
 
 
 @shared_task(bind=True)

@@ -138,6 +138,8 @@ packaging==23.2
     # via
     #   build
     #   gunicorn
+pillow==10.4.0
+    # via -r core/deploy/requirements.in
 pip-tools==7.4.1
     # via -r core/deploy/requirements.in
 platformdirs==4.2.0

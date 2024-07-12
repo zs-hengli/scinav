@@ -12,6 +12,7 @@ urlpatterns = [
     path('bots', views.Bots.as_view()),
     path('bots/tools', views.BotsTools.as_view()),
     path('bots/plaza', views.BotsPlaza.as_view()),
+    path('bots/advance/share', views.BotsAdvanceShare.as_view()),
     path('bots/<str:bot_id>', views.Bots.as_view()),
 
     path('bots/<str:bot_id>/subscribe/<str:action>', views.BotSubscribe.as_view()),

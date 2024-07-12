@@ -31,6 +31,7 @@ class Bot(models.Model):
     pub_date = models.DateField(null=True)
     order = models.IntegerField(null=False, default=0, db_default=0)
     extension = models.JSONField(null=True)
+    advance_share = models.BooleanField(default=False, db_default=False)
     del_flag = models.BooleanField(default=False, db_default=False)
     updated_at = models.DateTimeField(null=True, auto_now=True)
     created_at = models.DateTimeField(null=True, auto_now_add=True)

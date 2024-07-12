@@ -296,11 +296,11 @@ class DocumentsLibrary(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg='invalid post data')
         vd = serial.validated_data
-        document_libraries = document_library_add(
+        code, msg, data = document_library_add(
             request.user.id, vd['document_ids'], vd['collection_id'], vd['bot_id'], vd['add_type'],
             keyword=vd['keyword'], search_info=vd['search_info']
         )
-        data = DocumentUploadResultSerializer(document_libraries, many=True).data
+        data = DocumentUploadResultSerializer(data, many=True).data
         return my_json_response({'list': data})
 
     @staticmethod
@@ -356,9 +356,10 @@ class DocumentsPersonal(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg='invalid post data')
         validated_data = serial.validated_data
-        document_libraries = document_personal_upload(validated_data)
-        data = DocumentUploadResultSerializer(document_libraries, many=True).data
-        return my_json_response({'list': data})
+        code, msg, data = document_personal_upload(validated_data)
+        if code == 0:
+            data = {'list': DocumentUploadResultSerializer(data, many=True).data}
+        return my_json_response(code=code, data=data, msg=msg)
 
 
 @method_decorator([extract_json], name='dispatch')

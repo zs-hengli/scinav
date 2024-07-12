@@ -26,6 +26,8 @@ from document.serializers import DocumentLibraryPersonalSerializer, DocLibAddQue
     DocumentLibraryListQuerySerializer, DocumentRagCreateSerializer, AuthorsDetailSerializer, SearchQuerySerializer
 from document.tasks import async_document_library_task, async_update_document, async_update_conversation_by_collection, \
     update_document_library_task
+from vip.models import MemberUsageLog
+from vip.serializers import LimitCheckSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -597,7 +599,19 @@ def update_exist_documents():
 def document_personal_upload(validated_data):
     vd = validated_data
     files = vd.get('files')
+    openapi_key_id = vd.get('openapi_key_id')
     instances = []
+    document_count = len(files)
+    limit_info = LimitCheckSerializer.embedding_limit(vd['user_id'])
+    if limit_info['daily'] and limit_info['daily'] <= limit_info['used_day'] + document_count:
+        return 130006, 'exceed day limit', {
+            'used': limit_info['used_day'], 'limit': limit_info['daily'], 'need': document_count
+        }
+    elif limit_info['monthly'] and limit_info['monthly'] <= limit_info['used_month'] + document_count:
+        return 130007, 'exceed month limit', {
+            'used': limit_info['used_month'], 'limit': limit_info['monthly'], 'need': document_count
+        }
+
     for file in files:
         doc_lib_data = {
             'user_id': vd['user_id'],
@@ -628,7 +642,16 @@ def document_personal_upload(validated_data):
         instance, _ = DocumentLibrary.objects.update_or_create(
             doc_lib_data, user_id=vd['user_id'], filename=file['filename'], object_path=file['object_path'])
         instances.append(instance)
-    return instances
+        # add record to MemberUsageLog
+        MemberUsageLog.objects.create(
+            user_id=vd['user_id'],
+            openapi_key_id=openapi_key_id,
+            type=MemberUsageLog.UType.EMBEDDING,
+            obj_id1=instance.id,
+            obj_id2=instance.task_id,
+            status=MemberUsageLog.Status.UNKNOWN,
+        )
+    return 0, 'success', instances
 
 
 def document_library_add(
@@ -713,9 +736,9 @@ def document_library_add(
     # document_ids = _get_public_document_ids(user_id, document_ids)
     if ref_ds:
         document_ids = list(set(document_ids) | set(ref_ds))
-    document_libraries = update_document_lib(user_id, document_ids, keyword=keyword)
+    code, msg, data = update_document_lib(user_id, document_ids, keyword=keyword)
     async_document_library_task.apply_async()
-    return document_libraries
+    return code, msg, data
 
 
 def _get_public_document_ids(user_id, document_ids):

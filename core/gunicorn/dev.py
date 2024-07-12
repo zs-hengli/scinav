@@ -9,8 +9,8 @@ workers = multiprocessing.cpu_count()
 # threads = 2
 preload_app = True
 # max_requests = 100
-worker_class = 'gevent'
-timeout = 1800
+# worker_class = 'gevent'
+timeout = 120
 # enable_stdio_inheritance = True
 
 loglevel = 'debug'

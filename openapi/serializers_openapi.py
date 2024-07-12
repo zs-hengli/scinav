@@ -165,6 +165,21 @@ class UploadFileResponseSerializer(serializers.Serializer):
     task_id = serializers.CharField(help_text='The task id of the uploaded file.')
 
 
+@extend_schema_serializer(
+    examples=[
+        OpenApiExample('Example', value={
+            'type': 'daily_limit',
+            'used': 10,
+            'limit': 10,
+        })
+    ]
+)
+class UploadFileLimitResponseSerializer(serializers.Serializer):
+    type = serializers.CharField(help_text='The type of limit. in [daily_limit, monthly_limit]')
+    used = serializers.IntegerField(help_text='The number of success uploaded files.')
+    limit = serializers.IntegerField(help_text='The limit number of the type.')
+
+
 # TopicPlaza/MyTopic
 @extend_schema_serializer(
     examples=[

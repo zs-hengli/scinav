@@ -13,6 +13,8 @@ from document.serializers import DocumentRagCreateSerializer
 from bot.rag_service import Document as RagDocument
 from django_redis import get_redis_connection
 
+from vip.serializers import LimitCheckSerializer
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,9 +22,21 @@ def update_document_lib(user_id, document_ids, keyword=None):
     filter_query = Q(id__in=document_ids, del_flag=False, collection_type=Document.TypeChoices.PUBLIC)
     if keyword:
         filter_query &= Q(title__contains=keyword)
-    document_ids = Document.objects.filter(filter_query).values_list('id', flat=True).all()
+    document_ids = Document.objects.filter(filter_query).values_list('id', flat=True)
+    limit_info = LimitCheckSerializer.embedding_limit(user_id)
+    document_count = document_ids.count()
+    if user_id != '0000':
+        if limit_info['daily'] and limit_info['daily'] <= limit_info['used_day'] + document_count:
+            return 130006, 'exceed day limit', {
+                'used': limit_info['used_day'], 'limit': limit_info['daily'], 'need': document_count
+            }
+        elif limit_info['monthly'] and limit_info['monthly'] <= limit_info['used_month'] + document_count:
+            return 130007, 'exceed month limit', {
+                'used': limit_info['used_month'], 'limit': limit_info['monthly'], 'need': document_count
+            }
+
     document_libraries = []
-    for doc_id in document_ids:
+    for doc_id in document_ids.all():
         if old_document_library := DocumentLibrary.objects.filter(
             user_id=user_id, document_id=doc_id, del_flag=False, task_status__in=[
                 DocumentLibrary.TaskStatusChoices.COMPLETED, DocumentLibrary.TaskStatusChoices.ERROR
@@ -44,7 +58,7 @@ def update_document_lib(user_id, document_ids, keyword=None):
         document_library, _ = DocumentLibrary.objects.update_or_create(
             defaults=update_defaults, create_defaults=data, user_id=user_id, document_id=doc_id)
         document_libraries.append(document_library)
-    return document_libraries
+    return 0, 'success', document_libraries
 
 
 def document_update_from_rag_ret(rag_ret):

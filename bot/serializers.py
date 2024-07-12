@@ -26,6 +26,7 @@ class BotCreateSerializer(serializers.Serializer):
     llm = serializers.JSONField(default=None, allow_null=True)
     tools = serializers.JSONField(default=None, allow_null=True)
     cover_url = serializers.CharField(default=None, allow_null=True)
+    advance_share = serializers.BooleanField(default=False)
 
     def validate(self, attrs):
         if attrs.get('author') and len(attrs['author']) > 128:

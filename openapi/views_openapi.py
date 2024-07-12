@@ -24,7 +24,8 @@ from openapi.base_service import record_openapi_log
 from openapi.models import OpenapiLog
 from openapi.serializers_openapi import ChatResponseSerializer, UploadFileResponseSerializer, \
     TopicListRequestSerializer, PersonalLibraryRequestSerializer, SearchDocumentResultSerializer, ChatQuerySerializer, \
-    DocumentLibraryPersonalSerializer, CollectionListRequestSerializer, CollectionListSerializer
+    DocumentLibraryPersonalSerializer, CollectionListRequestSerializer, CollectionListSerializer, \
+    UploadFileLimitResponseSerializer
 from openapi.serializers_openapi import SearchQuerySerializer, ExceptionResponseSerializer, TopicListSerializer
 from openapi.service import upload_paper, get_request_openapi_key_id
 from openapi.service_openapi import search, collection_list_mine
@@ -221,7 +222,7 @@ class UploadPaper(APIView):
             }
         },
         responses={
-            (200, 'application/json'): OpenApiResponse(UploadFileResponseSerializer),
+            (200, 'application/json'): OpenApiResponse(UploadFileResponseSerializer | UploadFileLimitResponseSerializer),
             (400, 'application/json'): OpenApiResponse(ExceptionResponseSerializer),
         },
         extensions={'x-code-samples': [
@@ -260,7 +261,7 @@ print(response.text)
             error_msg = 'file not found'
             return openapi_exception_response(100001, error_msg)
         # logger.debug(f'ddddddddd file: {file.name}, {file.file}')
-        code, msg, data = upload_paper(user_id, file)
+        code, msg, data = upload_paper(user_id, file, openapi_key_id)
 
         record_openapi_log(
             user_id, openapi_key_id, OpenapiLog.Api.UPLOAD_PAPER, OpenapiLog.Status.SUCCESS, obj_id1=data['task_id']

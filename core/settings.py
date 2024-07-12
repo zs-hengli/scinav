@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'document',
     'openapi',
     'vip',
+    'customadmin',
 ]
 
 MIDDLEWARE = [
@@ -370,6 +371,11 @@ WEIXIN_PAY_MCH_PRIVATE_KEY = os.environ.get('WEIXIN_PAY_MCH_PRIVATE_KEY', 'priva
 # https://wechatpay-api.gitbook.io/wechatpay-api-v3/chang-jian-wen-ti/zheng-shu-xiang-guan#ru-he-cha-kan-zheng-shu-xu-lie-hao
 WEIXIN_PAY_MCH_CERT_SERIAL_NO = os.environ.get('WEIXIN_PAY_MCH_CERT_SERIAL_NO', 'mch cert serial no')
 WEIXIN_PAY_NOTIFY_URL = os.environ.get('WEIXIN_PAY_NOTIFY_URL', 'https://host/path')
+# 人民币元兑换代币的兑换率 10表示 1元兑换10代币
+EXCHANGE_RATE_CNY2TOKENS = int(os.environ.get('EXCHANGE_RATE_CNY2TOKENS', 10))
 
 # chat
 CHAT_TIMEOUT = int(os.environ.get('CHAT_TIMEOUT', 30))
+
+# admin
+ADMIN_API_KEY = os.environ.get('ADMIN_API_KEY', '82b71e05-a1fe-4cfb-b3ef-53290b2cbf60')

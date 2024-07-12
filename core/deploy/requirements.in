@@ -35,6 +35,7 @@ pybtex
 
 # weichat pay
 wechatpayv3
+pillow
 qrcode
 
 # gunicorn

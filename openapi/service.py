@@ -23,7 +23,7 @@ def get_request_openapi_key_id(request):
     return int(openapi_key_id)
 
 
-def upload_paper(user_id, file: InMemoryUploadedFile):
+def upload_paper(user_id, file: InMemoryUploadedFile, openapi_key_id):
     ret = presigned_url(user_id, file.name)
     url = ret['presigned_url']
     object_path = ret['object_path']
@@ -43,11 +43,20 @@ def upload_paper(user_id, file: InMemoryUploadedFile):
             'object_path': object_path,
             'filename': file.name,
         }],
+        'open_key_id': openapi_key_id,
     }
     logger.info(f'upload paper, info: {doc_person_lib_data}')
-    doc_libs = document_personal_upload(doc_person_lib_data)
-    task_id = doc_libs[0].task_id
-    return 0, '', {'object_path': object_path, 'task_id': task_id}
+    code, msg, data = document_personal_upload(doc_person_lib_data)
+    if code == 0:
+        task_id = data[0].task_id
+        data = {'object_path': object_path, 'task_id': task_id}
+    else:
+        data = {
+            'type': 'daily_limit' if code == 130006 else 'monthly_limit',
+            'used': data['used'],
+            'limit': data['limit'],
+        }
+    return code, msg, data
 
 
 def create_openapi_key(user_id, validated_data):

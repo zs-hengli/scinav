@@ -28,4 +28,5 @@ urlpatterns = [
     path('openapi/v1/', include('openapi.urls_openapi')),
     path('api/v1/', include('openapi.urls')),
     path('api/v1/', include('vip.urls')),
+    path('api/admin/', include('customadmin.urls')),
 ]
