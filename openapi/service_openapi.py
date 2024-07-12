@@ -45,7 +45,7 @@ def search(user_id, content, topn=100):
             },
             'reference_formats': get_reference_formats(document),
         })
-    async_update_document.apply_async(args=[document_ids])
+    async_update_document.apply_async(args=[document_ids, rag_ret])
     return ret_data
 
 

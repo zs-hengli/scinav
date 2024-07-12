@@ -192,7 +192,7 @@ def search(user_id, validated_data):
         rag_ret = RagDocument.search(user_id, content, limit=limit)
         documents = _rag_papers_to_documents(rag_ret)
         document_ids = [d['id'] for d in documents]
-        async_update_document.apply_async(args=[document_ids])
+        async_update_document.apply_async(args=[document_ids, rag_ret])
         search_result_save_cache(user_id, content, documents, limit=limit)
 
     documents, sources, authors = advance_search(documents, vd)
@@ -306,7 +306,7 @@ def author_documents(user_id, author_id, validated_data):
         papers = RagAuthors.get_author_papers(author_id)
         documents = _rag_papers_to_documents(papers)
         document_ids = [d['id'] for d in documents]
-        async_update_document.apply_async(args=[document_ids])
+        async_update_document.apply_async(args=[document_ids, papers])
         search_result_save_cache(user_id, author_id, documents, search_type='author_papers')
 
     documents, sources, authors = advance_search(documents, vd)

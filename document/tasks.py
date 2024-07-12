@@ -136,8 +136,12 @@ def async_schedule_publish_bot_task(self, task_id=None):
 
 @shared_task(bind=True)
 # @close_connection
-def async_update_document(self, document_ids):
+def async_update_document(self, document_ids, rag_search_documents=None):
     documents = Document.objects.filter(pk__in=document_ids).all()
+    rag_dict = {}
+    update_documents = []
+    if rag_search_documents:
+        rag_dict = {f"{d['collection_id']}_{d['doc_id']}": d for d in rag_search_documents}
     fileds = [
         'title', 'abstract', 'authors', 'author_names_ids', 'doi', 'categories',
         'year', 'pub_date', 'pub_type', 'venue', 'journal', 'conference', 'keywords',  # 'full_text_accessible',
@@ -151,15 +155,22 @@ def async_update_document(self, document_ids):
             'doc_id': d.doc_id,
         }
         try:
-            data = RagDocument.get(get_rag_data)
+            if not (data := rag_dict.get(f'{d.collection_id}_{d.doc_id}')):
+                data = RagDocument.get(get_rag_data)
         except Exception as e:
             logger.error(f'async_update_document, {d.doc_id}_{d.collection_id}_{d.collection_type}, {e}')
             continue
+        temp_document = documents[i]
+        need_update = False
         for f in fileds:
             if data[f] or isinstance(data[f], bool):
-                setattr(documents[i], f, data[f])
+                if getattr(temp_document, f) != data[f]:
+                    need_update = True
+                setattr(temp_document, f, data[f])
+        if need_update:
+            update_documents.append(temp_document)
     Document.objects.bulk_update(documents, fileds)
-    logger.info(f'async_update_document end, documents len: {len(documents)}')
+    logger.info(f'async_update_document end, documents len: {len(documents)}, update len: {len(update_documents)}')
     return True
 
 
