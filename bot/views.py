@@ -239,7 +239,7 @@ class BotSubscribe(APIView):
             return my_json_response({}, code=100002, msg='bot_id is illegal')
         if bot.user_id == user_id:
             return my_json_response({}, code=100003, msg='can not subscribe self bot')
-        bot_subscribe(user_id, bot_id, action)
+        bot_subscribe(user_id, bot, action)
         # 专题拥有者有专题文章的全文访问权限的公共库document_ids
         documents_ids = bot_user_full_text_document_ids(bot=bot)
         return my_json_response({

@@ -23,7 +23,7 @@ class GlobalConfig(models.Model):
         # award
         SUBSCRIBED_BOT = 'subscribed_bot', _('subscribed_bot')
         INVITE_REGISTER = 'invite_register', _('invite_register')
-        REGISTER_AWARD = 'register_award', _('register_award')
+        NEW_USER_AWARD = 'new_user_award', _('new_user_award')
         DURATION = 'duration_award', _('duration_award')
         # activity
         DISCOUNT = 'discount', _('discount')
@@ -67,8 +67,8 @@ class GlobalConfig(models.Model):
         configs = GlobalConfig.objects.filter(
             config_type=GlobalConfig.ConfigType.AWARD, sub_type__in=award_types).all()
         config = {}
-        for i,c in configs.items():
-            config[c.sub_type] = config.value
+        for c in configs:
+            config[c.sub_type] = c.value
         return config
 
     class Meta:

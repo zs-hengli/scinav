@@ -13,8 +13,7 @@ from customadmin.models import GlobalConfig
 from customadmin.service import get_global_configs
 from vip.models import Pay, TokensHistory, generate_trade_no, Member, MemberUsageLog
 from vip.pay.wxpay import native_pay, weixin_notify, pay_status
-from vip.serializers import MemberInfoSerializer, ExchangeQuerySerializer, TokensHistoryListSerializer, \
-    TradesQuerySerializer
+from vip.serializers import MemberInfoSerializer, ExchangeQuerySerializer, TradesQuerySerializer
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +94,8 @@ def pay_notify(request):
 def pay_trade_state(out_trade_no, pay: Pay = None):
     if not pay:
         pay = Pay.objects.filter(out_trade_no=out_trade_no).first()
+    if not pay:
+        return None
     data = {
         "id": pay.id,
         "out_trade_no": pay.out_trade_no,
@@ -102,7 +103,7 @@ def pay_trade_state(out_trade_no, pay: Pay = None):
         "amount": pay.amount,
         "description": pay.description,
         "trade_state": pay.trade_state,
-        "success_time": pay.success_time.strftime('%Y-%m-%d %H:%M:%S'),
+        "success_time": pay.success_time.strftime('%Y-%m-%d %H:%M:%S') if pay.success_time else None,
     }
     if pay.trade_state not in [Pay.TradeState.SUCCESS, Pay.TradeState.CLOSED]:
         status_info = pay_status(out_trade_no, transaction_id=pay.transaction_id)
@@ -174,9 +175,9 @@ def get_member_info(user_id):
                 "amount": member.amount,
                 "member_type": member_type,
                 "expire_days": expire_days,
-                "chat_used_day": chat_static_day[0].get('count'),
+                "chat_used_day": chat_static_day,
                 "limit_chat_daily": config_limit['limit_chat_daily'] if config_limit else None,
-                "embedding_used_month": embedding_static_monty[0].get('count'),
+                "embedding_used_month": embedding_static_monty,
                 "limit_embedding_monthly": config_limit['limit_embedding_monthly'] if config_limit else None,
             }
         data = MemberInfoSerializer(info).data
@@ -187,7 +188,7 @@ def tokens_expire_list(user_id):
     histories = TokensHistory.objects.filter(
         user_id=user_id, end_date__gte=datetime.date.today(), status__gt=TokensHistory.Status.DELETE,
         type__in=[TokensHistory.Type.SUBSCRIBED_BOT, TokensHistory.Type.INVITE_REGISTER,
-                  TokensHistory.Type.REGISTER_AWARD, TokensHistory.Type.MONTHLY_AWARD]
+                  TokensHistory.Type.NEW_USER_AWARD, TokensHistory.Type.DURATION_AWARD]
     ).all()
     data = []
     if histories:
@@ -197,7 +198,8 @@ def tokens_expire_list(user_id):
                 'amount': history.amount - history.used,
                 'end_date': history.end_date
             }
-            data.append(temp)
+            if temp['amount'] > 0:
+                data.append(temp)
     return data
 
 
@@ -227,7 +229,7 @@ def _consume_tokens(user_id, member, member_type, duration, amount):
         user_id=user_id,
         type__in=[
             TokensHistory.Type.WXPAY, TokensHistory.Type.SUBSCRIBED_BOT, TokensHistory.Type.INVITE_REGISTER,
-            TokensHistory.Type.REGISTER_AWARD, TokensHistory.Type.MONTHLY_AWARD
+            TokensHistory.Type.NEW_USER_AWARD, TokensHistory.Type.DURATION_AWARD
         ],
         status__gt=TokensHistory.Status.DELETE,
         amount__gt=F('used')

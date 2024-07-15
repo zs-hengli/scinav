@@ -92,7 +92,7 @@ class Migration(migrations.Migration):
                     ('exchange_standard_30', 'exchange_standard_30'), ('exchange_standard_90', 'exchange_standard_90'), ('exchange_standard_360', 'exchange_standard_360'),
                     ('exchange_premium_30', 'exchange_premium_30'), ('exchange_premium_90', 'exchange_premium_90'), ('exchange_premium_360', 'exchange_premium_360'),
                     ('subscribed_bot', 'subscribed_bot'), ('invite_register', 'invite_register'),
-                    ('register_award', 'register_award'), ('monthly_award', 'monthly_award'), ('expiration', 'expiration')
+                    ('new_user_award', 'new_user_award'), ('duration_award', 'duration_award'), ('expiration', 'expiration')
                 ], db_default=None, default=None, max_length=128, null=True)),
                 ('out_trade_no', models.CharField(db_default=None, default=None, max_length=128, null=True)),
                 ('start_date', models.DateField(db_default=None, default=None, null=True)),

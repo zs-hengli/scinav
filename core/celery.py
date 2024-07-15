@@ -25,6 +25,8 @@ def config_loggers(*args, **kwags):
     dictConfig(settings.LOGGING)
 
 
+app.conf.timezone = 'Asia/Shanghai'
+
 app.conf.beat_schedule = {
     'async-document-library-every-10seconds': {
         'task': 'document.tasks.async_document_library_task',
@@ -33,7 +35,11 @@ app.conf.beat_schedule = {
     'async-publish-bot-every-minute': {
         'task': 'document.tasks.async_schedule_publish_bot_task',
         'schedule': crontab(minute='*'),
-    }
+    },
+    'async-daily-member-status-every-day': {
+        'task': 'document.tasks.async_daily_member_status',
+        'schedule': crontab(minute=1, hour=0),
+    },
 }
 app.conf.broker_connection_retry_on_startup = True
 # 自动从Django的已注册app中发现任务

@@ -17,7 +17,8 @@ from customadmin.models import GlobalConfig
 from document.base_service import update_document_lib
 from document.models import Document, DocumentLibrary
 from document.tasks import async_schedule_publish_bot_task, async_ref_document_to_document_library
-from vip.models import Member
+from vip.base_service import tokens_award
+from vip.models import Member, TokensHistory
 from vip.serializers import MemberInfoSerializer
 
 logger = logging.getLogger(__name__)
@@ -259,7 +260,8 @@ def bot_list_chat_menu(user_id, page_size=10, page_num=1):
 
 
 # 专题订阅和取消订阅
-def bot_subscribe(user_id, bot_id, action='subscribe'):
+def bot_subscribe(user_id, bot:Bot, action='subscribe'):
+    bot_id = bot.id
     # 订阅： 加个人文件库 创建同名收藏夹
     # 取消订阅 删除收藏夹
     data = {
@@ -267,7 +269,9 @@ def bot_subscribe(user_id, bot_id, action='subscribe'):
         'bot_id': bot_id,
         'del_flag': action != 'subscribe'
     }
-    BotSubscribe.objects.update_or_create(data, user_id=user_id, bot_id=bot_id)
+    subscribe, created = BotSubscribe.objects.update_or_create(data, user_id=user_id, bot_id=bot_id)
+    if created and user_id != bot.user_id:
+        tokens_award(bot.user_id, TokensHistory.Type.SUBSCRIBED_BOT, bot_id=bot_id)
 
 
 def bot_user_full_text_document_ids(bot_id=None, bot: Bot = None):

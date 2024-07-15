@@ -15,6 +15,8 @@ from openapi.models import OpenapiKey
 from user.authing_service import get_user_by_id_token
 from user.models import MyUser
 from user.service import save_auth_user_info
+from vip.base_service import tokens_award
+from vip.models import TokensHistory
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +53,12 @@ def check_token(request):
                 ):
                     user = save_auth_user_info(user_info)
             else:
-                # todo new user
+                # invite register and new user award
                 user = save_auth_user_info(user_info)
+                invite_code = request.COOKIES.get('X-INVITE-CODE')
+                if invite_code:
+                    tokens_award(user_id=invite_code, award_type=TokensHistory.Type.INVITE_REGISTER)
+                tokens_award(user_id=user.id, award_type=TokensHistory.Type.NEW_USER_AWARD)
             return user, token
         else:
             logger.warning(f'Invalid access_token., request.headers: {request.headers}')

@@ -63,11 +63,11 @@ class GlobalConfigPostQuerySerializer(serializers.Serializer):
         if attrs.get('config_type') and attrs.get('config_type') == GlobalConfig.ConfigType.AWARD:
             if not attrs.get('sub_type') or attrs.get('sub_type') not in [
                 GlobalConfig.SubType.SUBSCRIBED_BOT, GlobalConfig.SubType.INVITE_REGISTER,
-                GlobalConfig.SubType.REGISTER_AWARD, GlobalConfig.SubType.DURATION
+                GlobalConfig.SubType.NEW_USER_AWARD, GlobalConfig.SubType.DURATION
             ]:
                 raise serializers.ValidationError({
                     'sub_type': 'award config sub_type is invalid must in [subscribed_bot, invite_register, '
-                                'register_award, duration_award]'
+                                'new_user_award, duration_award]'
                 })
             if attrs.get('sub_type') == GlobalConfig.SubType.DURATION:
                 award_serial = ConfigValueDurationAwardCheckSerializer(data=attrs.get('value'))

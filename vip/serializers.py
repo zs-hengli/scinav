@@ -132,12 +132,12 @@ class TradesQuerySerializer(serializers.Serializer):
 
 class TokensAwardQuerySerializer(serializers.Serializer):
     class Type(models.TextChoices):
-        REGISTER_AWARD = 'register_award', _('register_award')
-        MONTHLY_AWARD = 'monthly_award', _('monthly_award')
+        NEW_USER_AWARD = 'new_user_award', _('new_user_award')
+        DURATION_AWARD = 'duration_award', _('duration_award')
         INVITE_REGISTER = 'invite_register', _('invite_register')
         SUBSCRIBED_BOT = 'subscribed_bot', _('subscribed_bot')
 
-    award_type = serializers.ChoiceField(choices=Type, default=Type.REGISTER_AWARD)
+    award_type = serializers.ChoiceField(choices=Type, default=Type.NEW_USER_AWARD)
     amount = serializers.IntegerField(default=0)
     bot_id = serializers.CharField(required=False, default=None)
 

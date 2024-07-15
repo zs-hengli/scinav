@@ -9,7 +9,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from core.utils.views import extract_json, my_json_response
-from vip.base_service import tokens_award
+from vip.base_service import tokens_award, daily_member_status
 from vip.models import Pay
 # from vip.pay.wxpay import pay_status
 from vip.serializers import PayQrcodeQuerySerializer, ExchangeQuerySerializer, TradesQuerySerializer, \

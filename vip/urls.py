@@ -58,5 +58,5 @@ orders 订单列表：
     定时check支付状态为NOTPAY的订单
     
 赠送代币：
-    type: subscribed_bot,invite_register,register_award,monthly_award
+    type: subscribed_bot,invite_register,new_user_award,duration_award
 """

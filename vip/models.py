@@ -71,8 +71,7 @@ class TokensHistory(models.Model):
         EXCHANGE_PREMIUM_360 = 'exchange_premium_360', _('exchange_premium_360')
         SUBSCRIBED_BOT = 'subscribed_bot', _('subscribed_bot')
         INVITE_REGISTER = 'invite_register', _('invite_register')
-        REGISTER_AWARD = 'register_award', _('register_award')
-        MONTHLY_AWARD = 'monthly_award', _('monthly_award')
+        DURATION_AWARD = 'duration_award', _('duration_award')
         NEW_USER_AWARD = 'new_user_award', _('new_user_award')  # todo 新用户奖励 包括注册 一次性奖励 固定周期奖励
         EXPIRATION = 'expiration', _('expiration')
 
