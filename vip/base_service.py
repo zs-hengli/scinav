@@ -6,6 +6,7 @@ from django.db import transaction, DatabaseError
 from django.db.models import Q
 
 from customadmin.models import GlobalConfig
+from document.models import bulk_insert_ignore_duplicates
 from vip.models import Member, generate_trade_no, TokensHistory
 
 logger = logging.getLogger(__name__)
@@ -113,3 +114,72 @@ def daily_member_status():
             update_data.append(u_history)
         update_fileds = ['status', 'start_date', 'end_date', 'freezing_date', 'updated_at']
         TokensHistory.objects.bulk_update(update_data, update_fileds)
+
+
+def daily_duration_award():
+    """
+    每日任务 赠送会员时长
+    :return:
+    """
+    today = datetime.date.today()
+    configs = GlobalConfig.get_award([GlobalConfig.SubType.DURATION])
+    if not configs.get(GlobalConfig.SubType.DURATION) or not configs[GlobalConfig.SubType.DURATION].get('duration'):
+        return
+    config = configs[GlobalConfig.SubType.DURATION]
+    duration = config.get('duration')
+    amount = config.get('per')
+    period_of_validity = config.get('period_of_validity')
+    # 没有Member记录的用户赠送代币
+    no_member_users = Member.get_no_member_users()
+    member_dicts, history_objs = [], []
+    if no_member_users:
+        for user_id in no_member_users:
+            member_dicts.append({
+                'user_id': user_id, 'amount': amount,
+                'created_at': datetime.datetime.now(),
+                'updated_at': datetime.datetime.now()
+            })
+    # 上次赠送时间超过duration的用户赠送代币
+    user_ids = TokensHistory.get_need_duration_award_user(duration)
+    award_users = list(set(no_member_users + user_ids))
+    if award_users:
+        for user_id in award_users:
+            history_objs.append(TokensHistory(
+                user_id=user_id,
+                trade_no=generate_trade_no(),
+                title=f"duration award {duration}",
+                amount=amount,
+                type=TokensHistory.Type.DURATION_AWARD,
+                start_date=today,
+                end_date=today + datetime.timedelta(days=period_of_validity - 1),
+                status=TokensHistory.Status.COMPLETED,
+            ))
+    try:
+        with (transaction.atomic()):
+            if member_dicts:
+                bulk_insert_ignore_duplicates(Member, member_dicts)
+            TokensHistory.objects.bulk_create(history_objs)
+            members = Member.objects.filter(user_id__in=award_users)
+            for member in members:
+                member.update_amount()
+    except DatabaseError as e:
+        logger.error(f'daily_duration_award error, {e}, \n' + traceback.format_exc())
+
+    # 代币过期处理
+    if histories := TokensHistory.get_expire_history():
+        history_objs = []
+        for history in histories:
+            history_objs.append(TokensHistory(
+                user_id=history['user_id'],
+                trade_no=generate_trade_no(),
+                out_trade_no=history['trade_no'],
+                title=f"duration award {duration}",
+                amount=-history['amount'],
+                type=TokensHistory.Type.EXPIRATION,
+                status=TokensHistory.Status.COMPLETED,
+            ))
+
+        TokensHistory.objects.bulk_create(history_objs)
+        members = Member.objects.filter(user_id__in=[h['user_id'] for h in histories])
+        for member in members:
+            member.update_amount()

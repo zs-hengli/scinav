@@ -1,7 +1,7 @@
 import logging
 import uuid
 
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
 from rest_framework.decorators import permission_classes
@@ -9,7 +9,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from core.utils.views import extract_json, my_json_response
-from vip.base_service import tokens_award, daily_member_status
+from vip.base_service import tokens_award
 from vip.models import Pay
 # from vip.pay.wxpay import pay_status
 from vip.serializers import PayQrcodeQuerySerializer, ExchangeQuerySerializer, TradesQuerySerializer, \

@@ -20,7 +20,7 @@ from document.models import DocumentLibrary, Document
 from openapi.base_service import update_openapi_log_upload_status
 from openapi.models import OpenapiLog
 from user.models import UserOperationLog
-from vip.base_service import daily_member_status
+from vip.base_service import daily_member_status, daily_duration_award
 from vip.models import MemberUsageLog
 
 logger = logging.getLogger('celery')
@@ -320,3 +320,11 @@ def async_daily_member_status(self):
     logger.info('async_daily_member_status start')
     daily_member_status()
     logger.info('async_daily_member_status end')
+
+
+@shared_task(bind=True)
+# @close_connection
+def async_daily_duration_award(self):
+    logger.info('async_daily_duration_award start')
+    daily_duration_award()
+    logger.info('async_daily_duration_award end')

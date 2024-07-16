@@ -54,6 +54,15 @@ class Member(models.Model):
             logger.error('update_amount error sql: {sql}')
         return self
 
+    @staticmethod
+    def get_no_member_users():
+        sql = f"""
+        SELECT my_user.id as user_id FROM my_user left join member on member.user_id=my_user.id
+        WHERE member.user_id is null
+        """
+        rest = my_custom_sql(sql)
+        return [i['user_id'] for i in rest]
+
     class Meta:
         db_table = 'member'
         verbose_name = 'member'
@@ -99,6 +108,28 @@ class TokensHistory(models.Model):
     updated_at = models.DateTimeField(null=True, auto_now=True)
     created_at = models.DateTimeField(null=True, auto_now_add=True)
     status = models.IntegerField(null=True, default=None, db_default=None, choices=Status)
+
+    @staticmethod
+    def get_expire_history():
+        sql = f"""SELECT h1.* FROM tokens_history h1 
+left join tokens_history h2 on h1.trade_no = h2.out_trade_no
+where h1.type = 'duration_award' AND h2.id is null AND h1.end_date < current_timestamp::date
+        """
+        rest = my_custom_sql(sql)
+        return rest
+
+    @staticmethod
+    def get_need_duration_award_user(duration):
+        rest = my_custom_sql(f"""select user_id from (
+select user_id, max(start_date) m_start_date
+from tokens_history where type='duration_award' group by user_id
+union all
+select m.user_id, h.start_date m_start_date 
+from member m LEFT JOIN tokens_history h on m.user_id=h.user_id and h.type='duration_award'
+where  h.id is null) t
+where (CURRENT_TIMESTAMP - INTERVAL '{duration - 1} day')::date > m_start_date or m_start_date is null
+        """)
+        return [i['user_id'] for i in rest]
 
     class Meta:
         db_table = 'tokens_history'
