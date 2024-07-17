@@ -1,6 +1,10 @@
+import datetime
+
 from rest_framework import serializers
 
 from customadmin.models import GlobalConfig
+from vip.models import Member, TokensHistory
+from vip.serializers import TokensHistoryListSerializer
 
 
 class BaseModelSerializer(serializers.ModelSerializer):
@@ -88,3 +92,96 @@ class GlobalConfigDetailSerializer(BaseModelSerializer):
     class Meta:
         model = GlobalConfig
         fields = ['id', 'name', 'config_type', 'sub_type', 'value', 'order', 'updated_at', 'created_at']
+
+
+class MembersQuerySerializer(serializers.Serializer):
+    keyword = serializers.CharField(required=False, allow_null=True, default=None, allow_blank=True)
+    page_size = serializers.IntegerField(required=False, default=10)
+    page_num = serializers.IntegerField(required=False, default=1)
+
+
+class UpdateMembersQuerySerializer(serializers.Serializer):
+    user_id = serializers.CharField(required=True)
+    is_vip = serializers.BooleanField(default=None)
+
+
+class MembersListSerializer(serializers.Serializer):
+    id = serializers.CharField(required=True)
+    user_id = serializers.CharField(required=True)
+    amount = serializers.IntegerField(required=True)
+    is_vip = serializers.BooleanField(required=True)
+    email = serializers.CharField(required=True, allow_null=True)
+    phone = serializers.CharField(required=True, allow_null=True)
+    premium_end_date = serializers.DateField(required=True, allow_null=True)
+    standard_end_date = serializers.DateField(required=True, allow_null=True)
+    member_type = serializers.SerializerMethodField()
+
+    @staticmethod
+    def get_member_type(obj):
+        if obj['is_vip']:
+            member_type = Member.Type.VIP
+        elif obj['premium_end_date'] and obj['premium_end_date'] > datetime.date.today():
+            member_type = Member.Type.PREMIUM
+        elif obj['standard_end_date'] and obj['standard_end_date'] > datetime.date.today():
+            member_type = Member.Type.STANDARD
+        else:
+            member_type = Member.Type.FREE
+        return member_type
+
+
+class MembersAwardQuerySerializer(serializers.Serializer):
+    user_id = serializers.CharField(required=True)
+    amount = serializers.IntegerField(required=True)
+    period_of_validity = serializers.IntegerField(allow_null=True, default=None)
+
+
+class MembersTradesQuerySerializer(serializers.Serializer):
+    keyword = serializers.CharField(required=False, allow_null=True, default=None, allow_blank=True)
+    page_size = serializers.IntegerField(required=False, default=10)
+    page_num = serializers.IntegerField(required=False, default=1)
+
+
+class TokensHistoryAdminListSerializer(serializers.Serializer):
+    id = serializers.CharField(required=True)
+    trade_no = serializers.CharField(required=True)
+    amount = serializers.IntegerField(required=True)
+    type = serializers.ChoiceField(choices=TokensHistory.Type)
+    pay_amount = serializers.IntegerField(required=True, allow_null=True)
+    used_info = serializers.SerializerMethodField()
+    status_desc = serializers.SerializerMethodField()
+    created_at = serializers.DateTimeField(format='%Y-%m-%d %H:%M:%S')
+    user_id = serializers.CharField()
+    email = serializers.CharField(allow_null=True, default=None)
+    phone = serializers.CharField(allow_null=True, default=None)
+
+    @staticmethod
+    def get_used_info(obj):
+        data = {}
+        if obj['type'] in [
+            TokensHistory.Type.EXCHANGE_STANDARD_30, TokensHistory.Type.EXCHANGE_STANDARD_90,
+            TokensHistory.Type.EXCHANGE_STANDARD_360, TokensHistory.Type.EXCHANGE_PREMIUM_30,
+            TokensHistory.Type.EXCHANGE_PREMIUM_90, TokensHistory.Type.EXCHANGE_PREMIUM_360
+        ]:
+            if obj['status'] == TokensHistory.Status.FREEZING:
+                if not obj['freezing_date'] or obj['freezing_date'] < obj['start_date']:
+                    data['remain_days'] = (obj['end_date'] - obj['start_date']).days + 1
+                else:
+                    data['remain_days'] = (obj['end_date'] - obj['freezing_date']).days + 1
+            elif obj['end_date'] >= datetime.date.today():
+                data['remain_days'] = (obj['end_date'] - datetime.date.today()).days + 1
+            else:
+                data['end_date'] = obj['end_date']
+        elif obj['end_date']:
+            data['end_date'] = obj['end_date']
+        return data
+
+    @staticmethod
+    def get_status_desc(obj):
+        status_map = {
+            0: 'deleted',
+            2: 'completed',
+            3: 'in_progress',
+            4: 'freezing',
+        }
+        return status_map.get(obj['status'], 'completed')
+

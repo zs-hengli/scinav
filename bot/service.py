@@ -371,10 +371,10 @@ def bots_advance_share_info(user_id, bot=None):
     if bot and bot.advance_share:
         can_advance_share = True
     member = Member.objects.filter(user_id=user_id).first()
-    member_type = MemberInfoSerializer.get_member_type(member)
-    if member_type == MemberInfoSerializer.Type.VIP:
+    member_type = member.get_member_type() if member else Member.Type.FREE
+    if member_type == Member.Type.VIP:
         can_advance_share = True
-    elif member_type == MemberInfoSerializer.Type.FREE:
+    elif member_type == Member.Type.FREE:
         can_advance_share = False
     else:
         config = GlobalConfig.objects.filter(

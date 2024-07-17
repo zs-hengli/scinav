@@ -8,7 +8,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from core.utils.views import extract_json, my_json_response
-from user.serializers import UserSyncQuerySerializer
+from user.serializers import UserSyncQuerySerializer, UserSyncRespSerializer
 from user.service import sync_user_info
 
 logger = logging.getLogger(__name__)
@@ -39,8 +39,8 @@ class Users(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, 100001, f'validate error, {list(serial.errors.keys())}')
         vd = serial.validated_data
-        sync_user_info(request.user, vd)
-        return my_json_response({})
+        user = sync_user_info(request.user, vd)
+        return my_json_response(UserSyncRespSerializer(user).data)
 
 
 @method_decorator([extract_json], name='dispatch')

@@ -25,6 +25,13 @@ def dict_fetchall(cursor):
 
 # 会员信息：member
 class Member(models.Model):
+
+    class Type(models.TextChoices):
+        FREE = 'member_free', _('member_free')
+        STANDARD = 'member_standard', _('member_standard')
+        PREMIUM = 'member_premium', _('member_premium')
+        VIP = 'vip', _('vip')
+
     user = models.ForeignKey(
         'user.MyUser', unique=True, db_constraint=False, on_delete=models.DO_NOTHING, null=True, db_column='user_id')
     amount = models.IntegerField(default=0)
@@ -62,6 +69,35 @@ class Member(models.Model):
         """
         rest = my_custom_sql(sql)
         return [i['user_id'] for i in rest]
+
+    @staticmethod
+    def get_members_by_admin(user_id=None, email=None, phone=None, page_size=10, page_num=1):
+        select_sql = """select m.id,m.user_id,u.email,u.phone,u.date_joined,m.amount,
+    m.standard_end_date,m.premium_end_date,m.is_vip"""
+        from_sql = """ from member m left join my_user u on m.user_id=u.id where 1=1 """
+        where = ''
+        if user_id:
+            where += f" and m.user_id = '{user_id}'"
+        if email:
+            where += f" and u.email = '{email}'"
+        if phone:
+            where += f" and u.phone = '{phone}'"
+        count_sql = f"select count(1) as count {from_sql} {where}"
+        count_rest = my_custom_sql(count_sql)
+        limit_sql = f" limit {page_size} offset {(page_num - 1) * page_size}"
+        rest = my_custom_sql(f"{select_sql} {from_sql} {where} {limit_sql}")
+        return {'total': count_rest[0]['count'], 'list': rest}
+
+    def get_member_type(self):
+        if self.is_vip:
+            member_type = self.Type.VIP
+        elif self.premium_end_date and self.premium_end_date > datetime.date.today():
+            member_type = self.Type.PREMIUM
+        elif self.standard_end_date and self.standard_end_date > datetime.date.today():
+            member_type = self.Type.STANDARD
+        else:
+            member_type = self.Type.FREE
+        return member_type
 
     class Meta:
         db_table = 'member'
@@ -130,6 +166,25 @@ where  h.id is null) t
 where (CURRENT_TIMESTAMP - INTERVAL '{duration - 1} day')::date > m_start_date or m_start_date is null
         """)
         return [i['user_id'] for i in rest]
+
+    @staticmethod
+    def get_histories_by_admin(user_id=None, email=None, phone=None, trade_no=None, page_size=10, page_num=1):
+        select_sql = """select h.*,u.email,u.phone,u.date_joined"""
+        from_sql = """ from tokens_history h left join my_user u on h.user_id=u.id where 1=1 """
+        where = ''
+        if user_id:
+            where += f" and h.user_id = '{user_id}'"
+        if email:
+            where += f" and u.email = '{email}'"
+        if phone:
+            where += f" and u.phone = '{phone}'"
+        if trade_no:
+            where += f" and h.trade_no = '{trade_no}'"
+        count_sql = f"select count(1) as count {from_sql} {where}"
+        count_rest = my_custom_sql(count_sql)
+        limit_sql = f" limit {page_size} offset {(page_num - 1) * page_size}"
+        rest = my_custom_sql(f"{select_sql} {from_sql} {where} {limit_sql}")
+        return {'total': count_rest[0]['count'], 'list': rest}
 
     class Meta:
         db_table = 'tokens_history'

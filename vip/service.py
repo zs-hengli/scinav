@@ -169,7 +169,7 @@ def get_member_info(user_id):
         config_limit = config_limits[0]['value'] if config_limits else None
         info = {
             "amount": 0,
-            "member_type": MemberInfoSerializer.Type.FREE,
+            "member_type": Member.Type.FREE,
             "expire_days": None,
             "chat_used_day": chat_static_day,
             "limit_chat_daily": config_limit['limit_chat_daily'] if config_limit else None,
@@ -178,17 +178,17 @@ def get_member_info(user_id):
         }
         data = MemberInfoSerializer(info).data
     else:
-        member_type = MemberInfoSerializer.get_member_type(member)
-        if member_type == MemberInfoSerializer.Type.VIP:
+        member_type = member.get_member_type()
+        if member_type == Member.Type.VIP:
             info = {
                 "amount": member.amount,
                 "member_type": member_type,
             }
         else:
             expire_days = None
-            if member_type == MemberInfoSerializer.Type.PREMIUM:
+            if member_type == Member.Type.PREMIUM:
                 expire_days = (member.premium_end_date - datetime.date.today()).days + 1
-            elif member_type == MemberInfoSerializer.Type.STANDARD:
+            elif member_type == Member.Type.STANDARD:
                 expire_days = (member.standard_end_date - datetime.date.today()).days + 1
             config_limits = [
                 c for c in config if c['config_type'] == member_type and c['sub_type'] == GlobalConfig.SubType.LIMIT]
@@ -281,7 +281,7 @@ def _consume_tokens(user_id, member, member_type, duration, amount):
             ).first()
             end_date = (
                 member.standard_end_date
-                if member_type == MemberInfoSerializer.Type.STANDARD else member.premium_end_date
+                if member_type == Member.Type.STANDARD else member.premium_end_date
             )
             start_date = end_date - datetime.timedelta(days=duration - 1)
             new_history_status = _get_new_exchange_history_status(in_progress_history, member_type)
@@ -305,14 +305,14 @@ def _consume_tokens(user_id, member, member_type, duration, amount):
 
 
 def _tokens_history_type(member_type, duration):
-    if member_type == MemberInfoSerializer.Type.STANDARD:
+    if member_type == Member.Type.STANDARD:
         if duration == ExchangeQuerySerializer.Duration.THIRTY:
             return TokensHistory.Type.EXCHANGE_STANDARD_30
         elif duration == ExchangeQuerySerializer.Duration.NINETY:
             return TokensHistory.Type.EXCHANGE_STANDARD_90
         else:
             return TokensHistory.Type.EXCHANGE_STANDARD_360
-    elif member_type == MemberInfoSerializer.Type.PREMIUM:
+    elif member_type == Member.Type.PREMIUM:
         if duration == ExchangeQuerySerializer.Duration.NINETY:
             return TokensHistory.Type.EXCHANGE_PREMIUM_30
         elif duration == ExchangeQuerySerializer.Duration.NINETY:
@@ -325,7 +325,7 @@ def _tokens_history_type(member_type, duration):
 
 def _get_member_data(member, member_type, duration):
     freezing_standard_days = 0
-    if member_type == MemberInfoSerializer.Type.STANDARD:
+    if member_type == Member.Type.STANDARD:
         if not member.standard_start_date:
             member.standard_start_date = datetime.date.today()
         if not member.standard_end_date:
@@ -356,7 +356,7 @@ def _get_new_exchange_history_status(in_progress_history, member_type):
         TokensHistory.Type.EXCHANGE_STANDARD_30, TokensHistory.Type.EXCHANGE_STANDARD_90,
         TokensHistory.Type.EXCHANGE_STANDARD_360
     ] :
-        if member_type == MemberInfoSerializer.Type.STANDARD:
+        if member_type == Member.Type.STANDARD:
             return TokensHistory.Status.FREEZING
         else:
             return TokensHistory.Status.IN_PROGRESS

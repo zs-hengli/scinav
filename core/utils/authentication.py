@@ -143,7 +143,6 @@ def _get_openapi_key(openapi_key_id) -> OpenapiKey | None:
     return openapi
 
 
-
 def generate_token():
     """
     生成唯一token
@@ -151,3 +150,8 @@ def generate_token():
     :return:
     """
     return binascii.hexlify(os.urandom(20)).decode()
+
+
+def del_auth_cache(user_id):
+    user_info_key = f'scinav:auth:user_info:{user_id}'
+    cache.delete(user_info_key)

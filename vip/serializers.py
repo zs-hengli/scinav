@@ -29,33 +29,13 @@ class MemberInfoSerializer(serializers.Serializer):
         文件解析量
     """
 
-    class Type(models.TextChoices):
-        FREE = 'member_free', _('member_free')
-        STANDARD = 'member_standard', _('member_standard')
-        PREMIUM = 'member_premium', _('member_premium')
-        VIP = 'vip', _('vip')
-
     amount = serializers.IntegerField(default=0)
-    member_type = serializers.ChoiceField(choices=Type, default=Type.FREE)
+    member_type = serializers.ChoiceField(choices=Member.Type, default=Member.Type.FREE)
     expire_days = serializers.IntegerField(allow_null=True, default=None)
     chat_used_day = serializers.IntegerField(allow_null=True, default=None)
     limit_chat_daily = serializers.IntegerField(allow_null=True, default=None)
     embedding_used_month = serializers.IntegerField(allow_null=True, default=None)
     limit_embedding_monthly = serializers.IntegerField(allow_null=True, default=None)
-
-    @staticmethod
-    def get_member_type(member: Member | None):
-        if not member:
-            member_type = MemberInfoSerializer.Type.FREE
-        elif member.is_vip:
-            member_type = MemberInfoSerializer.Type.VIP
-        elif member.premium_end_date and member.premium_end_date > datetime.date.today():
-            member_type = MemberInfoSerializer.Type.PREMIUM
-        elif member.standard_end_date and member.standard_end_date > datetime.date.today():
-            member_type = MemberInfoSerializer.Type.STANDARD
-        else:
-            member_type = MemberInfoSerializer.Type.FREE
-        return member_type
 
 
 class ExchangeQuerySerializer(serializers.Serializer):
@@ -80,6 +60,7 @@ class ExchangeQuerySerializer(serializers.Serializer):
 class TokensHistoryListSerializer(serializers.ModelSerializer):
     used_info = serializers.SerializerMethodField()
     status_desc = serializers.SerializerMethodField()
+    created_at = serializers.DateTimeField(format='%Y-%m-%d %H:%M:%S')
 
     @staticmethod
     def get_used_info(obj: TokensHistory):
@@ -154,11 +135,11 @@ class LimitCheckSerializer(serializers.Serializer):
     @staticmethod
     def chat_limit(user_id):
         member = Member.objects.filter(user_id=user_id).first()
-        member_type = MemberInfoSerializer.get_member_type(member)
+        member_type = member.get_member_type() if member else Member.Type.FREE
         chat_static_day = MemberUsageLog.static_by_day(user_id, MemberUsageLog.UType.CHAT)
         chat_static_monty = MemberUsageLog.static_by_month(user_id, MemberUsageLog.UType.EMBEDDING)
         if member_type in [
-            MemberInfoSerializer.Type.FREE, MemberInfoSerializer.Type.STANDARD, MemberInfoSerializer.Type.PREMIUM
+            Member.Type.FREE, Member.Type.STANDARD, Member.Type.PREMIUM
         ]:
             limit_config = GlobalConfig.get_limit(member_type, ['limit_chat_daily', 'limit_chat_monthly'])
             limit_info = {
@@ -179,12 +160,10 @@ class LimitCheckSerializer(serializers.Serializer):
     @staticmethod
     def embedding_limit(user_id):
         member = Member.objects.filter(user_id=user_id).first()
-        member_type = MemberInfoSerializer.get_member_type(member)
+        member_type = member.get_member_type() if member else Member.Type.FREE
         embedding_static_day = MemberUsageLog.static_by_day(user_id, MemberUsageLog.UType.EMBEDDING)
         embedding_static_monty = MemberUsageLog.static_by_month(user_id, MemberUsageLog.UType.EMBEDDING)
-        if member_type in [
-            MemberInfoSerializer.Type.FREE, MemberInfoSerializer.Type.STANDARD, MemberInfoSerializer.Type.PREMIUM
-        ]:
+        if member_type in [Member.Type.FREE, Member.Type.STANDARD, Member.Type.PREMIUM]:
             limit_config = GlobalConfig.get_limit(member_type, ['limit_embedding_daily', 'limit_embedding_monthly'])
             limit_info = {
                 'daily': limit_config['limit_embedding_daily'],

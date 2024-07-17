@@ -5,7 +5,9 @@ import copy
 import hashlib
 import logging
 import random
+import re
 import time
+import uuid
 from datetime import datetime
 
 import pytz
@@ -195,6 +197,22 @@ def send_email(subject, content, to_emails, from_email=None):
     else:
         logger.error(f'Send email to {to_emails} failed')
     return res
+
+
+def check_uuid4_str(test_uuid, version=4):
+    try:
+        return uuid.UUID(test_uuid).version == version
+    except ValueError:
+        return False
+
+
+def check_email_str(email):
+    # 校验某个字符串是否是合格的email地址
+    regex_pattern = "^[a-zA-Z0-9_+&*-]+(?:\\.[a-zA-Z0-9_+&*-]+)*@(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,7}$"
+    if re.search(regex_pattern, email):
+        return True
+    else:
+        return False
 
 
 if __name__ == '__main__':

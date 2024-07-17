@@ -12,7 +12,7 @@ from vip.models import Member, generate_trade_no, TokensHistory
 logger = logging.getLogger(__name__)
 
 
-def tokens_award(user_id, award_type, amount=None, bot_id=None, period_of_validity=None):
+def tokens_award(user_id, award_type, amount=None, bot_id=None, period_of_validity=None, admin_id=None):
     # todo 细化赠币规则
     try:
         with (transaction.atomic()):
@@ -36,6 +36,8 @@ def tokens_award(user_id, award_type, amount=None, bot_id=None, period_of_validi
                 'end_date': end_date,
                 'status': TokensHistory.Status.COMPLETED,
             }
+            if admin_id:
+                history_data['give_user_id'] = admin_id
             if bot_id:
                 if TokensHistory.objects.filter(
                     type=award_type, out_trade_no=bot_id, user_id=user_id, status__gt=TokensHistory.Status.DELETE
@@ -72,53 +74,55 @@ def get_award_amount(award_type, member: Member = None):
 def daily_member_status():
     # 每日任务 更新会员状态
     # 昨天到期的用户
+    today =  datetime.date.today()
     yesterday = datetime.date.today() + datetime.timedelta(days=-1)
-    filter_query = Q(end_date=yesterday, status=TokensHistory.Status.IN_PROGRESS)
+    filter_query = Q(end_date__lte=yesterday, status=TokensHistory.Status.IN_PROGRESS)
     histories = TokensHistory.objects.filter(filter_query).order_by('end_date')
     logger.info(f'daily member status, {histories.count()} record to update')
-    update_data = []
+    update_history_data = []
     for history in histories:
         u_histories = TokensHistory.objects.filter(
-            user_id=history.user_id, status=TokensHistory.Status.FREEZING).order_by('start_date')
+            user_id=history.user_id, status=TokensHistory.Status.FREEZING).order_by('start_date', 'id')
         member = Member.objects.filter(user_id=history.user_id).first()
         if member.is_vip:
             continue
         # update member standard_remain_days
-        if member.premium_end_date == yesterday and member.standard_remain_days:
-            member.standard_end_date = yesterday + datetime.timedelta(days=member.standard_remain_days)
+        if member.premium_end_date <= yesterday and member.standard_remain_days:
+            member.standard_end_date = member.premium_end_date + datetime.timedelta(days=member.standard_remain_days)
             member.standard_remain_days = 0
             member.save()
         # update histories
         history.status = TokensHistory.Status.COMPLETED
-        update_data.append(history)
-        if same_level_freezing := [h for h in u_histories if h.type == history.type]:
+        update_history_data.append(history)
+        if same_level_freezing := [h for h in u_histories.all() if h.type == history.type]:
             same_level_freezing[0].status = TokensHistory.Status.IN_PROGRESS
-            update_data.append(same_level_freezing[0])
-        elif freezing_histories := [h for h in u_histories if h.freezing_date]:
+            update_history_data.append(same_level_freezing[0])
+        elif freezing_histories := [h for h in u_histories.all() if h.freezing_date]:
             freezing_history = freezing_histories[0]
             freezing_remain_days = (freezing_history.end_date - freezing_history.freezing_date).days + 1
             new_days = (
-                (yesterday + datetime.timedelta(days=freezing_remain_days)) - freezing_history.end_date
+                (history.end_date + datetime.timedelta(days=freezing_remain_days)) - freezing_history.end_date
             ).days
-            for u_history in u_histories:
-                if u_history.freezing_date:
+            for u_history in u_histories.all():
+                if u_history.id == freezing_history.id:
                     u_history.freezing_date = None
                     u_history.status = TokensHistory.Status.IN_PROGRESS
                 else:
-                    u_history.start_date += datetime.timedelta(days=new_days)
-                u_history.end_date += datetime.timedelta(days=new_days)
-                update_data.append(u_history)
+                    u_history.start_date += datetime.timedelta(days=new_days - 1)
+                u_history.end_date += datetime.timedelta(days=new_days - 1)
+                update_history_data.append(u_history)
         else:
-            u_history = u_histories.first()
-            u_history.status = TokensHistory.Status.IN_PROGRESS
-            update_data.append(u_history)
+            in_progress_history = u_histories.first()
+            in_progress_history.status = TokensHistory.Status.IN_PROGRESS
+            update_history_data.append(in_progress_history)
         update_fileds = ['status', 'start_date', 'end_date', 'freezing_date', 'updated_at']
-        TokensHistory.objects.bulk_update(update_data, update_fileds)
+        if update_history_data:
+            TokensHistory.objects.bulk_update(update_history_data, update_fileds)
 
 
 def daily_duration_award():
     """
-    每日任务 赠送会员时长
+    每日任务 赠送会员代币并清理过期代币
     :return:
     """
     today = datetime.date.today()
