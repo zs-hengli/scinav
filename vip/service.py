@@ -12,7 +12,7 @@ from django.db.models import Q, F
 from customadmin.models import GlobalConfig
 from customadmin.service import get_global_configs
 from vip.models import Pay, TokensHistory, generate_trade_no, Member, MemberUsageLog
-from vip.pay.wxpay import native_pay, weixin_notify, pay_status
+from vip.pay.wxpay import native_pay, weixin_notify, pay_status, h5_pay
 from vip.serializers import MemberInfoSerializer, ExchangeQuerySerializer, TradesQuerySerializer
 
 logger = logging.getLogger(__name__)
@@ -31,13 +31,35 @@ def generate_pay_qrcode(user_id, out_trade_no, description, amount):
             "user_id": user_id,
             "amount": amount,
             "description": description,
-            "code_url": code_url,
+            "url": code_url,
+            'trade_type': Pay.TradeType.NATIVE,
             "appid": settings.WEIXIN_PAY_APPID,
             "mchid": settings.WEIXIN_PAY_MCHID,
             "trade_state": Pay.TradeState.NOTPAY
         }
         Pay.objects.create(**pay_data)
         return {"image": "data:image/png;base64," + img_str, "code_url": code_url, "out_trade_no": out_trade_no}
+    else:
+        return False
+
+
+def generate_pay_h5_url(user_id, out_trade_no, description, amount, client_ip):
+    code, msg, data = h5_pay(out_trade_no, description, amount, client_ip)
+    if code == 200 and data and data.get('h5_url'):
+        h5_url = data.get('h5_url')
+        pay_data = {
+            "out_trade_no": out_trade_no,
+            "user_id": user_id,
+            "amount": amount,
+            "description": description,
+            "url": h5_url,
+            'trade_type': Pay.TradeType.H5,
+            "appid": settings.WEIXIN_PAY_APPID,
+            "mchid": settings.WEIXIN_PAY_MCHID,
+            "trade_state": Pay.TradeState.NOTPAY
+        }
+        Pay.objects.create(**pay_data)
+        return {"h5_url": h5_url, "out_trade_no": out_trade_no}
     else:
         return False
 

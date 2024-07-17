@@ -8,6 +8,7 @@ from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
+from core.utils.common import get_client_ip
 from core.utils.views import extract_json, my_json_response
 from vip.base_service import tokens_award
 from vip.models import Pay
@@ -15,7 +16,7 @@ from vip.models import Pay
 from vip.serializers import PayQrcodeQuerySerializer, ExchangeQuerySerializer, TradesQuerySerializer, \
     TokensHistoryListSerializer, TokensAwardQuerySerializer
 from vip.service import generate_pay_qrcode, pay_notify, get_member_info, tokens_expire_list, exchange_member, \
-    tokens_history_list, pay_trade_state
+    tokens_history_list, pay_trade_state, generate_pay_h5_url
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,27 @@ class PayQrcode(APIView):
         if not img:
             return my_json_response(code=100000, msg='系统错误，请联系管理员')
         return my_json_response(img)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET', 'POST']), name='dispatch')
+class PayH5(APIView):
+
+    @staticmethod
+    def post(request, *args, **kwargs):
+        post_data = request.data
+        # code, message, data = native_pay(out_trade_no=out_trade_no, description='支付测试', amount=1)
+        serial = PayQrcodeQuerySerializer(data=post_data)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=10001, msg='参数错误')
+        client_ip = get_client_ip(request)
+        vd = serial.validated_data
+        if not vd['out_trade_no']:
+            vd['out_trade_no'] = str(uuid.uuid4())[10:]
+        h5_url = generate_pay_h5_url(request.user.id, vd['out_trade_no'], vd['description'], vd['amount'], client_ip)
+        if not h5_url:
+            return my_json_response(code=100000, msg='系统错误，请联系管理员')
+        return my_json_response(h5_url)
 
 
 @method_decorator([extract_json], name='dispatch')

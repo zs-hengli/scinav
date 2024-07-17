@@ -13,6 +13,7 @@ urlpatterns = [
     path('vip/award', views.TokensAward.as_view(), name='award'),
 
     path('pay/qrcode', views.PayQrcode.as_view(), name='pay_qrcode'),
+    path('pay/h5', views.PayH5.as_view(), name='pay_h5'),
     path('pay/status/<str:out_trade_no>', views.PayStatus.as_view(), name='pay_status'),
     path('pay/notify', views.WeixinNotify.as_view(), name='notify'),
     #

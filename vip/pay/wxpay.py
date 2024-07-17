@@ -33,6 +33,27 @@ def native_pay(out_trade_no, description, amount):
         amount={'total': amount},
         pay_type=WeChatPayType.NATIVE
     )
+    logger.info(f"native pay: code:{code}, message:{message}")
+    data = {}
+    if code == 200:
+        data = json.loads(message)
+    return code, message, data
+
+
+def h5_pay(out_trade_no, description, amount, client_ip):
+    # 下单成功后，将获取的的h5_url传递给前端跳转唤起支付。
+    scene_info = {
+        'payer_client_ip': client_ip,
+        'h5_info': {'type': 'Wap'}
+    }
+    code, message = wxpay.pay(
+        description=description,
+        out_trade_no=out_trade_no,
+        amount={'total': amount},
+        pay_type=WeChatPayType.H5,
+        scene_info=scene_info,
+    )
+    logger.info(f"h5 pay: code:{code}, message:{message}")
     data = {}
     if code == 200:
         data = json.loads(message)

@@ -144,13 +144,18 @@ class Pay(models.Model):
         CLOSED = 'CLOSED', _('CLOSED'),
         REFUND = 'REFUND', _('REFUND')
 
+    class TradeType(models.TextChoices):
+        NATIVE = 'NATIVE', _('NATIVE'),
+        JSAPI = 'JSAPI', _('JSAPI'),
+        H5 = 'H5', _('H5')
+
     user = models.ForeignKey(
         'user.MyUser', db_constraint=False, on_delete=models.DO_NOTHING, null=True, db_column='user_id')
     amount = models.IntegerField(default=0, db_default=0)
     appid = models.CharField(max_length=128, null=True, default=None, db_default=None)
     mchid = models.CharField(max_length=128, null=True, default=None, db_default=None)
     description = models.CharField(max_length=128, null=True, default=None, db_default=None)
-    code_url = models.CharField(max_length=128, null=True, default=None, db_default=None)
+    url = models.CharField(max_length=128, null=True, default=None, db_default=None)
     out_trade_no = models.CharField(max_length=128, null=True, default=None, db_default=None)
     transaction_id = models.CharField(max_length=128, null=True, default=None, db_default=None)
     trade_type = models.CharField(max_length=128, null=True, default=None, db_default=None)
