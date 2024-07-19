@@ -12,10 +12,11 @@ from bot.models import Bot, HotBot, BotTools
 from bot.rag_service import Bot as RagBot
 from bot.serializers import BotCreateSerializer, BotListQuerySerializer, BotDocumentsQuerySerializer, \
     BotToolsCreateQuerySerializer, BotToolsUpdateQuerySerializer, BotToolsDeleteQuerySerializer, BotDetailSerializer, \
-    MyBotListAllSerializer
+    MyBotListAllSerializer, HotBotListSerializer
 from bot.service import (bot_create, bot_delete, bot_publish, bot_subscribe, bot_update, hot_bots, get_bot_list,
                          bot_tools_create, bot_tools_update, formate_bot_tools, del_invalid_bot_tools,
-                         bot_tools_add_bot_id, bot_user_full_text_document_ids, bots_plaza, bots_advance_share_info)
+                         bot_tools_add_bot_id, bot_user_full_text_document_ids, bots_plaza, bots_advance_share_info,
+                         add_hot_bot)
 from document.tasks import async_add_user_operation_log
 from core.utils.exceptions import ValidationError
 from core.utils.views import extract_json, my_json_response
@@ -47,22 +48,12 @@ class HotBots(APIView):
     @staticmethod
     def post(request, bot_id, order=1, *args, **kwargs):
         bot = Bot.objects.filter(pk=bot_id).first()
-        query = request.data
         if not bot:
             return my_json_response(code=100002, msg=_('bot not found'))
         if bot.type != Bot.TypeChoices.PUBLIC:
             return my_json_response(code=100001, msg=_('bot is not published'))
-        hot_bot_data = {
-            'bot_id': bot_id,
-            'order_num': order,
-            'del_flag': False,
-        }
-        if query.get('action') and query['action'] == 'delete':
-            hot_bot_data['del_flag'] = True
-        if query.get('order_num'):
-            hot_bot_data['order_num'] = query['order_num']
-        HotBot.objects.update_or_create(hot_bot_data, bot_id=bot_id)
-        return my_json_response(hot_bot_data)
+        hot_bot = add_hot_bot(bot_id, order)
+        return my_json_response(HotBotListSerializer(hot_bot).data)
 
     @staticmethod
     def delete(request, bot_id, *args, **kwargs):

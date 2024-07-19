@@ -222,7 +222,8 @@ class UploadPaper(APIView):
             }
         },
         responses={
-            (200, 'application/json'): OpenApiResponse(UploadFileResponseSerializer | UploadFileLimitResponseSerializer),
+            (200, 'application/json'): OpenApiResponse(UploadFileResponseSerializer),
+            # (200, 'application/json'): OpenApiResponse(UploadFileLimitResponseSerializer),
             (400, 'application/json'): OpenApiResponse(ExceptionResponseSerializer),
         },
         extensions={'x-code-samples': [

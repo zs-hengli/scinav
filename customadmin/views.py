@@ -6,13 +6,17 @@ from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.views import APIView
 
+from bot.models import Bot, HotBot
+from bot.serializers import HotBotListSerializer
+from bot.service import bot_publish, add_hot_bot
 from core.utils.authentication import del_auth_cache
 from core.utils.views import extract_json, my_json_response
 from customadmin.models import GlobalConfig
 from customadmin.serializers import GlobalConfigPostQuerySerializer, MembersQuerySerializer, \
-    MembersAwardQuerySerializer, UpdateMembersQuerySerializer, MembersTradesQuerySerializer
+    MembersAwardQuerySerializer, UpdateMembersQuerySerializer, MembersTradesQuerySerializer, \
+    BotsUpdateOrderQuerySerializer
 from customadmin.service import get_global_configs, set_global_configs, get_members, members_admin_award, \
-    update_member_vip, get_trades
+    update_member_vip, get_trades, bots_publish_list, update_bots_publish_order, update_bots_hot_order, hot_bots_list
 from user.models import MyUser
 from vip.models import Member
 
@@ -24,7 +28,6 @@ class IsAdminUser(BasePermission):
     Allows access only to superusers.
     """
     def has_permission(self, request, view=None):
-        logger.debug(f'dddddddd IsAdminUser {request.user}')
         return bool(request.user and request.user.is_superuser)
 
 
@@ -37,6 +40,70 @@ class Index(APIView):
         logger.debug(f'kwargs: {kwargs}')
         data = {'desc': 'admin index'}
         return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET', 'PUT', 'POST', 'DELETE']), name='dispatch')
+@permission_classes([IsAdminUser])
+class BotsPublish(APIView):
+
+    @staticmethod
+    def get(request, *args, **kwargs):  # noqa
+        bots = bots_publish_list()
+        return my_json_response({'list': bots})
+
+    @staticmethod
+    def put(request, *args, **kwargs):
+        post_data = request.data
+        serial = BotsUpdateOrderQuerySerializer(data=post_data, many=True)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error {list(serial.errors.keys())}')
+        update_bots_publish_order(serial.validated_data)
+        return my_json_response({})
+
+    @staticmethod
+    def post(request, bot_id, *args, **kwargs):
+        code, msg, data = bot_publish(bot_id, 0)
+        return my_json_response(data, code=code, msg=msg)
+
+    @staticmethod
+    def delete(request, bot_id, *args, **kwargs):
+        code, msg, data = bot_publish(bot_id, 0, action=Bot.TypeChoices.PERSONAL)
+        return my_json_response({}, code=code, msg=msg)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET', 'PUT', 'POST', 'DELETE']), name='dispatch')
+@permission_classes([IsAdminUser])
+class BotsHot(APIView):
+
+    @staticmethod
+    def get(request, *args, **kwargs):  # noqa
+        bots = hot_bots_list()
+        return my_json_response({'list': bots})
+
+    @staticmethod
+    def put(request, *args, **kwargs):
+        post_data = request.data
+        serial = BotsUpdateOrderQuerySerializer(data=post_data, many=True)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error')
+        update_bots_hot_order(serial.validated_data)
+        return my_json_response({})
+
+    @staticmethod
+    def post(request, bot_id, *args, **kwargs):
+        hot_bot = add_hot_bot(bot_id)
+        return my_json_response(HotBotListSerializer(hot_bot).data)
+
+    @staticmethod
+    def delete(request, bot_id, *args, **kwargs):
+        hot_bot = HotBot.objects.filter(bot_id=bot_id).first()
+        if not hot_bot:
+            return my_json_response(code=100002, msg='hot_bot not found')
+        hot_bot.del_flag = True
+        hot_bot.save()
+        return my_json_response({})
 
 
 @method_decorator([extract_json], name='dispatch')
@@ -85,6 +152,7 @@ class GlobalConfigs(APIView):
                 GlobalConfig.ConfigType.MEMBER_FREE,
                 GlobalConfig.ConfigType.MEMBER_STANDARD,
                 GlobalConfig.ConfigType.MEMBER_PREMIUM,
+                GlobalConfig.ConfigType.VIP,
                 GlobalConfig.ConfigType.AWARD
             ]
         data = get_global_configs(config_types)

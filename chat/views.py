@@ -17,6 +17,7 @@ from chat.service import chat_query, conversation_create, conversation_detail, c
     conversation_menu_list, question_list, conversation_share_create, conversation_create_by_share, \
     chat_papers_total
 from core.utils.views import extract_json, my_json_response, streaming_response, ServerSentEventRenderer
+from vip.serializers import LimitCheckSerializer
 
 # from document.service import update_chat_references
 
@@ -255,3 +256,14 @@ class ChatPapersTotal(APIView):
         total = chat_papers_total(request.user.id, validated_data.get('bot_id'), validated_data.get('collection_ids'))
         data = {'papers_total': total}
         return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+class ChatLimit(APIView):
+
+    @staticmethod
+    def get(request, *args, **kwargs):
+        user_id = request.user.id
+        limit_info = LimitCheckSerializer.chat_limit(user_id)
+        return my_json_response(limit_info)

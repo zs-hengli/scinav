@@ -12,6 +12,7 @@ class GlobalConfig(models.Model):
         MEMBER_FREE = 'member_free', _('member_free')
         MEMBER_STANDARD = 'member_standard', _('member_standard')
         MEMBER_PREMIUM = 'member_premium', _('member_premium')
+        VIP = 'vip', _('vip')
 
         AWARD = 'award', _('award')
         ACTIVITY = 'activity', _('activity')
@@ -38,6 +39,7 @@ class GlobalConfig(models.Model):
     #   "limit_embedding_daily": "",
     #   "limit_embedding_monthly": "",
     #   "limit_advanced_share": 3,
+    #   "limit_max_file_size": 30,
     #   # exchange
     #   "days_30": 450,
     #   "days_90": 900,

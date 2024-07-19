@@ -9,6 +9,7 @@ urlpatterns = [
     path('documents/presigned-url', views.GenPresignedUrl.as_view()),
     # List Documents Library
     path('documents/library', views.DocumentsLibrary.as_view()),
+    path('documents/library/embedding/limit', views.EmbeddingLimit.as_view()),
     path('documents/library/operation/check', views.DocumentsLibraryOperationCheck.as_view()),
     path('documents/library/<str:document_library_id>', views.DocumentsLibrary.as_view()),
     path('documents/library/<str:document_id>/status', views.DocumentsLibraryStatus.as_view()),

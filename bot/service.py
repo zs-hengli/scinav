@@ -125,9 +125,24 @@ def bot_delete(bot_id):
 
 # 专题列表
 def hot_bots():
-    hot_bot = HotBot.objects.filter(del_flag=False, bot__del_flag=False).order_by('order_num', '-updated_at').all()
-    hot_bot_list_data = HotBotListSerializer(hot_bot, many=True).data
+    hot_order0 = HotBot.objects.filter(
+        del_flag=False, bot__del_flag=False, order_num=0).order_by('order_num', '-updated_at').all()
+    hot_order = HotBot.objects.filter(
+        del_flag=False, bot__del_flag=False, order_num__gt=0).order_by('order_num', '-updated_at').all()
+    hot_bot_list_data = (
+        list(HotBotListSerializer(hot_order, many=True).data) + list(HotBotListSerializer(hot_order0, many=True).data)
+    )
     return hot_bot_list_data
+
+
+def add_hot_bot(bot_id, order=0):
+    hot_bot_data = {
+        'bot_id': bot_id,
+        'order_num': order,
+        'del_flag': False,
+    }
+    hot_bot, _ = HotBot.objects.update_or_create(hot_bot_data, bot_id=bot_id)
+    return hot_bot
 
 
 def get_bot_list(validated_data):
@@ -372,13 +387,18 @@ def bots_advance_share_info(user_id, bot=None):
         can_advance_share = True
     member = Member.objects.filter(user_id=user_id).first()
     member_type = member.get_member_type() if member else Member.Type.FREE
+    config = GlobalConfig.objects.filter(
+        config_type=member_type, sub_type=GlobalConfig.SubType.LIMIT).first()
     if member_type == Member.Type.VIP:
-        can_advance_share = True
+        limit_info = config.value if config else {}
+        limit = limit_info.get('limit_advanced_share', None)
+        if limit is None:
+            can_advance_share = True
+        else:
+            limit = int(limit)
     elif member_type == Member.Type.FREE:
         can_advance_share = False
     else:
-        config = GlobalConfig.objects.filter(
-            config_type=member_type, sub_type=GlobalConfig.SubType.LIMIT).first()
         limit_info = config.value if config else {}
         limit = int(limit_info.get('limit_advanced_share', 0))
     advance_count = Bot.objects.filter(user_id=user_id, advance_share=True, del_flag=False).count()

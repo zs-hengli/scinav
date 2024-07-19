@@ -5,7 +5,6 @@ from . import views
 urlpatterns = [
     path('vip/index', views.Index.as_view(), name='index'),
     path('vip/member', views.Members.as_view(), name='member'),
-
     path('vip/tokens/expire', views.TokensExpire.as_view(), name='tokens_expire'),
     path('vip/exchange', views.Exchange.as_view(), name='exchange'),
     path('vip/trades', views.Trades.as_view(), name='trades'),

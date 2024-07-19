@@ -737,7 +737,8 @@ def document_library_add(
     if ref_ds:
         document_ids = list(set(document_ids) | set(ref_ds))
     code, msg, data = update_document_lib(user_id, document_ids, keyword=keyword)
-    async_document_library_task.apply_async()
+    if code == 0:
+        async_document_library_task.apply_async()
     return code, msg, data
 
 

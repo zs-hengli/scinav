@@ -22,6 +22,7 @@ from document.service import search, presigned_url, document_personal_upload, \
     document_update_from_rag, search_authors, author_detail, author_documents, get_csl_reference_formats, get_citations, \
     get_references
 from document.tasks import async_add_user_operation_log
+from vip.serializers import LimitCheckSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -300,8 +301,10 @@ class DocumentsLibrary(APIView):
             request.user.id, vd['document_ids'], vd['collection_id'], vd['bot_id'], vd['add_type'],
             keyword=vd['keyword'], search_info=vd['search_info']
         )
-        data = DocumentUploadResultSerializer(data, many=True).data
-        return my_json_response({'list': data})
+        if code == 0:
+            return my_json_response({'list': DocumentUploadResultSerializer(data, many=True).data})
+        else:
+            return my_json_response(code=code, msg=msg, data=data)
 
     @staticmethod
     def put(request, document_library_id, *args, **kwargs):
@@ -478,3 +481,17 @@ class DocumentsLibraryStatus(APIView):
     def get(request, document_id, *args, **kwargs):
         status = DocumentDetailSerializer.get_document_library_status(request.user.id, document_id)
         return my_json_response({'status': status})
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+class EmbeddingLimit(APIView):
+
+    @staticmethod
+    def get(request, *args, **kwargs):
+        user_id = request.user.id
+        limit_info = LimitCheckSerializer.embedding_limit(user_id)
+        return my_json_response(limit_info)
+
+
+

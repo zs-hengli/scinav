@@ -8,14 +8,61 @@ from django.contrib.admin.models import LogEntry, CHANGE
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction, DatabaseError
 
+from bot.models import Bot, HotBot
 from core.utils.common import check_uuid4_str, check_email_str
 from customadmin.models import GlobalConfig
 from customadmin.serializers import GlobalConfigDetailSerializer, MembersListSerializer, \
-    TokensHistoryAdminListSerializer
+    TokensHistoryAdminListSerializer, BotsPublishListRespSerializer, HotBotAdminListSerializer
 from vip.base_service import tokens_award
 from vip.models import Member, TokensHistory
 
 logger = logging.getLogger(__name__)
+
+
+def bots_publish_list():
+    order0_query_set = Bot.objects.filter(
+        type__in=[Bot.TypeChoices.PUBLIC, Bot.TypeChoices.IN_PROGRESS], del_flag=False, order=0
+    ).order_by('-updated_at')
+    order_query_set = Bot.objects.filter(
+        type__in=[Bot.TypeChoices.PUBLIC, Bot.TypeChoices.IN_PROGRESS], del_flag=False, order__gt=0
+    ).order_by('order', '-updated_at')
+    order0_data = BotsPublishListRespSerializer(order0_query_set.all(), many=True).data
+    order_data = BotsPublishListRespSerializer(order_query_set.all(), many=True).data
+    return list(order_data) + list(order0_data)
+
+
+def update_bots_publish_order(validated_data):
+    vd = validated_data
+    vd_dict = {v['bot_id']: v for v in vd}
+    bots = Bot.objects.filter(id__in=list(vd_dict.keys()), del_flag=False).all()
+    for bot in bots:
+        bot.order = vd_dict[bot.id]['order']
+        bot.updated_at = datetime.datetime.now()
+    Bot.objects.bulk_update(bots, ['order', 'updated_at'])
+    return True
+
+
+def hot_bots_list():
+    hot_order0 = HotBot.objects.filter(
+        del_flag=False, bot__del_flag=False, order_num=0).order_by('order_num', '-updated_at').all()
+    hot_order = HotBot.objects.filter(
+        del_flag=False, bot__del_flag=False, order_num__gt=0).order_by('order_num', '-updated_at').all()
+    hot_bot_list_data = (
+        list(HotBotAdminListSerializer(hot_order, many=True).data)
+        + list(HotBotAdminListSerializer(hot_order0, many=True).data)
+    )
+    return hot_bot_list_data
+
+
+def update_bots_hot_order(validated_data):
+    vd = validated_data
+    vd_dict = {v['bot_id']: v for v in vd}
+    hot_bots = HotBot.objects.filter(bot_id__in=list(vd_dict.keys()), del_flag=False).all()
+    for hot_bot in hot_bots:
+        hot_bot.order_num = vd_dict[hot_bot.bot_id]['order']
+        hot_bot.updated_at = datetime.datetime.now()
+    HotBot.objects.bulk_update(hot_bots, ['order_num', 'updated_at'])
+    return True
 
 
 def get_global_configs(config_types):

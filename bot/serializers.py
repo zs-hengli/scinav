@@ -94,7 +94,7 @@ class BotDetailSerializer(BaseModelSerializer):
         model = Bot
         fields = [
             'id', 'user_id', 'author', 'title', 'description', 'prompt_spec', 'questions', 'collections', 'type',
-            'tools', 'updated_at'
+            'tools', 'updated_at', 'advance_share',
         ]
 
 
@@ -112,7 +112,7 @@ class HotBotListSerializer(BaseModelSerializer):
 
     class Meta:
         model = HotBot
-        fields = ['bot_id', 'order', 'order_num', 'title', 'updated_at']
+        fields = ['bot_id', 'order', 'order_num', 'title', 'updated_at',]
 
 
 class BotListQuerySerializer(serializers.Serializer):
@@ -132,7 +132,7 @@ class MyBotListAllSerializer(BaseModelSerializer):
 
     class Meta:
         model = Bot
-        fields = ['id', 'author', 'title', 'description', 'updated_at', 'user_id', 'order']
+        fields = ['id', 'author', 'title', 'description', 'updated_at', 'user_id', 'order', 'advance_share',]
 
 
 class BotListAllSerializer(BaseModelSerializer):
@@ -145,13 +145,15 @@ class BotListAllSerializer(BaseModelSerializer):
 
     class Meta:
         model = Bot
-        fields = ['id', 'author', 'title', 'description', 'doc_total', 'updated_at', 'user_id', 'order']
+        fields = [
+            'id', 'author', 'title', 'description', 'doc_total', 'updated_at', 'user_id', 'order', 'advance_share',
+        ]
 
 
 class BotsPlazaResultsSerializer(BaseModelSerializer):
     class Meta:
         model = Bot
-        fields = ['id', 'title', 'updated_at', 'order']
+        fields = ['id', 'title', 'updated_at', 'order', 'advance_share']
 
 
 class BotListMySerializer(BaseModelSerializer):
@@ -164,14 +166,14 @@ class BotListMySerializer(BaseModelSerializer):
 
     class Meta:
         model = Bot
-        fields = ['id', 'title', 'description', 'doc_total', 'updated_at']
+        fields = ['id', 'title', 'description', 'doc_total', 'advance_share', 'updated_at']
 
 
 class BotListChatMenuSerializer(BaseModelSerializer):
 
     class Meta:
         model = Bot
-        fields = ['id', 'title', 'description', 'updated_at']
+        fields = ['id', 'title', 'description', 'updated_at', 'advance_share']
 
 
 class BotDocumentsQuerySerializer(serializers.Serializer):

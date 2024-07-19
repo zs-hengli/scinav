@@ -2,6 +2,7 @@ import datetime
 
 from rest_framework import serializers
 
+from bot.models import Bot, HotBot
 from customadmin.models import GlobalConfig
 from vip.models import Member, TokensHistory
 from vip.serializers import TokensHistoryListSerializer
@@ -12,12 +13,65 @@ class BaseModelSerializer(serializers.ModelSerializer):
     updated_at = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S")
 
 
+class BotsPublishListRespSerializer(BaseModelSerializer):
+    user_info = serializers.SerializerMethodField()
+
+    @staticmethod
+    def get_user_info(obj: Bot) -> dict:
+        return {
+            'id': obj.user.id,
+            'email': obj.user.email,
+            'phone': obj.user.phone
+        }
+
+    class Meta:
+        model = Bot
+        fields = ['id', 'title', 'order', 'user_info', 'type']
+
+
+class BotsUpdateOrderQuerySerializer(serializers.Serializer):
+    bot_id = serializers.CharField(required=True)
+    order = serializers.IntegerField(required=True)
+
+
+class HotBotAdminListSerializer(BaseModelSerializer):
+    title = serializers.SerializerMethodField()
+    order = serializers.SerializerMethodField()
+    user_info = serializers.SerializerMethodField()
+
+    @staticmethod
+    def get_user_info(obj: HotBot) -> dict:
+        bot_user = obj.bot.user
+        return {
+            'id': bot_user.id,
+            'email': bot_user.email,
+            'phone': bot_user.phone
+        }
+
+    @staticmethod
+    def get_title(obj: HotBot):
+        return obj.bot.title
+
+    @staticmethod
+    def get_order(obj: HotBot):
+        return obj.order_num
+
+    class Meta:
+        model = HotBot
+        fields = ['bot_id', 'order', 'order_num', 'title', 'updated_at', 'user_info',]
+
+
 class ConfigValueMemberLimitCheckSerializer(serializers.Serializer):
     limit_chat_daily = serializers.IntegerField(required=True)
     limit_chat_monthly = serializers.IntegerField(required=True)
     limit_embedding_daily = serializers.IntegerField(required=True)
     limit_embedding_monthly = serializers.IntegerField(required=True)
     limit_advanced_share = serializers.IntegerField(required=False, default=0)  # 高级分享个数配置
+    limit_max_file_size = serializers.IntegerField(required=False, default=0)  # 文件最大大小单位M
+
+
+class ConfigValueMemberVipLimitCheckSerializer(serializers.Serializer):
+    limit_advanced_share = serializers.IntegerField(required=False, default=0, allow_null=True)  # 高级分享个数配置
 
 
 class ConfigValueMemberExchangeCheckSerializer(serializers.Serializer):
@@ -115,6 +169,7 @@ class MembersListSerializer(serializers.Serializer):
     premium_end_date = serializers.DateField(required=True, allow_null=True)
     standard_end_date = serializers.DateField(required=True, allow_null=True)
     member_type = serializers.SerializerMethodField()
+    date_joined = serializers.DateTimeField(required=True, format='%Y-%m-%d %H:%M:%S')
 
     @staticmethod
     def get_member_type(obj):
