@@ -76,12 +76,17 @@ class Member(models.Model):
     m.standard_end_date,m.premium_end_date,m.is_vip"""
         from_sql = """ from member m left join my_user u on m.user_id=u.id where 1=1 """
         where = ''
+        if user_id or email or phone:
+            where += ' and ('
+        or_sql = ''
         if user_id:
-            where += f" and m.user_id = '{user_id}'"
+            or_sql += f"{'or' if or_sql else ''} m.user_id = '{user_id}'"
         if email:
-            where += f" and u.email = '{email}'"
+            or_sql += f" {'or' if or_sql else ''} u.email = '{email}'"
         if phone:
-            where += f" and u.phone = '{phone}'"
+            or_sql += f" {'or' if or_sql else ''} u.phone = '{phone}'"
+        if where:
+            where += f"{or_sql})"
         count_sql = f"select count(1) as count {from_sql} {where}"
         count_rest = my_custom_sql(count_sql)
         limit_sql = f" limit {page_size} offset {(page_num - 1) * page_size}"
@@ -107,10 +112,10 @@ class Member(models.Model):
 # 代币充值和使用记录 tokens_history
 class TokensHistory(models.Model):
     class Type(models.TextChoices):
-        WXPAY = 'wxpay', _('wxpay'),
-        EXCHANGE_STANDARD_30 = 'exchange_standard_30', _('exchange_standard_30'),
-        EXCHANGE_STANDARD_90 = 'exchange_standard_90', _('exchange_standard_90'),
-        EXCHANGE_STANDARD_360 = 'exchange_standard_360', _('exchange_standard_360'),
+        WXPAY = 'wxpay', _('wxpay')
+        EXCHANGE_STANDARD_30 = 'exchange_standard_30', _('exchange_standard_30')
+        EXCHANGE_STANDARD_90 = 'exchange_standard_90', _('exchange_standard_90')
+        EXCHANGE_STANDARD_360 = 'exchange_standard_360', _('exchange_standard_360')
         EXCHANGE_PREMIUM_30 = 'exchange_premium_30', _('exchange_premium_30')
         EXCHANGE_PREMIUM_90 = 'exchange_premium_90', _('exchange_premium_90')
         EXCHANGE_PREMIUM_360 = 'exchange_premium_360', _('exchange_premium_360')
@@ -168,18 +173,29 @@ where (CURRENT_TIMESTAMP - INTERVAL '{duration - 1} day')::date > m_start_date o
         return [i['user_id'] for i in rest]
 
     @staticmethod
-    def get_histories_by_admin(user_id=None, email=None, phone=None, trade_no=None, page_size=10, page_num=1):
+    def get_histories_by_admin(user_id=None, email=None, phone=None, trade_no=None, types=None,
+                               page_size=10, page_num=1):
         select_sql = """select h.*,u.email,u.phone,u.date_joined"""
         from_sql = """ from tokens_history h left join my_user u on h.user_id=u.id where 1=1 """
         where = ''
+        if user_id or email or phone or trade_no:
+            where += ' and ('
+        or_sql = ''
         if user_id:
-            where += f" and h.user_id = '{user_id}'"
+            where += f"{'or' if or_sql else ''} h.user_id = '{user_id}'"
         if email:
-            where += f" and u.email = '{email}'"
+            where += f"{'or' if or_sql else ''} u.email = '{email}'"
         if phone:
-            where += f" and u.phone = '{phone}'"
+            where += f"{'or' if or_sql else ''} u.phone = '{phone}'"
         if trade_no:
-            where += f" and h.trade_no = '{trade_no}'"
+            where += f"{'or' if or_sql else ''} h.trade_no = '{trade_no}'"
+        if where:
+            where += f"{or_sql})"
+        elif types:
+            if isinstance(types, list):
+                types = "'" + "','".join(types) + "'"
+            where += f" and h.type in ('{types}')"
+
         count_sql = f"select count(1) as count {from_sql} {where}"
         count_rest = my_custom_sql(count_sql)
         limit_sql = f" limit {page_size} offset {(page_num - 1) * page_size}"

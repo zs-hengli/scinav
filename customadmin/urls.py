@@ -9,6 +9,7 @@ urlpatterns = [
     path('bots/publish/<str:bot_id>', views.BotsPublish.as_view(), name='bots'),
     path('bots/hot', views.BotsHot.as_view(), name='bots'),
     path('bots/hot/<str:bot_id>', views.BotsHot.as_view(), name='bots'),
+    path('bots/<str:bot_id>', views.BotDetail.as_view(), name='bot_detail'),
 
     path('config', views.GlobalConfigs.as_view(), name='index'),
     path('superuser/<str:user_id>', views.SuperUser.as_view(), name='superuser'),

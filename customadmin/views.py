@@ -14,7 +14,7 @@ from core.utils.views import extract_json, my_json_response
 from customadmin.models import GlobalConfig
 from customadmin.serializers import GlobalConfigPostQuerySerializer, MembersQuerySerializer, \
     MembersAwardQuerySerializer, UpdateMembersQuerySerializer, MembersTradesQuerySerializer, \
-    BotsUpdateOrderQuerySerializer
+    BotsUpdateOrderQuerySerializer, BotsPublishQuerySerializer, BotsPublishListRespSerializer
 from customadmin.service import get_global_configs, set_global_configs, get_members, members_admin_award, \
     update_member_vip, get_trades, bots_publish_list, update_bots_publish_order, update_bots_hot_order, hot_bots_list
 from user.models import MyUser
@@ -45,6 +45,19 @@ class Index(APIView):
 @method_decorator([extract_json], name='dispatch')
 @method_decorator(require_http_methods(['GET', 'PUT', 'POST', 'DELETE']), name='dispatch')
 @permission_classes([IsAdminUser])
+class BotDetail(APIView):
+
+    @staticmethod
+    def get(request, bot_id, *args, **kwargs):  # noqa
+        bot = Bot.objects.filter(id=bot_id).first()
+        if not bot:
+            return my_json_response(code=190001, msg=f'参数错误：此专题不存在')
+        return my_json_response(BotsPublishListRespSerializer(bot).data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET', 'PUT', 'POST', 'DELETE']), name='dispatch')
+@permission_classes([IsAdminUser])
 class BotsPublish(APIView):
 
     @staticmethod
@@ -62,8 +75,13 @@ class BotsPublish(APIView):
         return my_json_response({})
 
     @staticmethod
-    def post(request, bot_id, *args, **kwargs):
-        code, msg, data = bot_publish(bot_id, 0)
+    def post(request, *args, **kwargs):
+        post_data = request.data
+        serial = BotsUpdateOrderQuerySerializer(data=post_data)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error {list(serial.errors.keys())}')
+        vd = serial.validated_data
+        code, msg, data = bot_publish(vd['bot_id'], vd['order'])
         return my_json_response(data, code=code, msg=msg)
 
     @staticmethod
@@ -92,8 +110,13 @@ class BotsHot(APIView):
         return my_json_response({})
 
     @staticmethod
-    def post(request, bot_id, *args, **kwargs):
-        hot_bot = add_hot_bot(bot_id)
+    def post(request, *args, **kwargs):
+        post_data = request.data
+        serial = BotsUpdateOrderQuerySerializer(data=post_data)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error')
+        vd = serial.validated_data
+        hot_bot = add_hot_bot(vd['bot_id'], vd['order'])
         return my_json_response(HotBotListSerializer(hot_bot).data)
 
     @staticmethod
@@ -237,6 +260,8 @@ class MembersTrades(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error {list(serial.errors.keys())}')
         vd = serial.validated_data
-        data = get_trades(vd['keyword'], vd['page_size'], vd['page_num'])
+        if vd['types']:
+            vd['type'] = ','.split(vd['types'])
+        data = get_trades(vd['keyword'], vd['types'], vd['page_size'], vd['page_num'])
 
         return my_json_response(data)

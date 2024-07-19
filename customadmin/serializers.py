@@ -1,5 +1,6 @@
 import datetime
 
+from django.db import models
 from rest_framework import serializers
 
 from bot.models import Bot, HotBot
@@ -15,6 +16,7 @@ class BaseModelSerializer(serializers.ModelSerializer):
 
 class BotsPublishListRespSerializer(BaseModelSerializer):
     user_info = serializers.SerializerMethodField()
+    bot_id = serializers.CharField(source='id')
 
     @staticmethod
     def get_user_info(obj: Bot) -> dict:
@@ -26,7 +28,7 @@ class BotsPublishListRespSerializer(BaseModelSerializer):
 
     class Meta:
         model = Bot
-        fields = ['id', 'title', 'order', 'user_info', 'type']
+        fields = ['id', 'bot_id', 'title', 'order', 'user_info', 'type', 'pub_date', 'updated_at']
 
 
 class BotsUpdateOrderQuerySerializer(serializers.Serializer):
@@ -34,10 +36,15 @@ class BotsUpdateOrderQuerySerializer(serializers.Serializer):
     order = serializers.IntegerField(required=True)
 
 
+class BotsPublishQuerySerializer(serializers.Serializer):
+    bot_ids = serializers.ListSerializer(child=serializers.CharField(required=True))
+
+
 class HotBotAdminListSerializer(BaseModelSerializer):
     title = serializers.SerializerMethodField()
     order = serializers.SerializerMethodField()
     user_info = serializers.SerializerMethodField()
+    pub_date = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S", source='created_at')
 
     @staticmethod
     def get_user_info(obj: HotBot) -> dict:
@@ -58,7 +65,7 @@ class HotBotAdminListSerializer(BaseModelSerializer):
 
     class Meta:
         model = HotBot
-        fields = ['bot_id', 'order', 'order_num', 'title', 'updated_at', 'user_info',]
+        fields = ['bot_id', 'order', 'order_num', 'title', 'updated_at', 'created_at', 'pub_date', 'user_info',]
 
 
 class ConfigValueMemberLimitCheckSerializer(serializers.Serializer):
@@ -191,7 +198,12 @@ class MembersAwardQuerySerializer(serializers.Serializer):
 
 
 class MembersTradesQuerySerializer(serializers.Serializer):
+    class Type(models.TextChoices):
+        WXPAY = 'wxpay'
+        AWARD = 'award'
+        EXCHANGE = 'exchange'
     keyword = serializers.CharField(required=False, allow_null=True, default=None, allow_blank=True)
+    types = serializers.ChoiceField(required=False, choices=Type, default=None, allow_blank=True)
     page_size = serializers.IntegerField(required=False, default=10)
     page_num = serializers.IntegerField(required=False, default=1)
 

@@ -12,7 +12,8 @@ from bot.models import Bot, HotBot
 from core.utils.common import check_uuid4_str, check_email_str
 from customadmin.models import GlobalConfig
 from customadmin.serializers import GlobalConfigDetailSerializer, MembersListSerializer, \
-    TokensHistoryAdminListSerializer, BotsPublishListRespSerializer, HotBotAdminListSerializer
+    TokensHistoryAdminListSerializer, BotsPublishListRespSerializer, HotBotAdminListSerializer, \
+    MembersTradesQuerySerializer
 from vip.base_service import tokens_award
 from vip.models import Member, TokensHistory
 
@@ -108,6 +109,8 @@ def get_members(keyword, page_size=10, page_num=1):
             email = keyword
         if re.search(r'^(?:\+\d{1,2}\s?)?1[3-9]\d{9}$', keyword):
             phone = keyword
+        if not user_id and not email and not phone:
+            return {'list': [], 'total': 0}
     members_info = Member.get_members_by_admin(
         user_id=user_id, email=email, phone=phone, page_size=page_size, page_num=page_num)
     members_info['list'] = MembersListSerializer(members_info['list'], many=True).data
@@ -203,7 +206,7 @@ def update_member_vip(member: Member, admin_id, is_vip:bool = True):
     return True
 
 
-def get_trades(keyword, page_size=10, page_num=1):
+def get_trades(keyword, types, page_size=10, page_num=1):
     user_id, email, phone, trade_no = None, None, None, None
     if keyword:
         # user_id  66583f7945fb8a982a4d6f0a  af35a6ea-d9db-442c-8fd1-88a69846424e
@@ -215,7 +218,22 @@ def get_trades(keyword, page_size=10, page_num=1):
             phone = keyword
         if re.search(r'^\d{20}$', keyword):
             trade_no = keyword
+        if not user_id and not email and not phone and not trade_no:
+            return {'list': [], 'total': 0}
+    if types:
+        if MembersTradesQuerySerializer.Type.EXCHANGE in types:
+            types += [
+                TokensHistory.Type.EXCHANGE_STANDARD_30, TokensHistory.Type.EXCHANGE_STANDARD_90,
+                TokensHistory.Type.EXCHANGE_STANDARD_360, TokensHistory.Type.EXCHANGE_PREMIUM_30,
+                TokensHistory.Type.EXCHANGE_PREMIUM_90, TokensHistory.Type.EXCHANGE_PREMIUM_360,
+            ]
+        if MembersTradesQuerySerializer.Type.AWARD in types:
+            types += [
+                TokensHistory.Type.SUBSCRIBED_BOT, TokensHistory.Type.INVITE_REGISTER,
+                TokensHistory.Type.DURATION_AWARD, TokensHistory.Type.NEW_USER_AWARD,
+            ]
     histories_info = TokensHistory.get_histories_by_admin(
-        user_id=user_id, email=email, phone=phone, trade_no=trade_no, page_size=page_size, page_num=page_num)
+        user_id=user_id, email=email, phone=phone, trade_no=trade_no, types=types,
+        page_size=page_size, page_num=page_num)
     histories_info['list'] = TokensHistoryAdminListSerializer(histories_info['list'], many=True).data
     return histories_info
