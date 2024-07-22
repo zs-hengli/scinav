@@ -2,7 +2,7 @@ import copy
 import datetime
 import logging
 
-from django.db.models import Q, F
+from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
 from bot.models import BotCollection, BotSubscribe, Bot
@@ -11,8 +11,7 @@ from collection.base_service import generate_collection_title
 from collection.models import Collection, CollectionDocument
 from collection.serializers import CollectionPublicSerializer, CollectionListSerializer, \
     CollectionRagPublicListSerializer, \
-    CollectionSubscribeSerializer, CollectionDocumentListSerializer, bot_subscribe_personal_document_num, \
-    CollectionDocUpdateSerializer
+    CollectionSubscribeSerializer, CollectionDocumentListSerializer, bot_subscribe_personal_document_num
 from document.models import Document, DocumentLibrary
 from document.serializers import DocumentApaListSerializer, CollectionDocumentListCollectionSerializer
 from document.service import search, author_documents
@@ -268,8 +267,6 @@ def create_collection_by_documents(user_id, document_ids, title=None):
         'is_all': False,
         'action': 'add',
     }
-    # update_serial = CollectionDocUpdateSerializer(data=update_data)
-    # update_serial.is_valid(raise_exception=True)
     collection_document_add(update_data)
     return collection
 

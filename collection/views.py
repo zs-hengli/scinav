@@ -8,15 +8,14 @@ from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
+from collection.base_service import generate_collection_title
 from collection.models import Collection
 from collection.serializers import (CollectionCreateSerializer,
                                     CollectionDetailSerializer,
-                                    CollectionDocUpdateSerializer,
                                     CollectionUpdateSerializer, CollectionDeleteQuerySerializer,
                                     CollectionDocumentListQuerySerializer, CollectionCheckQuerySerializer,
                                     CollectionCreateBotCheckQuerySerializer, CollectionDocumentSelectedQuerySerializer,
                                     CollectionListQuerySerializer, AddDocument2CollectionQuerySerializer)
-from collection.base_service import generate_collection_title
 from collection.service import (collection_list, collections_docs,
                                 collections_delete, collection_chat_operation_check, collection_delete_operation_check,
                                 collections_published_bot_titles, collections_create_bot_check,
@@ -86,8 +85,8 @@ class Collections(APIView):
 
         if vd.get('document_titles'):
             title = generate_collection_title(document_titles=vd['document_titles'])
-        elif vd.get('search_content'):
-            title = vd['search_content']
+        elif vd.get('search_info') and vd['search_info'].get('content'):
+            title = vd['search_info']['content']
         else:
             title = generate_collection_title(document_titles=[])
 
@@ -105,8 +104,6 @@ class Collections(APIView):
             'is_all': vd.get('is_all', False),
             'action': 'add',
         }
-        # update_serial = CollectionDocUpdateSerializer(data=update_data)
-        # update_serial.is_valid(raise_exception=True)
         collection_document_add(update_data)
 
         data = CollectionDetailSerializer(collection).data
@@ -198,9 +195,6 @@ class CollectionDocuments(APIView):
         ):
             documents = get_search_documents_4_all_selected(user_id, validated_data.get('document_ids'), validated_data)
             validated_data['document_ids'] = [doc['id'] for doc in documents]
-        # serial = CollectionDocUpdateSerializer(data=validated_data)
-        # if not serial.is_valid():
-        #     return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         if serial.validated_data['action'] != 'delete':
             collection_document_add(validated_data)
         else:

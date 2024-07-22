@@ -59,7 +59,7 @@ class SearchQuerySerializer(serializers.Serializer):
 
 class SearchDocuments4AddQuerySerializer(serializers.Serializer):
     content = serializers.CharField(required=False, max_length=4096, allow_blank=True, trim_whitespace=False)
-    search_content = serializers.CharField(required=False, max_length=4096, allow_blank=True, trim_whitespace=False)
+    # search_content = serializers.CharField(required=False, max_length=4096, allow_blank=True, trim_whitespace=False)
     author_id = serializers.IntegerField(required=False)
     limit = serializers.IntegerField(default=None)
     begin_date = serializers.CharField(required=False, default=None, allow_blank=True)
@@ -384,10 +384,10 @@ class DocLibAddQuerySerializer(serializers.Serializer):
     collection_id = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
     bot_id = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
     add_type = serializers.ChoiceField(required=False, choices=AddTypeChoices, default=None)
-    search_content = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
+    # search_content = serializers.CharField(required=False, allow_null=True, allow_blank=False, default=None)
     author_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     keyword = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
-    search_limit = serializers.IntegerField(required=False, default=100)
+    # search_limit = serializers.IntegerField(required=False, default=100)
     search_info = SearchDocuments4AddQuerySerializer(required=False, default=None)
 
     def validate(self, attrs):
@@ -406,22 +406,11 @@ class DocLibAddQuerySerializer(serializers.Serializer):
         ):
             raise serializers.ValidationError('bot_id is required')
 
-        if attrs.get('search_content'):
-            if not attrs.get('search_info'):
-                attrs['search_info'] = {}
-            attrs['search_info']['content'] = attrs['search_content']
+        if attrs.get('search_info') and attrs['search_info'].get('content'):
             attrs['search_info']['limit'] = attrs.get('limit', 100)
 
-        if attrs.get('author_id'):
-            if not attrs.get('search_info'):
-                attrs['search_info'] = {}
-            attrs['search_info']['author_id'] = attrs['author_id']
+        if attrs.get('search_info') and attrs['search_info'].get('author_id'):
             attrs['search_info']['limit'] = attrs.get('limit', 1000)
-        if (
-            attrs.get('search_info') and attrs['search_info'].get('search_content')
-            and not attrs['search_info'].get('content')
-        ):
-            attrs['search_info']['content'] = attrs['search_info']['search_content']
 
         if (
             attrs.get('add_type') and not attrs.get('collection_id') and not attrs.get('bot_id')

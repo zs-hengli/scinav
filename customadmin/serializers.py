@@ -1,4 +1,5 @@
 import datetime
+import logging
 
 from django.db import models
 from rest_framework import serializers
@@ -7,6 +8,9 @@ from bot.models import Bot, HotBot
 from customadmin.models import GlobalConfig
 from vip.models import Member, TokensHistory
 from vip.serializers import TokensHistoryListSerializer
+
+
+logger = logging.getLogger(__name__)
 
 
 class BaseModelSerializer(serializers.ModelSerializer):
@@ -203,9 +207,19 @@ class MembersTradesQuerySerializer(serializers.Serializer):
         AWARD = 'award'
         EXCHANGE = 'exchange'
     keyword = serializers.CharField(required=False, allow_null=True, default=None, allow_blank=True)
-    types = serializers.ChoiceField(required=False, choices=Type, default=None, allow_blank=True)
+    types = serializers.CharField(required=False, default=None, allow_blank=True)
     page_size = serializers.IntegerField(required=False, default=10)
     page_num = serializers.IntegerField(required=False, default=1)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if attrs.get('types'):
+            types = attrs.get('types').split(',')
+            choices = [c[0] for c in self.Type.choices]
+            for t in types:
+                if t not in choices:
+                    raise serializers.ValidationError(f'{t} is invalid must in {choices}')
+        return attrs
 
 
 class TokensHistoryAdminListSerializer(serializers.Serializer):

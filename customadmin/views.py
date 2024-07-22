@@ -261,7 +261,7 @@ class MembersTrades(APIView):
             return my_json_response(serial.errors, code=100001, msg=f'validate error {list(serial.errors.keys())}')
         vd = serial.validated_data
         if vd['types']:
-            vd['type'] = ','.split(vd['types'])
+            vd['types'] = vd['types'].split(',') if isinstance(vd['types'], str) else vd['types']
         data = get_trades(vd['keyword'], vd['types'], vd['page_size'], vd['page_num'])
 
         return my_json_response(data)

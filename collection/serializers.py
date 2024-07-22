@@ -33,13 +33,13 @@ class CollectionCreateByDocsSerializer(serializers.Serializer):
 class CollectionCreateSerializer(serializers.ModelSerializer):
     name = serializers.CharField(required=False, source='title')
     document_ids = serializers.ListField(required=False, child=serializers.CharField(min_length=32, max_length=36))
-    search_content = serializers.CharField(required=False)
+    # search_content = serializers.CharField(required=False)
     author_id = serializers.IntegerField(required=False)
     search_info = SearchDocuments4AddQuerySerializer(required=False, default=None)
     type = serializers.ChoiceField(choices=Collection.TypeChoices.choices, default=Collection.TypeChoices.PERSONAL)
     document_titles = serializers.ListField(required=False, child=serializers.CharField(max_length=255))
     is_all = serializers.BooleanField(required=False, default=False)
-    search_limit = serializers.IntegerField(required=False, default=100)
+    # search_limit = serializers.IntegerField(required=False, default=100)
 
     def validate(self, attrs):
         if (
@@ -50,22 +50,10 @@ class CollectionCreateSerializer(serializers.ModelSerializer):
         if attrs.get('title') and len(attrs['title']) > 255:
             attrs['title'] = attrs['title'][:255]
 
-        if attrs.get('search_content'):
-            if not attrs.get('search_info'):
-                attrs['search_info'] = {}
-            attrs['search_info']['content'] = attrs['search_content']
-            attrs['search_info']['limit'] = attrs.get('limit', 100)
-
-        if attrs.get('author_id'):
-            if not attrs.get('search_info'):
-                attrs['search_info'] = {}
-            attrs['search_info']['author_id'] = attrs['author_id']
-            attrs['search_info']['limit'] = attrs.get('limit', 1000)
-
         if attrs.get('is_all') and (not attrs.get('search_info') or (
             not attrs.get('search_info').get('author_id') and not attrs.get('search_info').get('content'))
         ):
-            raise serializers.ValidationError(_('Please provide a search_content or author_id'))
+            raise serializers.ValidationError(_('Please provide a search content or author_id'))
 
         return super().validate(attrs)
 
@@ -78,7 +66,7 @@ class AddDocument2CollectionQuerySerializer(serializers.Serializer):
     document_ids = serializers.ListField(required=False, child=serializers.CharField(min_length=32, max_length=36))
     action = serializers.ChoiceField(required=False, choices=['add', 'delete'], default='add')
     is_all = serializers.BooleanField(required=False, default=False)
-    search_content = serializers.CharField(required=False)
+    # search_content = serializers.CharField(required=False)
     author_id = serializers.IntegerField(required=False)
     search_info = SearchDocuments4AddQuerySerializer(required=False, default=None)
     list_type = serializers.ChoiceField(
@@ -87,42 +75,13 @@ class AddDocument2CollectionQuerySerializer(serializers.Serializer):
 
     def validate(self, attrs):
 
-        if attrs.get('search_content'):
-            if not attrs.get('search_info'):
-                attrs['search_info'] = {}
-            attrs['search_info']['content'] = attrs['search_content']
+        if attrs.get('search_info') and attrs['search_info'].get('content'):
             attrs['search_info']['limit'] = attrs.get('limit', 100)
 
-        if attrs.get('author_id'):
-            if not attrs.get('search_info'):
-                attrs['search_info'] = {}
-            attrs['search_info']['author_id'] = attrs['author_id']
+        if attrs.get('search_info') and attrs['search_info'].get('author_id'):
             attrs['search_info']['limit'] = attrs.get('limit', 1000)
 
         return super().validate(attrs)
-
-
-class CollectionCreateByDocLibSerializer(BaseModelSerializer):
-    name = serializers.CharField(required=False, source='title')
-    document_ids = serializers.ListField(required=False, child=serializers.CharField(min_length=32, max_length=36))
-    is_all = serializers.BooleanField(required=False, default=False)
-
-    def validate(self, attrs):
-        if not attrs.get('title') and not attrs.get('document_ids') and not attrs.get('search_content'):
-            raise serializers.ValidationError(_('Please provide a name or document_ids or search_content'))
-        if attrs.get('is_all') and not attrs.get('search_content'):
-            raise serializers.ValidationError(_('Please provide a search_content'))
-        if attrs.get('title') and len(attrs['title']) > 255:
-            attrs['title'] = attrs['title'][:255]
-        elif attrs.get('document_ids'):
-            titles = Document.objects.filter(id__in=attrs['document_ids']).values_list("title", flat=True).all()
-            attrs['document_titles'] = list(titles)
-
-        return attrs
-
-    class Meta:
-        model = Collection
-        fields = '__all__'
 
 
 class CollectionUpdateSerializer(BaseModelSerializer):
@@ -246,37 +205,6 @@ class CollectionDeleteQuerySerializer(serializers.Serializer):
         if not attrs.get('ids') and not attrs.get('is_all'):
             raise serializers.ValidationError(f"ids and is_all {_('cannot be empty at the same time')}")
         return attrs
-
-
-class CollectionDocUpdateSerializer(serializers.Serializer):
-    user_id = serializers.CharField(required=True, max_length=36)
-    collection_id = serializers.CharField(required=True, max_length=36, min_length=36)
-    document_ids = serializers.ListField(
-        required=False, child=serializers.CharField(required=True, max_length=36, min_length=36)
-    )
-    is_all = serializers.BooleanField(required=False, default=False)
-    action = serializers.ChoiceField(required=False, choices=['add', 'delete'], default='add')
-    list_type = serializers.ChoiceField(
-        required=False, choices=['s2', 'arxiv', 'document_library', 'all'], default=None)
-    search_content = serializers.CharField(required=False, allow_null=True, default=None)
-    author_id = serializers.IntegerField(required=False, allow_null=True, default=None)
-
-    def validate(self, attrs):
-        if not attrs.get('document_ids') and not attrs.get('is_all') and not attrs.get('list_type'):
-            raise serializers.ValidationError(f"document_ids and list_type {_('cannot be empty at the same time')}")
-
-        return attrs
-
-    @staticmethod
-    def _update_bot_collections_doc_num(collection_id, num, action='update'):
-        # todo update
-        bot_collections = BotCollection.objects.filter(collection_id=collection_id, del_flag=False)
-        bot_ids = [bc.bot_id for bc in bot_collections]
-        if action == 'update':
-            Collection.objects.filter(bot_id__in=bot_ids).update(total_public=F('total_public') + num)
-        elif action == 'set':
-            Collection.objects.filter(bot_id__in=bot_ids).update(total_public=num)
-        return num
 
 
 class CollectionDocumentListQuerySerializer(serializers.Serializer):

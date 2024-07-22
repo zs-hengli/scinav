@@ -191,10 +191,10 @@ where (CURRENT_TIMESTAMP - INTERVAL '{duration - 1} day')::date > m_start_date o
             where += f"{'or' if or_sql else ''} h.trade_no = '{trade_no}'"
         if where:
             where += f"{or_sql})"
-        elif types:
+        if types:
             if isinstance(types, list):
                 types = "'" + "','".join(types) + "'"
-            where += f" and h.type in ('{types}')"
+            where += f" and h.type in ({types})"
 
         count_sql = f"select count(1) as count {from_sql} {where}"
         count_rest = my_custom_sql(count_sql)

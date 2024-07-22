@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class PayQrcodeQuerySerializer(serializers.Serializer):
     out_trade_no = serializers.CharField(required=False, default=None)
     description = serializers.CharField(required=True)
-    amount = serializers.IntegerField(required=True)
+    amount = serializers.IntegerField(required=True, min_value=1)
 
 
 class MemberInfoSerializer(serializers.Serializer):
