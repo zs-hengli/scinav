@@ -8,6 +8,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from core.utils.views import extract_json, my_json_response
+from customadmin.service import Notice
 from user.serializers import UserSyncQuerySerializer, UserSyncRespSerializer
 from user.service import sync_user_info
 
@@ -53,6 +54,15 @@ class Callback(APIView):
         logger.debug(f'request.headers: {request.headers}')
         data = {'desc': 'user Callback'}
 
+        return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+class Notices(APIView):
+
+    def get(self, request, *args, **kwargs):  # noqa
+        data = Notice.get_active_notice()
         return my_json_response(data)
 
 

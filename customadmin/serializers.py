@@ -5,7 +5,7 @@ from django.db import models
 from rest_framework import serializers
 
 from bot.models import Bot, HotBot
-from customadmin.models import GlobalConfig
+from customadmin.models import GlobalConfig, Notification
 from vip.models import Member, TokensHistory
 from vip.serializers import TokensHistoryListSerializer
 
@@ -268,3 +268,36 @@ class TokensHistoryAdminListSerializer(serializers.Serializer):
 class MembersClockUpdateQuerySerializer(serializers.Serializer):
     user_id = serializers.CharField(required=True)
     clock_time = serializers.DateTimeField(required=True)
+
+
+class NoticesQuerySerializer(serializers.Serializer):
+    page_num = serializers.IntegerField(required=False, default=1)
+    page_size = serializers.IntegerField(required=False, default=10)
+
+
+class NoticesDetailSerializer(serializers.ModelSerializer):
+    created_at = serializers.DateTimeField(format='%Y-%m-%d %H:%M:%S')
+
+    class Meta:
+        model = Notification
+        fields = ['id', 'title', 'content', 'en_title', 'en_content', 'is_active', 'created_at']
+
+
+class NoticesCreateSerializer(serializers.Serializer):
+    title = serializers.CharField(required=True, allow_blank=True)
+    content = serializers.CharField(required=True, allow_blank=True)
+    en_title = serializers.CharField(required=True, allow_blank=True)
+    en_content = serializers.CharField(required=True, allow_blank=True)
+    is_active = serializers.BooleanField(default=True)
+
+
+class NoticesUpdateSerializer(serializers.Serializer):
+    title = serializers.CharField(required=False)
+    content = serializers.CharField(required=False)
+    en_title = serializers.CharField(required=False)
+    en_content = serializers.CharField(required=False)
+
+
+class NoticesActiveSerializer(serializers.Serializer):
+    id = serializers.CharField(required=True)
+    is_active = serializers.BooleanField(default=True)

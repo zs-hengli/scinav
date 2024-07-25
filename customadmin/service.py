@@ -6,14 +6,15 @@ import traceback
 
 from django.contrib.admin.models import LogEntry, CHANGE
 from django.contrib.contenttypes.models import ContentType
+from django.core.cache import cache
 from django.db import transaction, DatabaseError
 
 from bot.models import Bot, HotBot
 from core.utils.common import check_uuid4_str, check_email_str
-from customadmin.models import GlobalConfig
+from customadmin.models import GlobalConfig, Notification
 from customadmin.serializers import GlobalConfigDetailSerializer, MembersListSerializer, \
     TokensHistoryAdminListSerializer, BotsPublishListRespSerializer, HotBotAdminListSerializer, \
-    MembersTradesQuerySerializer
+    MembersTradesQuerySerializer, NoticesDetailSerializer
 from vip.base_service import tokens_award, MemberTimeClock, update_history_completed_status
 from vip.models import Member, TokensHistory
 
@@ -243,3 +244,76 @@ def get_trades(keyword, types, page_size=10, page_num=1):
         page_size=page_size, page_num=page_num)
     histories_info['list'] = TokensHistoryAdminListSerializer(histories_info['list'], many=True).data
     return histories_info
+
+
+class Notice:
+    REDIS_KEY = 'scinav:notices'
+
+    @classmethod
+    def get_notices(cls, page_size=10, page_num=1):
+        query_set = Notification.objects.filter(del_flag=False).order_by('-id')
+        total = query_set.count()
+        notices = query_set[page_size * (page_num - 1):page_size * page_num]
+        notices = NoticesDetailSerializer(notices, many=True).data
+        return {'list': notices, 'total': total}
+
+    @classmethod
+    def get_active_notice(cls):
+        if not (notice := cache.get(cls.REDIS_KEY)):
+            notice = Notification.objects.filter(del_flag=False, is_active=True).first()
+            notice = NoticesDetailSerializer(notice).data if notice else {}
+            cache.set(cls.REDIS_KEY, notice, 60 * 60 * 24)
+        return notice
+
+    @classmethod
+    def update_notice(cls, notice, admin_id, title=None, content=None, en_title=None, en_content=None):
+        if title:
+            notice.title = title
+        if content:
+            notice.content = content
+        if en_title:
+            notice.en_title = en_title
+        if en_content:
+            notice.en_content = en_content
+        if admin_id:
+            notice.updated_by = admin_id
+        notice.updated_at = datetime.datetime.now()
+        try:
+            with transaction.atomic():
+                notice.save()
+                if notice.is_active:
+                    cache.set(cls.REDIS_KEY, NoticesDetailSerializer(notice).data, 60 * 60 * 24)
+                return notice
+        except DatabaseError as e:
+            logger.error(f'update notice error, {e}, \n' + traceback.format_exc())
+            return False
+
+    @classmethod
+    def create_notice(cls, validated_data, admin_id):
+        try:
+            with transaction.atomic():
+                Notification.objects.filter(is_active=True).update(is_active=False)
+                notice = Notification.objects.create(**validated_data, updated_by=admin_id)
+                cache.set(cls.REDIS_KEY, NoticesDetailSerializer(notice).data, 60 * 60 * 24)
+                return notice
+        except DatabaseError as e:
+            logger.error(f'create notice error, {e}, \n' + traceback.format_exc())
+            return False
+
+    @classmethod
+    def active_notice(cls, notice, is_active, admin_id):
+        notice.is_active = is_active
+        notice.updated_by = admin_id
+        notice.updated_at = datetime.datetime.now()
+        try:
+            with transaction.atomic():
+                notice.save()
+                data = NoticesDetailSerializer(notice).data
+                if is_active:
+                    cache.set(cls.REDIS_KEY, data, 60 * 60 * 24)
+                else:
+                    cache.delete(cls.REDIS_KEY)
+                return data
+        except DatabaseError as e:
+            logger.error(f'active notice error, {e}, \n' + traceback.format_exc())
+            return False

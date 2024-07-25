@@ -142,6 +142,10 @@ def daily_duration_award(is_clock=False):
                     today = clock_time.date()
                 else:
                     today = datetime.date.today()
+                end_date = (
+                    today + datetime.timedelta(days=period_of_validity - 1)
+                    if period_of_validity else None
+                )
                 history_objs.append(TokensHistory(
                     user_id=user_id,
                     trade_no=generate_trade_no(),
@@ -149,7 +153,7 @@ def daily_duration_award(is_clock=False):
                     amount=amount,
                     type=TokensHistory.Type.DURATION_AWARD,
                     start_date=today,
-                    end_date=today + datetime.timedelta(days=period_of_validity - 1),
+                    end_date=end_date,
                     status=TokensHistory.Status.COMPLETED,
                 ))
         try:

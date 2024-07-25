@@ -22,5 +22,8 @@ urlpatterns = [
     path('members/clock/expire_task', views.MembersClockExpireAward.as_view(), name='members_clock'),
     path('members/clock/<str:user_id>', views.MembersClock.as_view(), name='members_clock'),
     #
+    path('notice', views.Notices.as_view(), name='notice'),
+    path('notice/<int:notice_id>', views.Notices.as_view(), name='notice'),
+    path('notice/active', views.NoticesActive.as_view(), name='notice_active'),
 ]
 

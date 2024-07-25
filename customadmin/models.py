@@ -81,3 +81,19 @@ class GlobalConfig(models.Model):
         db_table = 'global_config'
         verbose_name = 'global config'
         unique_together = ('config_type', 'sub_type')
+
+
+class Notification(models.Model):
+    title = models.CharField(max_length=512, null=True, blank=True)
+    en_title = models.CharField(max_length=512, null=True, blank=True)
+    content = models.TextField(null=True, blank=True)
+    en_content = models.TextField(null=True, blank=True)
+    is_active = models.BooleanField(default=False, db_default=False)
+    updated_by = models.CharField(max_length=36, null=True, default=None, db_default=None)
+    del_flag = models.BooleanField(default=False, db_default=False)
+    updated_at = models.DateTimeField(null=True, auto_now=True)
+    created_at = models.DateTimeField(null=True, auto_now_add=True)
+
+    class Meta:
+        db_table = 'notification'
+        verbose_name = 'notification'

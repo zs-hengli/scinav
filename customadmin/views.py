@@ -11,13 +11,15 @@ from bot.serializers import HotBotListSerializer
 from bot.service import bot_publish, add_hot_bot
 from core.utils.authentication import del_auth_cache
 from core.utils.views import extract_json, my_json_response
-from customadmin.models import GlobalConfig
+from customadmin.models import GlobalConfig, Notification
 from customadmin.serializers import GlobalConfigPostQuerySerializer, MembersQuerySerializer, \
     MembersAwardQuerySerializer, UpdateMembersQuerySerializer, MembersTradesQuerySerializer, \
     BotsUpdateOrderQuerySerializer, BotsPublishQuerySerializer, BotsPublishListRespSerializer, \
-    MembersClockUpdateQuerySerializer
+    MembersClockUpdateQuerySerializer, NoticesQuerySerializer, NoticesCreateSerializer, NoticesUpdateSerializer, \
+    NoticesDetailSerializer, NoticesActiveSerializer
 from customadmin.service import get_global_configs, set_global_configs, get_members, members_admin_award, \
-    update_member_vip, get_trades, bots_publish_list, update_bots_publish_order, update_bots_hot_order, hot_bots_list
+    update_member_vip, get_trades, bots_publish_list, update_bots_publish_order, update_bots_hot_order, hot_bots_list, \
+    Notice
 from user.models import MyUser
 from vip.base_service import MemberTimeClock
 from vip.models import Member
@@ -306,3 +308,71 @@ class MembersClockExpireAward(APIView):
     def get(request, *args, **kwargs):
         MemberTimeClock.daily_expire_clock_duration_award()
         return my_json_response({})
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET', 'POST', 'DELETE', 'PUT']), name='dispatch')
+@permission_classes([IsAdminUser])
+class Notices(APIView):
+    @staticmethod
+    def get(request, *args, **kwargs):
+        query_data = request.query_params.dict()
+        serial = NoticesQuerySerializer(data=query_data)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error {list(serial.errors.keys())}')
+        vd = serial.validated_data
+        data = Notice.get_notices(vd['page_size'], vd['page_num'])
+        return my_json_response(data)
+
+    @staticmethod
+    def post(request, *args, **kwargs):
+        post_data = request.data
+        serial = NoticesCreateSerializer(data=post_data)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error {list(serial.errors.keys())}')
+        data = Notice.create_notice(serial.validated_data, request.user.id)
+        data = NoticesDetailSerializer(data).data
+        return my_json_response(data)
+
+    @staticmethod
+    def put(request, notice_id, *args, **kwargs):
+        post_data = request.data
+        notice_id = int(notice_id)
+        notice = Notification.objects.filter(id=notice_id).first()
+        if not notice:
+            return my_json_response(code=100001, msg=f'notice not found by id {notice_id}')
+        serial = NoticesUpdateSerializer(data=post_data)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error {list(serial.errors.keys())}')
+        data = Notice.update_notice(notice, admin_id=request.user.id, **serial.validated_data)
+        data = NoticesDetailSerializer(data).data
+        return my_json_response(data)
+
+    @staticmethod
+    def delete(request, notice_id, *args, **kwargs):
+        notice_id = int(notice_id)
+        notice = Notification.objects.filter(id=notice_id).first()
+        if not notice:
+            return my_json_response(code=100001, msg=f'notice not found by id {notice_id}')
+        notice.del_flag = True
+        notice.save()
+        return my_json_response({})
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['PUT']), name='dispatch')
+@permission_classes([IsAdminUser])
+class NoticesActive(APIView):
+
+    @staticmethod
+    def put(request, *args, **kwargs):
+        post_data = request.data
+        serial = NoticesActiveSerializer(data=post_data)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error {list(serial.errors.keys())}')
+        vd = serial.validated_data
+        notice = Notification.objects.filter(id=vd['id']).first()
+        if not notice:
+            return my_json_response(code=100001, msg=f'notice not found by id {serial.validated_data["id"]}')
+        data = Notice.active_notice(notice, vd['is_active'], request.user.id)
+        return my_json_response(data)
