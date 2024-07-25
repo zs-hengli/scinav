@@ -93,12 +93,14 @@ class Member(models.Model):
         rest = my_custom_sql(f"{select_sql} {from_sql} {where} {limit_sql}")
         return {'total': count_rest[0]['count'], 'list': rest}
 
-    def get_member_type(self):
+    def get_member_type(self, today=None):
+        if not today:
+            today = datetime.date.today()
         if self.is_vip:
             member_type = self.Type.VIP
-        elif self.premium_end_date and self.premium_end_date > datetime.date.today():
+        elif self.premium_end_date and self.premium_end_date > today:
             member_type = self.Type.PREMIUM
-        elif self.standard_end_date and self.standard_end_date > datetime.date.today():
+        elif self.standard_end_date and self.standard_end_date > today:
             member_type = self.Type.STANDARD
         else:
             member_type = self.Type.FREE
@@ -151,11 +153,19 @@ class TokensHistory(models.Model):
     status = models.IntegerField(null=True, default=None, db_default=None, choices=Status)
 
     @staticmethod
-    def get_expire_history():
+    def get_expire_history(users_clock=None):
+        where_sql = []
+        if users_clock:
+            for user_id, clock_time in users_clock.items():
+                where_sql.append(f"(h1.user_id = '{user_id}' and h1.end_date < '{clock_time}')")
+        else:
+            where_sql.append('h1.end_date < current_timestamp::date')
+
         sql = f"""SELECT h1.* FROM tokens_history h1 
 left join tokens_history h2 on h1.trade_no = h2.out_trade_no
-where h1.type = 'duration_award' AND h2.id is null AND h1.end_date < current_timestamp::date
+where h1.type = 'duration_award' AND h2.id is null
         """
+        sql += ' and (' + ' or '.join(where_sql) + ')'
         rest = my_custom_sql(sql)
         return rest
 
@@ -163,7 +173,7 @@ where h1.type = 'duration_award' AND h2.id is null AND h1.end_date < current_tim
     def get_need_duration_award_user(duration):
         rest = my_custom_sql(f"""select user_id from (
 select user_id, max(start_date) m_start_date
-from tokens_history where type='duration_award' group by user_id
+from tokens_history where type='duration_award' or type='new_user_award' group by user_id
 union all
 select m.user_id, h.start_date m_start_date 
 from member m LEFT JOIN tokens_history h on m.user_id=h.user_id and h.type='duration_award'
@@ -201,6 +211,18 @@ where (CURRENT_TIMESTAMP - INTERVAL '{duration - 1} day')::date > m_start_date o
         limit_sql = f" limit {page_size} offset {(page_num - 1) * page_size}"
         rest = my_custom_sql(f"{select_sql} {from_sql} {where} {limit_sql}")
         return {'total': count_rest[0]['count'], 'list': rest}
+
+    @staticmethod
+    def histories_with_member_info(history_ids):
+        if not history_ids:
+            return []
+        else:
+            history_ids = ','.join(map(str, history_ids))
+        sql = f"""select h.*, m.standard_end_date,m.premium_end_date,m.is_vip,m.amount as member_amount
+from tokens_history h  left join member m on h.user_id=m.user_id
+where h.id in ({history_ids}) order by h.id"""
+        rest = my_custom_sql(sql)
+        return rest
 
     class Meta:
         db_table = 'tokens_history'

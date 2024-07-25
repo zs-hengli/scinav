@@ -70,7 +70,7 @@ def collection_list(user_id, list_type, page_size, page_num, keyword=None):
                 bot = bots_dict.get(coll['bot_id'])
                 coll['is_all_in_document_library'] = sub_bot_info.get('is_all_in_document_library', True)
                 # todo 未发布专题 分享出去 没有全文
-                if bot and bot.type == Bot.TypeChoices.PERSONAL:
+                if bot and bot.type == Bot.TypeChoices.PERSONAL and not bot.advance_share:
                     coll['is_all_in_document_library'] = sub_bot_info.get('is_all_in_document_library', False)
             else:
                 coll['is_all_in_document_library'] = _is_collection_docs_all_in_document_library(coll['id'], user_id)
@@ -169,7 +169,12 @@ def _bot_subscribe_collection_list(user_id, keyword=None):
             bot_sub_collect[bot_id]['total'] -= len(personal_documents)
             # if bot.type == Bot.TypeChoices.PUBLIC:
             bot_sub_collect[bot_id]['total'] += len(ref_documents)
-            if bot.type == Bot.TypeChoices.PERSONAL:
+            ref_d_repeat_num = CollectionDocument.objects.filter(
+                collection_id__in=bot_sub_collect[bot_id]['collection_ids'],
+                document_id__in=ref_documents, del_flag=False
+            ).count()
+            bot_sub_collect[bot_id]['total'] -= ref_d_repeat_num
+            if bot.type == Bot.TypeChoices.PERSONAL and not bot.advance_share:
                 # 关联
                 # 标签的个人文献应该在文献列表中显示，但是它会作为全量文献库文献存在。 排除其他影响文献数量颜色的因素，外面文献列表显示绿色
                 # 关联 & 获取全文
@@ -490,7 +495,7 @@ def collection_documents_select_list(user_id, validated_data):
     if ref_ds and (
         list_type in ['all', 'all_documents']
         or (list_type in ['s2', 'arxiv'])
-        or (list_type in ['subscribe_full_text'] and bot.type == Collection.TypeChoices.PUBLIC)
+        or (list_type in ['subscribe_full_text'] and (bot.type == Collection.TypeChoices.PUBLIC or bot.advance_share))
         or (list_type in ['document_library'] and ref_doc_lib_ids)
     ):
         if list_type in ['document_library']:

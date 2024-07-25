@@ -20,4 +20,5 @@ urlpatterns = [
     path('chat/share/<str:share_id>', views.ConversationShares.as_view()),
 
     path('chat/papers/total', views.ChatPapersTotal.as_view()),
+    path('chat/models<str:paper_id>', views.ChatModels.as_view()),
 ]

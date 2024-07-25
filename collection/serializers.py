@@ -280,7 +280,7 @@ class CollectionDocumentListSerializer(serializers.Serializer):
         elif list_type == 'arxiv':
             document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(user_id)
             sub_bot_document_ids = []
-            if bot and bot.type == Bot.TypeChoices.PUBLIC:
+            if bot and (bot.type == Bot.TypeChoices.PUBLIC or bot.advance_share):
                 sub_bot_document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(
                     bot.user_id, is_self=False
                 )
@@ -294,7 +294,7 @@ class CollectionDocumentListSerializer(serializers.Serializer):
         elif list_type == 's2':
             document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(user_id)
             sub_bot_document_ids = []
-            if bot and bot.type == Bot.TypeChoices.PUBLIC:
+            if bot and (bot.type == Bot.TypeChoices.PUBLIC or bot.advance_share):
                 sub_bot_document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(
                     bot.user_id, is_self=False
                 )
@@ -307,7 +307,9 @@ class CollectionDocumentListSerializer(serializers.Serializer):
                 filter_query).values('document_id').order_by('document_id').distinct()
         elif list_type == 'subscribe_full_text':
             document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(user_id)
-            if bot.user_id == user_id or (bot.user_id != user_id and bot and bot.type == Bot.TypeChoices.PERSONAL):
+            if bot.user_id == user_id or (
+                bot.user_id != user_id and bot and bot.type == Bot.TypeChoices.PERSONAL and not bot.advance_share
+            ):
                 bot_document_ids = document_ids
             else:
                 bot_document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(bot.user_id, is_self=False)
@@ -322,7 +324,7 @@ class CollectionDocumentListSerializer(serializers.Serializer):
         elif list_type == 'personal&subscribe_full_text':
             doc_lib_document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(user_id)
             if not bot or bot.user_id == user_id or (
-                bot.user_id != user_id and bot and bot.type == Bot.TypeChoices.PERSONAL):
+                bot.user_id != user_id and bot and bot.type == Bot.TypeChoices.PERSONAL and not bot.advance_share):
                 sub_bot_document_ids = doc_lib_document_ids
             else:
                 sub_bot_document_ids = CollectionDocumentListSerializer._my_doc_lib_document_ids(bot.user_id, False)

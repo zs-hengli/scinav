@@ -36,10 +36,10 @@ app.conf.beat_schedule = {
         'task': 'document.tasks.async_schedule_publish_bot_task',
         'schedule': crontab(minute='*'),
     },
-    'async-daily-member-status-every-day': {
-        'task': 'document.tasks.async_daily_member_status',
-        'schedule': crontab(minute=1, hour=0),
-    },
+    # 'async-daily-member-status-every-day': {
+    #     'task': 'document.tasks.async_daily_member_status',
+    #     'schedule': crontab(minute=1, hour=0),
+    # },
     'async_daily_duration_award-every-day': {
         'task': 'document.tasks.async_daily_duration_award',
         'schedule': crontab(minute=6, hour=0),

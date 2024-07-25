@@ -37,6 +37,7 @@ def bot_create(body):
         'tools': body['tools'],
         'cover_url': body['cover_url'],
         'type': body['type'],
+        'advance_share': body['advance_share'],
     }
     data['prompt'] = {
         'type': 'SystemPrompt',
@@ -89,7 +90,7 @@ def bot_update(bot, bot_collections, updated_attrs, validated_data):
     if set(need_recreate_attrs) & set(updated_attrs):
         recreate_bot(bot, collections)
     # update ref_document_to_document_library
-    if bot.type == Bot.TypeChoices.PUBLIC:
+    if bot.type == Bot.TypeChoices.PUBLIC or bot.advance_share:
         for collection_id in validated_data['collections']:
             if collection_id not in bc_ids:
                 document_ids = CollectionDocument.objects.filter(

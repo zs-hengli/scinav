@@ -14,10 +14,12 @@ from core.utils.views import extract_json, my_json_response
 from customadmin.models import GlobalConfig
 from customadmin.serializers import GlobalConfigPostQuerySerializer, MembersQuerySerializer, \
     MembersAwardQuerySerializer, UpdateMembersQuerySerializer, MembersTradesQuerySerializer, \
-    BotsUpdateOrderQuerySerializer, BotsPublishQuerySerializer, BotsPublishListRespSerializer
+    BotsUpdateOrderQuerySerializer, BotsPublishQuerySerializer, BotsPublishListRespSerializer, \
+    MembersClockUpdateQuerySerializer
 from customadmin.service import get_global_configs, set_global_configs, get_members, members_admin_award, \
     update_member_vip, get_trades, bots_publish_list, update_bots_publish_order, update_bots_hot_order, hot_bots_list
 from user.models import MyUser
+from vip.base_service import MemberTimeClock
 from vip.models import Member
 
 logger = logging.getLogger(__name__)
@@ -265,3 +267,42 @@ class MembersTrades(APIView):
         data = get_trades(vd['keyword'], vd['types'], vd['page_size'], vd['page_num'])
 
         return my_json_response(data)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET', 'POST', 'DELETE']), name='dispatch')
+@permission_classes([IsAdminUser])
+class MembersClock(APIView):
+
+    @staticmethod
+    def get(request, *args, **kwargs):
+        users_clock = MemberTimeClock.get_member_time_clock()
+        if users_clock:
+            for user_id, clock_time in users_clock.items():
+                users_clock[user_id] = clock_time.strftime('%Y-%m-%d %H:%M:%S')
+        return my_json_response(users_clock)
+
+    @staticmethod
+    def post(request, *args, **kwargs):
+        post_data = request.data
+        serial = MembersClockUpdateQuerySerializer(data=post_data)
+        if not serial.is_valid():
+            return my_json_response(serial.errors, code=100001, msg=f'validate error {list(serial.errors.keys())}')
+        vd = serial.validated_data
+        code, msg = MemberTimeClock.update_member_time_clock(vd['user_id'], vd['clock_time'])
+        return my_json_response(code=code, msg=msg)
+
+    @staticmethod
+    def delete(request, user_id, *args, **kwargs):
+        code, msg = MemberTimeClock.init_member_time_clock(user_id)
+        return my_json_response(code=code, msg=msg)
+
+
+@method_decorator([extract_json], name='dispatch')
+@method_decorator(require_http_methods(['GET']), name='dispatch')
+@permission_classes([IsAdminUser])
+class MembersClockExpireAward(APIView):
+    @staticmethod
+    def get(request, *args, **kwargs):
+        MemberTimeClock.daily_expire_clock_duration_award()
+        return my_json_response({})

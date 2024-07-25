@@ -603,11 +603,11 @@ def document_personal_upload(validated_data):
     instances = []
     document_count = len(files)
     limit_info = LimitCheckSerializer.embedding_limit(vd['user_id'])
-    if limit_info['daily'] and limit_info['daily'] <= limit_info['used_day'] + document_count:
+    if limit_info['daily'] and limit_info['daily'] < limit_info['used_day'] + document_count:
         return 130006, 'exceed day limit', {
             'used': limit_info['used_day'], 'limit': limit_info['daily'], 'need': document_count
         }
-    elif limit_info['monthly'] and limit_info['monthly'] <= limit_info['used_month'] + document_count:
+    elif limit_info['monthly'] and limit_info['monthly'] < limit_info['used_month'] + document_count:
         return 130007, 'exceed month limit', {
             'used': limit_info['used_month'], 'limit': limit_info['monthly'], 'need': document_count
         }

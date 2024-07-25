@@ -17,6 +17,8 @@ class GlobalConfig(models.Model):
         AWARD = 'award', _('award')
         ACTIVITY = 'activity', _('activity')
 
+        TIME_CLOCK = 'time_clock', _('time_clock')
+
     class SubType(models.TextChoices):
         # member
         LIMIT = 'limit', _('limit')
@@ -28,6 +30,8 @@ class GlobalConfig(models.Model):
         DURATION = 'duration_award', _('duration_award')
         # activity
         DISCOUNT = 'discount', _('discount')
+        # time_clock
+        MEMBER = 'member', _('member')
 
     name = models.CharField(max_length=256, null=True, default=None, db_default=None)
     config_type = models.CharField(max_length=128, null=True, default=None, db_default=None, choices=ConfigType)

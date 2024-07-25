@@ -19,9 +19,22 @@ class Conversation(models.Model):
         SIMPLE_COV = 'simple', _('simple')
 
     class LLMModel(models.TextChoices):
-        GPT_3_5_TURBO = 'gpt-3.5-turbo', _('gpt-3.5-turbo')
-        # GPT_4 = 'gpt-4', _('gpt-4')
-        GPT_4O = 'gpt-4o', _('gpt-4o')
+
+        GPT_4O = 'gpt-4o', 'GPT-4o'
+        # GPT_4O_MINI = "gpt-4o-mini", "GPT-4o-mini"
+        # CLAUDE_3_5_SONNET = "claude-3.5-sonnet", "Claude-3.5-Sonnet"
+        BASIC = "basic", "Basic"
+        ADVANCED = "advanced", "Advanced"
+
+    class AllLLMModel(models.TextChoices):
+        GPT_4O = 'gpt-4o', 'GPT-4o'
+        GPT_4O_MINI = "gpt-4o-mini", "GPT-4o-mini"
+        CLAUDE_3_5_SONNET = "claude-3.5-sonnet", "Claude-3.5-Sonnet"
+        GPT_4 = 'gpt-4', 'GPT-4'
+        GPT_3_5 = 'gpt-3.5', 'GPT-3.5'
+        GPT_3_5_TURBO = 'gpt-3.5-turbo', 'GPT-3.5-Turbo'
+        BASIC = "basic", "Basic"
+        ADVANCED = "advanced", "Advanced"
 
     id = models.CharField(max_length=36, primary_key=True, default=uuid.uuid4)
     title = models.CharField(null=True, blank=True, max_length=200, default=None, db_default=None)
@@ -62,7 +75,7 @@ class Question(models.Model):
     answer = models.TextField(null=True, blank=True, db_default=None)
     is_like = models.BooleanField(null=True, default=None, db_default=None)
     stream = models.JSONField(null=True, blank=True, db_default=None)
-    model = models.CharField(null=True, blank=True, max_length=64, default='gpt-3.5-turbo', db_default='gpt-3.5-turbo')
+    model = models.CharField(null=True, blank=True, max_length=64, default=None, db_default=None)
     input_tokens = models.IntegerField(null=True, default=None, db_default=None)
     output_tokens = models.IntegerField(null=True, default=None, db_default=None)
     del_flag = models.BooleanField(default=False, db_default=False)

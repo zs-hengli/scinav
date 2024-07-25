@@ -55,9 +55,13 @@ def check_token(request):
             else:
                 # invite register and new user award
                 user = save_auth_user_info(user_info)
-                invite_code = request.COOKIES.get('X-INVITE-CODE')
+                invite_code = request.headers.get('X-INVITE-CODE')
+                logger.debug(f'new user invite_code: {request.headers}, {invite_code}')
                 if invite_code:
-                    tokens_award(user_id=invite_code, award_type=TokensHistory.Type.INVITE_REGISTER)
+                    tokens_award(
+                        user_id=invite_code, award_type=TokensHistory.Type.INVITE_REGISTER, new_user_id=user.id)
+                    user.inviter_id = invite_code
+                    user.save()
                 tokens_award(user_id=user.id, award_type=TokensHistory.Type.NEW_USER_AWARD)
             return user, token
         else:

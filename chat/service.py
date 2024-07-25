@@ -111,7 +111,7 @@ def conversation_create(user_id, validated_data, openapi_kay_id=None):
         user_id=conv['user_id'],
         agent_id=conv['agent_id'],
         documents=documents,
-        model=vd['model'] if vd['model'] else 'gpt-4o',
+        model=vd['model'] if vd['model'] else 'basic',
         collections=collections,
         public_collection_ids=conv['public_collection_ids'],
         paper_ids=papers_info,
@@ -191,7 +191,7 @@ def conversation_create_by_share(user_id, conversation_share: ConversationShare,
         share_id=conversation_share.id,
         agent_id=conv['agent_id'],
         documents=documents,
-        model=vd['model'] if vd['model'] else 'gpt-4o',
+        model=vd['model'] if vd['model'] else 'basic',
         collections=collections,
         public_collection_ids=conv['public_collection_ids'],
         paper_ids=papers_info,
@@ -480,7 +480,8 @@ def chat_papers_total(user_id, bot_id=None, collection_ids=None):
     bot = Bot.objects.filter(id=bot_id).first()
     query_set, d1, d2, ref_ds = CollectionDocumentListSerializer.get_collection_documents(
         user_id, collection_ids, 'all', bot=bot)
-    doc_total = query_set.count() + len(ref_ds)
+    # doc_total = query_set.count() + len(ref_ds)
+    doc_total = len(set([d['document_id'] for d in query_set.all()]) | set(ref_ds))
     return pub_coll_papers_total + doc_total
 
 
@@ -628,7 +629,7 @@ def chat_query(user_id, validated_data, openapi_key_id=None):
         if not question.is_stop: question.answer = ''.join(stream['chunk'])
         question.save()
         model = question.model
-        if not model: model = 'gpt-4o'
+        if not model: model = 'basic'
         if openapi_key_id:
             record_openapi_log(
                 user_id, openapi_key_id, OpenapiLog.Api.CONVERSATION, OpenapiLog.Status.SUCCESS,

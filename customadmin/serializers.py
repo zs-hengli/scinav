@@ -73,10 +73,10 @@ class HotBotAdminListSerializer(BaseModelSerializer):
 
 
 class ConfigValueMemberLimitCheckSerializer(serializers.Serializer):
-    limit_chat_daily = serializers.IntegerField(required=True)
-    limit_chat_monthly = serializers.IntegerField(required=True)
-    limit_embedding_daily = serializers.IntegerField(required=True)
-    limit_embedding_monthly = serializers.IntegerField(required=True)
+    limit_chat_daily = serializers.IntegerField(required=True, allow_null=True)
+    limit_chat_monthly = serializers.IntegerField(required=True, allow_null=True)
+    limit_embedding_daily = serializers.IntegerField(required=True, allow_null=True)
+    limit_embedding_monthly = serializers.IntegerField(required=True, allow_null=True)
     limit_advanced_share = serializers.IntegerField(required=False, default=0)  # 高级分享个数配置
     limit_max_file_size = serializers.IntegerField(required=False, default=0)  # 文件最大大小单位M
 
@@ -183,12 +183,14 @@ class MembersListSerializer(serializers.Serializer):
     date_joined = serializers.DateTimeField(required=True, format='%Y-%m-%d %H:%M:%S')
 
     @staticmethod
-    def get_member_type(obj):
+    def get_member_type(obj, today=None):
+        if not today:
+            today = datetime.date.today()
         if obj['is_vip']:
             member_type = Member.Type.VIP
-        elif obj['premium_end_date'] and obj['premium_end_date'] > datetime.date.today():
+        elif obj['premium_end_date'] and obj['premium_end_date'] > today:
             member_type = Member.Type.PREMIUM
-        elif obj['standard_end_date'] and obj['standard_end_date'] > datetime.date.today():
+        elif obj['standard_end_date'] and obj['standard_end_date'] > today:
             member_type = Member.Type.STANDARD
         else:
             member_type = Member.Type.FREE
@@ -266,3 +268,7 @@ class TokensHistoryAdminListSerializer(serializers.Serializer):
         }
         return status_map.get(obj['status'], 'completed')
 
+
+class MembersClockUpdateQuerySerializer(serializers.Serializer):
+    user_id = serializers.CharField(required=True)
+    clock_time = serializers.DateTimeField(required=True)

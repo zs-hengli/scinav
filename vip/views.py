@@ -10,13 +10,12 @@ from rest_framework.views import APIView
 
 from core.utils.common import get_client_ip
 from core.utils.views import extract_json, my_json_response
-from vip.base_service import tokens_award
+from vip.base_service import tokens_award, daily_duration_award
 from vip.models import Pay
-# from vip.pay.wxpay import pay_status
 from vip.serializers import PayQrcodeQuerySerializer, ExchangeQuerySerializer, TradesQuerySerializer, \
-    TokensHistoryListSerializer, TokensAwardQuerySerializer
+    TokensAwardQuerySerializer
 from vip.service import generate_pay_qrcode, pay_notify, get_member_info, tokens_expire_list, exchange_member, \
-    tokens_history_list, pay_trade_state, generate_pay_h5_url
+    tokens_history_list, pay_trade_state, generate_pay_h5_url, format_history_list
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +28,7 @@ class Index(APIView):
     def get(self, request, *args, **kwargs):  # noqa
         logger.debug(f'kwargs: {kwargs}')
         data = {'desc': 'index'}
-        out_trade_no = 'e08-4b02-a8ac-b7b5694042e0'
-        # data = pay_status(out_trade_no)
+        daily_duration_award()
         return my_json_response(data)
 
 
@@ -138,14 +136,17 @@ class Exchange(APIView):
 class Trades(APIView):
 
     def get(self, request, *args, **kwargs):  # noqa
+        user_id = request.user.id
         query = request.query_params.dict()
         serial = TradesQuerySerializer(data=query)
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         vd = serial.validated_data
-        total, histories = tokens_history_list(request.user.id, vd['status'], vd['page_size'], vd['page_num'])
+        total, histories = tokens_history_list(user_id, vd['status'], vd['page_size'], vd['page_num'])
+        # histories = TokensHistoryListSerializer(histories, many=True).data
+        histories = format_history_list(user_id, histories)
         data = {
-            'list': TokensHistoryListSerializer(histories, many=True).data,
+            'list': histories,
             'total': total,
         }
         return my_json_response(data)

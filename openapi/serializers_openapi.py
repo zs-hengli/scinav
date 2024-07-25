@@ -387,7 +387,7 @@ class ChatQuerySerializer(serializers.Serializer):
                   'If the `question_id` is passed in, the `paper_knowledge` and `topic_id` will be ignored.'
     )
     model = serializers.ChoiceField(
-        choices=Conversation.LLMModel, required=False, default=Conversation.LLMModel.GPT_4O,
+        choices=Conversation.LLMModel, required=False, default=Conversation.LLMModel.BASIC,
         help_text='Specify large language `model` name. Currently, only `gpt-4o` is available'
         # gpt-4o is currently open for access, but in the future, it will be restricted to advanced users only.
     )

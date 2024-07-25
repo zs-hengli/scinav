@@ -26,6 +26,7 @@ SECRET_KEY = 'django-insecure-&t(9z)u@$8oe!2n+1*qv7x-*kz^kqn$sz06w^0@$yj2wu^4pii
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 DEBUG_MODAL_EXCEPTIONS = True
+ENV = os.environ.get('ENV', '')
 
 ALLOWED_HOSTS = ['*']
 CORS_ALLOW_ALL_ORIGINS = True
@@ -372,7 +373,7 @@ WEIXIN_PAY_MCH_PRIVATE_KEY = os.environ.get('WEIXIN_PAY_MCH_PRIVATE_KEY', 'priva
 WEIXIN_PAY_MCH_CERT_SERIAL_NO = os.environ.get('WEIXIN_PAY_MCH_CERT_SERIAL_NO', 'mch cert serial no')
 WEIXIN_PAY_NOTIFY_URL = os.environ.get('WEIXIN_PAY_NOTIFY_URL', 'https://host/path')
 # 人民币元兑换代币的兑换率 10表示 1元兑换10代币
-EXCHANGE_RATE_CNY2TOKENS = int(os.environ.get('EXCHANGE_RATE_CNY2TOKENS', 10))
+EXCHANGE_RATE_CNY2TOKENS = int(os.environ.get('EXCHANGE_RATE_CNY2TOKENS', 100))
 
 # chat
 CHAT_TIMEOUT = int(os.environ.get('CHAT_TIMEOUT', 30))

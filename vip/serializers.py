@@ -98,6 +98,94 @@ class TokensHistoryListSerializer(serializers.ModelSerializer):
         fields = ['id', 'trade_no', 'amount', 'type', 'pay_amount', 'used_info', 'status', 'status_desc', 'created_at']
 
 
+class TokensHistoryListFormatSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    trade_no = serializers.CharField()
+    amount = serializers.IntegerField()
+    type = serializers.CharField()
+    pay_amount = serializers.IntegerField()
+    used_info = serializers.JSONField()
+    status = serializers.IntegerField()
+    status_desc = serializers.CharField()
+    created_at = serializers.DateTimeField(format='%Y-%m-%d %H:%M:%S')
+
+    @classmethod
+    def get_member_type(cls, obj, today):
+        if obj['is_vip']:
+            member_type = Member.Type.VIP
+        elif obj['premium_end_date'] and obj['premium_end_date'] > today:
+            member_type = Member.Type.PREMIUM
+        elif obj['standard_end_date'] and obj['standard_end_date'] > today:
+            member_type = Member.Type.STANDARD
+        else:
+            member_type = Member.Type.FREE
+        return member_type
+
+    @classmethod
+    def format_used_info(cls, obj, today):
+        data = {}
+        if obj['type'] in [
+            TokensHistory.Type.EXCHANGE_STANDARD_30, TokensHistory.Type.EXCHANGE_STANDARD_90,
+            TokensHistory.Type.EXCHANGE_STANDARD_360, TokensHistory.Type.EXCHANGE_PREMIUM_30,
+            TokensHistory.Type.EXCHANGE_PREMIUM_90, TokensHistory.Type.EXCHANGE_PREMIUM_360
+        ]:
+            if obj['status'] == TokensHistory.Status.FREEZING and obj['freezing_date']:
+                start_date = max(obj['freezing_date'], obj['start_date'])
+                data['remain_days'] = (obj['end_date'] - start_date).days + 1
+            elif obj['end_date'] >= today:
+                data['remain_days'] = (obj['end_date'] - today).days + 1
+            else:
+                data['end_date'] = obj['end_date']
+        elif obj['end_date']:
+            data['end_date'] = obj['end_date']
+        obj['used_info'] = data
+        return obj
+
+    @classmethod
+    def format_status(cls, obj, today):
+        status_map = {
+            0: 'deleted',
+            2: 'completed',
+            3: 'in_progress',
+            4: 'freezing',
+        }
+        member_type = cls.get_member_type(obj, today)
+        is_expire = obj['end_date'] and obj['end_date'] < today and not obj['freezing_date']
+        if obj['type'] not in [
+            TokensHistory.Type.EXCHANGE_STANDARD_30, TokensHistory.Type.EXCHANGE_STANDARD_90,
+            TokensHistory.Type.EXCHANGE_STANDARD_360, TokensHistory.Type.EXCHANGE_PREMIUM_30,
+            TokensHistory.Type.EXCHANGE_PREMIUM_90, TokensHistory.Type.EXCHANGE_PREMIUM_360
+        ] or is_expire:
+            obj['status'] = TokensHistory.Status.COMPLETED
+        else:
+            if member_type == Member.Type.VIP:
+                obj['status'] = TokensHistory.Status.FREEZING
+            elif member_type == Member.Type.PREMIUM:
+                if obj['type'] in [
+                    TokensHistory.Type.EXCHANGE_STANDARD_30, TokensHistory.Type.EXCHANGE_STANDARD_90,
+                    TokensHistory.Type.EXCHANGE_STANDARD_360
+                ]:
+                    obj['status'] = TokensHistory.Status.FREEZING
+                else:
+                    obj['status'] = (
+                        TokensHistory.Status.IN_PROGRESS if obj['start_date'] <= today <= obj['end_date']
+                        else TokensHistory.Status.FREEZING
+                    )
+            else:
+                if obj['type'] in [
+                    TokensHistory.Type.EXCHANGE_PREMIUM_30, TokensHistory.Type.EXCHANGE_PREMIUM_90,
+                    TokensHistory.Type.EXCHANGE_PREMIUM_360
+                ]:
+                    obj['status'] = TokensHistory.Status.COMPLETED
+                else:
+                    obj['status'] = (
+                        TokensHistory.Status.IN_PROGRESS if obj['start_date'] <= today <= obj['end_date']
+                        else TokensHistory.Status.FREEZING
+                    )
+        obj['status_desc'] = status_map.get(obj['status'], 'completed')
+        return obj
+
+
 class TradesQuerySerializer(serializers.Serializer):
     class Status(models.TextChoices):
         ALL = 'all', _('all')

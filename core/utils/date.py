@@ -3,6 +3,10 @@ from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
+SHA_TZ = timezone(
+    timedelta(hours=8),
+    name='Asia/Shanghai',
+)
 
 def utc_to_local(date, local_zone_hour=8, from_format='%Y-%m-%dT%H:%M:%SZ', to_format='%Y-%m-%d %H:%M:%S'):
     """

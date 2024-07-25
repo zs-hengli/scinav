@@ -26,11 +26,11 @@ def update_document_lib(user_id, document_ids, keyword=None):
     limit_info = LimitCheckSerializer.embedding_limit(user_id)
     document_count = document_ids.count()
     if user_id != '0000':
-        if limit_info['monthly'] and limit_info['monthly'] <= limit_info['used_month'] + document_count:
+        if limit_info['monthly'] and limit_info['monthly'] < limit_info['used_month'] + document_count:
             return 130007, 'exceed month limit', {
                 'used': limit_info['used_month'], 'limit': limit_info['monthly'], 'need': document_count
             }
-        elif limit_info['daily'] and limit_info['daily'] <= limit_info['used_day'] + document_count:
+        elif limit_info['daily'] and limit_info['daily'] < limit_info['used_day'] + document_count:
             return 130006, 'exceed day limit', {
                 'used': limit_info['used_day'], 'limit': limit_info['daily'], 'need': document_count
             }

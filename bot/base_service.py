@@ -71,16 +71,18 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
     if ref_ds and (
         list_type in ['all', 'all_documents']
         or (list_type in ['s2', 'arxiv'])
-        or (list_type in ['subscribe_full_text'] and bot.type == Collection.TypeChoices.PUBLIC)
-        or (list_type in ['personal'] and ref_doc_lib_ids)
+        or (list_type in ['subscribe_full_text'] and (bot.type == Collection.TypeChoices.PUBLIC or bot.advance_share))
+        or (list_type in ['personal'])
     ):
         if list_type in ['personal']:
             ref_ds = list(ref_doc_lib_ids)
         elif list_type in ['s2', 'arxiv']:
-            if bot.type == Collection.TypeChoices.PUBLIC:
+            if bot.type == Collection.TypeChoices.PUBLIC or bot.advance_share:
+                logger.debug(f'dddddddd arxiv ref_ds: {ref_ds}')
                 ref_ds = Document.objects.filter(
                     id__in=ref_ds, full_text_accessible=False, del_flag=False, collection_id=list_type
                 ).values_list('id', flat=True)
+                logger.debug(f'dddddddd arxiv ref_ds2: {ref_ds}')
             ref_ds = list(set(ref_ds) - set(ref_doc_lib_ids))
         elif list_type in ['subscribe_full_text']:
             ref_ds = list(Document.objects.filter(
@@ -90,6 +92,7 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
     all_c_docs = query_set.all()
     start = start_num - (public_count % page_size if not need_public_count and start_num else 0)
     document_ids = [cd['document_id'] for cd in all_c_docs]
+    logger.debug(f'ddddddddd document_ids: {document_ids}')
     if ref_ds:
         document_ids += ref_ds
     filter_query = Q(id__in=document_ids)
@@ -127,7 +130,7 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
         if ref_ds:
             full_text_ref_documents = Document.objects.filter(
                 id__in=ref_ds, full_text_accessible=True, del_flag=False).values_list('id', flat=True).all()
-            if bot.type == Bot.TypeChoices.PERSONAL or not bot_is_subscribed:
+            if (bot.type == Bot.TypeChoices.PERSONAL and not bot.advance_share) or not bot_is_subscribed:
                 full_text_ref_documents = DocumentLibrary.objects.filter(
                     user_id=user_id, document_id__in=list(full_text_ref_documents), del_flag=False,
                     task_status=DocumentLibrary.TaskStatusChoices.COMPLETED
@@ -136,7 +139,7 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
         for doc in docs:
             has_full_text = (
                 True if doc.id in all_full_text_docs or (
-                    doc.id in ref_ds and doc.object_path and bot.type == Bot.TypeChoices.PUBLIC)
+                    doc.id in ref_ds and doc.object_path and (bot.type == Bot.TypeChoices.PUBLIC or bot.advance_share))
                 else False
             )
             res_data.append({
@@ -158,14 +161,18 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
                 if not d_id['id']:
                     continue
                 full_text_ref_documents = []
+                logger.debug(f'ddddddddd ref_ds: {ref_ds}')
                 if ref_ds:
+                    logger.debug(f'ddddddddd ref_ds: {ref_ds}')
                     full_text_ref_documents = Document.objects.filter(
                         id__in=ref_ds, full_text_accessible=True, del_flag=False).values_list('id', flat=True)
                 if d_id['id'] in doc_lib_document_ids:
                     res_data[index]['type'] = 'personal'
                 elif d_id['id'] in sub_bot_document_ids:
                     res_data[index]['type'] = 'subscribe_full_text'
-                elif bot.type == Bot.TypeChoices.PUBLIC and d_id['id'] in full_text_ref_documents:
+                elif (
+                    bot.type == Bot.TypeChoices.PUBLIC or bot.advance_share
+                ) and d_id['id'] in full_text_ref_documents:
                     res_data[index]['type'] = 'subscribe_full_text'
         else:
             res_data += CollectionDocumentListCollectionSerializer(docs, many=True).data

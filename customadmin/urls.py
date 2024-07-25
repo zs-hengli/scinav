@@ -18,6 +18,9 @@ urlpatterns = [
     path('members', views.Members.as_view(), name='members'),
     path('members/award', views.MembersAward.as_view(), name='members_award'),
     path('members/trades', views.MembersTrades.as_view(), name='members_trades'),
+    path('members/clock', views.MembersClock.as_view(), name='members_clock'),
+    path('members/clock/expire_task', views.MembersClockExpireAward.as_view(), name='members_clock'),
+    path('members/clock/<str:user_id>', views.MembersClock.as_view(), name='members_clock'),
     #
 ]
 

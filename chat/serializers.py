@@ -23,7 +23,7 @@ class ConversationCreateBaseSerializer(serializers.Serializer):
     documents = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
     collections = serializers.ListField(required=False, child=serializers.CharField(min_length=1), allow_empty=True)
     bot_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, min_length=32, max_length=36)
-    model = serializers.ChoiceField(choices=Conversation.LLMModel, required=False, default=Conversation.LLMModel.GPT_4O)
+    model = serializers.ChoiceField(choices=Conversation.LLMModel, required=False, default=Conversation.LLMModel.BASIC)
 
     def validate(self, attrs):
         attrs['has_conversation'] = False
@@ -329,7 +329,7 @@ def chat_paper_ids(user_id, documents, collection_ids=None, bot_id=None):
             ).all()
             documents += list(ref_documents)
             # 订阅了专题广场里面的非本人专题
-            if bot.type == Bot.TypeChoices.PUBLIC:
+            if bot.type == Bot.TypeChoices.PUBLIC or bot.advance_share:
                 ref_text_accessible_ds = [
                     rd['id'] for rd in ref_documents for d in org_documents
                     if rd['doc_id'] == d['ref_doc_id'] and d['full_text_accessible']
