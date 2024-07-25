@@ -188,9 +188,9 @@ class MembersListSerializer(serializers.Serializer):
             today = datetime.date.today()
         if obj['is_vip']:
             member_type = Member.Type.VIP
-        elif obj['premium_end_date'] and obj['premium_end_date'] > today:
+        elif obj['premium_end_date'] and obj['premium_end_date'] >= today:
             member_type = Member.Type.PREMIUM
-        elif obj['standard_end_date'] and obj['standard_end_date'] > today:
+        elif obj['standard_end_date'] and obj['standard_end_date'] >= today:
             member_type = Member.Type.STANDARD
         else:
             member_type = Member.Type.FREE
@@ -240,11 +240,7 @@ class TokensHistoryAdminListSerializer(serializers.Serializer):
     @staticmethod
     def get_used_info(obj):
         data = {}
-        if obj['type'] in [
-            TokensHistory.Type.EXCHANGE_STANDARD_30, TokensHistory.Type.EXCHANGE_STANDARD_90,
-            TokensHistory.Type.EXCHANGE_STANDARD_360, TokensHistory.Type.EXCHANGE_PREMIUM_30,
-            TokensHistory.Type.EXCHANGE_PREMIUM_90, TokensHistory.Type.EXCHANGE_PREMIUM_360
-        ]:
+        if obj['type'] in TokensHistory.TYPE_EXCHANGE:
             if obj['status'] == TokensHistory.Status.FREEZING:
                 if not obj['freezing_date'] or obj['freezing_date'] < obj['start_date']:
                     data['remain_days'] = (obj['end_date'] - obj['start_date']).days + 1

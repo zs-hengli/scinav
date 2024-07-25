@@ -98,9 +98,9 @@ class Member(models.Model):
             today = datetime.date.today()
         if self.is_vip:
             member_type = self.Type.VIP
-        elif self.premium_end_date and self.premium_end_date > today:
+        elif self.premium_end_date and self.premium_end_date >= today:
             member_type = self.Type.PREMIUM
-        elif self.standard_end_date and self.standard_end_date > today:
+        elif self.standard_end_date and self.standard_end_date >= today:
             member_type = self.Type.STANDARD
         else:
             member_type = self.Type.FREE
@@ -126,6 +126,18 @@ class TokensHistory(models.Model):
         DURATION_AWARD = 'duration_award', _('duration_award')
         NEW_USER_AWARD = 'new_user_award', _('new_user_award')  # todo 新用户奖励 包括注册 一次性奖励 固定周期奖励
         EXPIRATION = 'expiration', _('expiration')
+
+    TYPE_EXCHANGE_STANDARD = [
+        Type.EXCHANGE_STANDARD_30,
+        Type.EXCHANGE_STANDARD_90,
+        Type.EXCHANGE_STANDARD_360,
+    ]
+    TYPE_EXCHANGE_PREMIUM = [
+        Type.EXCHANGE_PREMIUM_30,
+        Type.EXCHANGE_PREMIUM_90,
+        Type.EXCHANGE_PREMIUM_360,
+    ]
+    TYPE_EXCHANGE = TYPE_EXCHANGE_STANDARD + TYPE_EXCHANGE_PREMIUM
 
     class Status(models.IntegerChoices):
         DELETE = 0, _('delete'),
@@ -170,16 +182,26 @@ where h1.type = 'duration_award' AND h2.id is null
         return rest
 
     @staticmethod
-    def get_need_duration_award_user(duration):
-        rest = my_custom_sql(f"""select user_id from (
+    def get_need_duration_award_user(duration, users_clock=None):
+        if users_clock:
+            where_sql = ' (' + ' or '.join([
+                f"(t.user_id = '{user_id}' and ('{clock_time}'::timestamp-INTERVAL '{duration - 1} day')::date > m_start_date)"
+                for user_id, clock_time in users_clock.items()
+            ]) + ')'
+        else:
+            where_sql = f" (CURRENT_TIMESTAMP - INTERVAL '{duration - 1} day')::date > m_start_date"
+
+        sql = f"""select user_id from (
 select user_id, max(start_date) m_start_date
 from tokens_history where type='duration_award' or type='new_user_award' group by user_id
 union all
 select m.user_id, h.start_date m_start_date 
 from member m LEFT JOIN tokens_history h on m.user_id=h.user_id and h.type='duration_award'
 where  h.id is null) t
-where (CURRENT_TIMESTAMP - INTERVAL '{duration - 1} day')::date > m_start_date or m_start_date is null
-        """)
+where m_start_date is null or"""
+        sql += where_sql
+        rest = my_custom_sql(sql)
+
         return [i['user_id'] for i in rest]
 
     @staticmethod

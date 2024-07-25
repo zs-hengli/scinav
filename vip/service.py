@@ -311,8 +311,7 @@ def _consume_tokens(user_id, member, exchange_member_type, duration, amount):
             if exchange_member_type == Member.Type.PREMIUM and member.standard_end_date >= today:
                 standard_histories = TokensHistory.objects.filter(
                     user_id=user_id,
-                    type__in=[TokensHistory.Type.EXCHANGE_STANDARD_30, TokensHistory.Type.EXCHANGE_STANDARD_90,
-                              TokensHistory.Type.EXCHANGE_STANDARD_360],
+                    type__in=TokensHistory.TYPE_EXCHANGE_STANDARD,
                     end_date__gte=today,
                     status__gt=TokensHistory.Status.DELETE,
                 ).all()
@@ -379,10 +378,7 @@ def _get_member_data(member, member_type, duration, today=None):
 def _get_new_exchange_history_status(in_progress_history, exchange_member_type):
     if not in_progress_history:
         return TokensHistory.Status.IN_PROGRESS
-    elif in_progress_history.type in [
-        TokensHistory.Type.EXCHANGE_STANDARD_30, TokensHistory.Type.EXCHANGE_STANDARD_90,
-        TokensHistory.Type.EXCHANGE_STANDARD_360
-    ]:
+    elif in_progress_history.type in TokensHistory.TYPE_EXCHANGE_STANDARD:
         if exchange_member_type == Member.Type.STANDARD:
             return TokensHistory.Status.FREEZING
         else:
@@ -391,18 +387,24 @@ def _get_new_exchange_history_status(in_progress_history, exchange_member_type):
         return TokensHistory.Status.FREEZING
 
 
-def tokens_history_list(user_id, status, page_size, page_num):
-    status_map = {
-        TradesQuerySerializer.Status.COMPLETED: TokensHistory.Status.COMPLETED,
-        TradesQuerySerializer.Status.IN_PROGRESS: TokensHistory.Status.IN_PROGRESS,
-        TradesQuerySerializer.Status.FREEZING: TokensHistory.Status.FREEZING
-    }
-    status_tag = status_map.get(status, None)
+def tokens_history_list(user_id, status, page_size, page_num, today=None):
     filter_query = Q(user_id=user_id, status__gt=TokensHistory.Status.DELETE)
-    if status_tag:
-        filter_query &= Q(status=status_tag)
+    if not today:
+        today = datetime.date.today()
+    member = Member.objects.filter(user_id=user_id).first()
+    if status == TradesQuerySerializer.Status.COMPLETED:
+        if member.is_vip:
+            filter_query &= (
+                (Q(end_date__lt=today) & ~Q(status=TokensHistory.Status.FREEZING))
+                | Q(status=TokensHistory.Status.COMPLETED)
+            )
+        else:
+            filter_query &= (Q(end_date__lt=today) | Q(status=TokensHistory.Status.COMPLETED))
     elif status == TradesQuerySerializer.Status.VALID:
-        filter_query &= Q(status__in=[TokensHistory.Status.IN_PROGRESS, TokensHistory.Status.FREEZING])
+        if member.is_vip:
+            filter_query &= Q(status__in=[TokensHistory.Status.FREEZING, TokensHistory.Status.IN_PROGRESS])
+        else:
+            filter_query &= Q(end_date__gte=today, type__in=TokensHistory.TYPE_EXCHANGE)
     histories = TokensHistory.objects.filter(filter_query).order_by('id')
     total = histories.count()
     histories = histories[(page_num - 1) * page_size:page_num * page_size]
@@ -425,10 +427,7 @@ def format_history_list(user_id, histories):
 
 def tokens_history_clock(histories, today):
     for h in histories:
-        if h.type in [
-            TokensHistory.Type.EXCHANGE_STANDARD_30, TokensHistory.Type.EXCHANGE_STANDARD_90,
-            TokensHistory.Type.EXCHANGE_STANDARD_360
-        ]:
+        if h.type in TokensHistory.TYPE_EXCHANGE_STANDARD:
             if h.start_date <= today:
                 h.status = TokensHistory.Status.COMPLETED
                 h.save()

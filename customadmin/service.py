@@ -14,7 +14,7 @@ from customadmin.models import GlobalConfig
 from customadmin.serializers import GlobalConfigDetailSerializer, MembersListSerializer, \
     TokensHistoryAdminListSerializer, BotsPublishListRespSerializer, HotBotAdminListSerializer, \
     MembersTradesQuerySerializer
-from vip.base_service import tokens_award
+from vip.base_service import tokens_award, MemberTimeClock, update_history_completed_status
 from vip.models import Member, TokensHistory
 
 logger = logging.getLogger(__name__)
@@ -130,24 +130,31 @@ def members_admin_award(member, amount, period_of_validity, admin_id):
 
 
 def update_member_vip(member: Member, admin_id, is_vip:bool = True):
-    member_type = member.get_member_type()
-    member.is_vip = is_vip
-    today = datetime.date.today()
+    clock_time = MemberTimeClock.get_member_time_clock(member.user_id)
+    if clock_time:
+        today = clock_time.date()
+    else:
+        today = datetime.date.today()
+    member_type = member.get_member_type(today)
     update_history_data = []
     if is_vip:
         if member_type in [Member.Type.STANDARD, Member.Type.PREMIUM]:
             # update member
             if member_type == Member.Type.STANDARD:
-                member.standard_remain_days = (member.standard_end_date - datetime.date.today()).days + 1
+                member.standard_remain_days = (member.standard_end_date - today).days + 1
             else:
-                member.premium_remain_days = (member.premium_end_date - datetime.date.today()).days + 1
+                member.premium_remain_days = (member.premium_end_date - today).days + 1
             member.save()
             # update tokens_history
+            update_history_completed_status(user_id=member.user_id, today=today)
             in_progress_history = TokensHistory.objects.filter(
-                user_id=member.user_id, status=TokensHistory.Status.IN_PROGRESS).first()
-            in_progress_history.status = TokensHistory.Status.FREEZING
-            in_progress_history.freezing_date = today
-            update_history_data.append(in_progress_history)
+                user_id=member.user_id, end_date__gte=today, start_date__lte=today,
+                type__in=TokensHistory.TYPE_EXCHANGE,
+            ).first()
+            if in_progress_history:
+                in_progress_history.status = TokensHistory.Status.FREEZING
+                in_progress_history.freezing_date = today
+                update_history_data.append(in_progress_history)
     else:
         u_histories = []
         if member.premium_remain_days:
@@ -156,8 +163,7 @@ def update_member_vip(member: Member, admin_id, is_vip:bool = True):
             u_histories = TokensHistory.objects.filter(
                 user_id=member.user_id,
                 status=TokensHistory.Status.FREEZING,
-                type__in=[TokensHistory.Type.EXCHANGE_PREMIUM_30, TokensHistory.Type.EXCHANGE_PREMIUM_90,
-                          TokensHistory.Type.EXCHANGE_PREMIUM_360],
+                type__in=TokensHistory.TYPE_EXCHANGE_PREMIUM,
             ).order_by('start_date', 'id').all()
         elif member.standard_remain_days:
             member.standard_end_date = today + datetime.timedelta(days=member.standard_remain_days - 1)
@@ -165,14 +171,13 @@ def update_member_vip(member: Member, admin_id, is_vip:bool = True):
             u_histories = TokensHistory.objects.filter(
                 user_id=member.user_id,
                 status=TokensHistory.Status.FREEZING,
-                type__in=[TokensHistory.Type.EXCHANGE_STANDARD_30, TokensHistory.Type.EXCHANGE_STANDARD_90,
-                          TokensHistory.Type.EXCHANGE_STANDARD_360],
+                type__in=TokensHistory.TYPE_EXCHANGE_STANDARD,
             ).order_by('start_date', 'id').all()
         if freezing_histories := [h for h in u_histories if h.freezing_date]:
             freezing_history = freezing_histories[0]
             freezing_remain_days = (freezing_history.end_date - freezing_history.freezing_date).days + 1
             new_days = (
-                (datetime.date.today() + datetime.timedelta(days=freezing_remain_days)) - freezing_history.end_date
+                (today + datetime.timedelta(days=freezing_remain_days)) - freezing_history.end_date
             ).days
             for u_history in u_histories:
                 if u_history.id == freezing_history.id:
@@ -191,6 +196,7 @@ def update_member_vip(member: Member, admin_id, is_vip:bool = True):
             if update_history_data:
                 TokensHistory.objects.bulk_update(
                     update_history_data, ['start_date', 'end_date', 'freezing_date', 'status'])
+            member.is_vip = is_vip
             member.save()
             LogEntry(
                 user_id=admin_id,
@@ -200,6 +206,10 @@ def update_member_vip(member: Member, admin_id, is_vip:bool = True):
                 change_message=json.dumps({"is_vip": is_vip, "id": member.id, "user_id": member.user_id}),
                 content_type_id=ContentType.objects.get_for_model(Member).id,
             ).save()
+            if not is_vip:
+                # todo 高级分享改为普通分享
+                Bot.objects.filter(
+                    user_id=member.user_id, advance_share=True, del_flag=False).update(advance_share=False)
     except DatabaseError as e:
         logger.error(f'tokens award error, {e}, \n' + traceback.format_exc())
         return False
@@ -222,11 +232,7 @@ def get_trades(keyword, types, page_size=10, page_num=1):
             return {'list': [], 'total': 0}
     if types:
         if MembersTradesQuerySerializer.Type.EXCHANGE in types:
-            types += [
-                TokensHistory.Type.EXCHANGE_STANDARD_30, TokensHistory.Type.EXCHANGE_STANDARD_90,
-                TokensHistory.Type.EXCHANGE_STANDARD_360, TokensHistory.Type.EXCHANGE_PREMIUM_30,
-                TokensHistory.Type.EXCHANGE_PREMIUM_90, TokensHistory.Type.EXCHANGE_PREMIUM_360,
-            ]
+            types += TokensHistory.TYPE_EXCHANGE
         if MembersTradesQuerySerializer.Type.AWARD in types:
             types += [
                 TokensHistory.Type.SUBSCRIBED_BOT, TokensHistory.Type.INVITE_REGISTER,

@@ -65,11 +65,7 @@ class TokensHistoryListSerializer(serializers.ModelSerializer):
     @staticmethod
     def get_used_info(obj: TokensHistory):
         data = {}
-        if obj.type in [
-            TokensHistory.Type.EXCHANGE_STANDARD_30, TokensHistory.Type.EXCHANGE_STANDARD_90,
-            TokensHistory.Type.EXCHANGE_STANDARD_360, TokensHistory.Type.EXCHANGE_PREMIUM_30,
-            TokensHistory.Type.EXCHANGE_PREMIUM_90, TokensHistory.Type.EXCHANGE_PREMIUM_360
-        ]:
+        if obj.type in TokensHistory.TYPE_EXCHANGE:
             if obj.status == TokensHistory.Status.FREEZING:
                 if not obj.freezing_date or obj.freezing_date < obj.start_date:
                     data['remain_days'] = (obj.end_date - obj.start_date).days + 1
@@ -113,9 +109,9 @@ class TokensHistoryListFormatSerializer(serializers.Serializer):
     def get_member_type(cls, obj, today):
         if obj['is_vip']:
             member_type = Member.Type.VIP
-        elif obj['premium_end_date'] and obj['premium_end_date'] > today:
+        elif obj['premium_end_date'] and obj['premium_end_date'] >= today:
             member_type = Member.Type.PREMIUM
-        elif obj['standard_end_date'] and obj['standard_end_date'] > today:
+        elif obj['standard_end_date'] and obj['standard_end_date'] >= today:
             member_type = Member.Type.STANDARD
         else:
             member_type = Member.Type.FREE
@@ -124,14 +120,12 @@ class TokensHistoryListFormatSerializer(serializers.Serializer):
     @classmethod
     def format_used_info(cls, obj, today):
         data = {}
-        if obj['type'] in [
-            TokensHistory.Type.EXCHANGE_STANDARD_30, TokensHistory.Type.EXCHANGE_STANDARD_90,
-            TokensHistory.Type.EXCHANGE_STANDARD_360, TokensHistory.Type.EXCHANGE_PREMIUM_30,
-            TokensHistory.Type.EXCHANGE_PREMIUM_90, TokensHistory.Type.EXCHANGE_PREMIUM_360
-        ]:
+        if obj['type'] in TokensHistory.TYPE_EXCHANGE:
             if obj['status'] == TokensHistory.Status.FREEZING and obj['freezing_date']:
                 start_date = max(obj['freezing_date'], obj['start_date'])
                 data['remain_days'] = (obj['end_date'] - start_date).days + 1
+            elif obj['start_date'] > today:
+                data['remain_days'] = (obj['end_date'] - obj['start_date']).days + 1
             elif obj['end_date'] >= today:
                 data['remain_days'] = (obj['end_date'] - today).days + 1
             else:
@@ -151,20 +145,13 @@ class TokensHistoryListFormatSerializer(serializers.Serializer):
         }
         member_type = cls.get_member_type(obj, today)
         is_expire = obj['end_date'] and obj['end_date'] < today and not obj['freezing_date']
-        if obj['type'] not in [
-            TokensHistory.Type.EXCHANGE_STANDARD_30, TokensHistory.Type.EXCHANGE_STANDARD_90,
-            TokensHistory.Type.EXCHANGE_STANDARD_360, TokensHistory.Type.EXCHANGE_PREMIUM_30,
-            TokensHistory.Type.EXCHANGE_PREMIUM_90, TokensHistory.Type.EXCHANGE_PREMIUM_360
-        ] or is_expire:
+        if obj['type'] not in TokensHistory.TYPE_EXCHANGE or is_expire:
             obj['status'] = TokensHistory.Status.COMPLETED
         else:
             if member_type == Member.Type.VIP:
                 obj['status'] = TokensHistory.Status.FREEZING
             elif member_type == Member.Type.PREMIUM:
-                if obj['type'] in [
-                    TokensHistory.Type.EXCHANGE_STANDARD_30, TokensHistory.Type.EXCHANGE_STANDARD_90,
-                    TokensHistory.Type.EXCHANGE_STANDARD_360
-                ]:
+                if obj['type'] in TokensHistory.TYPE_EXCHANGE_STANDARD:
                     obj['status'] = TokensHistory.Status.FREEZING
                 else:
                     obj['status'] = (
@@ -172,10 +159,7 @@ class TokensHistoryListFormatSerializer(serializers.Serializer):
                         else TokensHistory.Status.FREEZING
                     )
             else:
-                if obj['type'] in [
-                    TokensHistory.Type.EXCHANGE_PREMIUM_30, TokensHistory.Type.EXCHANGE_PREMIUM_90,
-                    TokensHistory.Type.EXCHANGE_PREMIUM_360
-                ]:
+                if obj['type'] in TokensHistory.TYPE_EXCHANGE_PREMIUM:
                     obj['status'] = TokensHistory.Status.COMPLETED
                 else:
                     obj['status'] = (
@@ -191,8 +175,8 @@ class TradesQuerySerializer(serializers.Serializer):
         ALL = 'all', _('all')
         COMPLETED = 'completed', _('completed')
         VALID = 'valid', _('valid')
-        IN_PROGRESS = 'in_progress', _('in_progress')
-        FREEZING = 'freezing', _('freezing')
+        # IN_PROGRESS = 'in_progress', _('in_progress')
+        # FREEZING = 'freezing', _('freezing')
 
     status = serializers.ChoiceField(choices=Status, default=Status.ALL)
     page_size = serializers.IntegerField(default=10)

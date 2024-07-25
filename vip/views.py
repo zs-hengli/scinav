@@ -1,3 +1,4 @@
+import datetime
 import logging
 import uuid
 
@@ -10,7 +11,7 @@ from rest_framework.views import APIView
 
 from core.utils.common import get_client_ip
 from core.utils.views import extract_json, my_json_response
-from vip.base_service import tokens_award, daily_duration_award
+from vip.base_service import tokens_award, daily_duration_award, MemberTimeClock
 from vip.models import Pay
 from vip.serializers import PayQrcodeQuerySerializer, ExchangeQuerySerializer, TradesQuerySerializer, \
     TokensAwardQuerySerializer
@@ -142,7 +143,12 @@ class Trades(APIView):
         if not serial.is_valid():
             return my_json_response(serial.errors, code=100001, msg=f'validate error, {list(serial.errors.keys())}')
         vd = serial.validated_data
-        total, histories = tokens_history_list(user_id, vd['status'], vd['page_size'], vd['page_num'])
+        clock_time = MemberTimeClock.get_member_time_clock(user_id)
+        if clock_time:
+            today = clock_time.date()
+        else:
+            today = datetime.date.today()
+        total, histories = tokens_history_list(user_id, vd['status'], vd['page_size'], vd['page_num'], today)
         # histories = TokensHistoryListSerializer(histories, many=True).data
         histories = format_history_list(user_id, histories)
         data = {

@@ -7,6 +7,7 @@ from django.core.cache import cache
 from django.db import transaction, DatabaseError
 from django.db.models import Q
 
+from bot.models import Bot
 from core.utils.date import SHA_TZ
 from customadmin.models import GlobalConfig
 from document.models import bulk_insert_ignore_duplicates
@@ -80,61 +81,41 @@ def get_award_amount(award_type, member: Member = None):
     return amount, period_of_validity
 
 
-# def daily_member_status():
-#     # 每日任务 更新会员状态
-#     # 昨天到期的用户
-#     today = datetime.date.today()
-#     yesterday = datetime.date.today() + datetime.timedelta(days=-1)
-#     filter_query = Q(end_date__lte=yesterday, status=TokensHistory.Status.IN_PROGRESS)
-#     histories = TokensHistory.objects.filter(filter_query).order_by('end_date')
-#     logger.info(f'daily member status, {histories.count()} record to update')
-#     update_history_data = []
-#     for history in histories:
-#         u_histories = TokensHistory.objects.filter(
-#             user_id=history.user_id, status=TokensHistory.Status.FREEZING).order_by('start_date', 'id')
-#         member = Member.objects.filter(user_id=history.user_id).first()
-#         if member.is_vip:
-#             continue
-#         # update member standard_remain_days
-#         if member.premium_end_date <= yesterday and member.standard_remain_days:
-#             member.standard_end_date = member.premium_end_date + datetime.timedelta(days=member.standard_remain_days)
-#             member.standard_remain_days = 0
-#             member.save()
-#         # update histories
-#         history.status = TokensHistory.Status.COMPLETED
-#         update_history_data.append(history)
-#         if same_level_freezing := [h for h in u_histories.all() if h.type == history.type]:
-#             same_level_freezing[0].status = TokensHistory.Status.IN_PROGRESS
-#             update_history_data.append(same_level_freezing[0])
-#         elif freezing_histories := [h for h in u_histories.all() if h.freezing_date]:
-#             freezing_history = freezing_histories[0]
-#             freezing_remain_days = (freezing_history.end_date - freezing_history.freezing_date).days + 1
-#             new_days = (
-#                 (history.end_date + datetime.timedelta(days=freezing_remain_days)) - freezing_history.end_date
-#             ).days
-#             for u_history in u_histories.all():
-#                 if u_history.id == freezing_history.id:
-#                     u_history.freezing_date = None
-#                     u_history.status = TokensHistory.Status.IN_PROGRESS
-#                 else:
-#                     u_history.start_date += datetime.timedelta(days=new_days - 1)
-#                 u_history.end_date += datetime.timedelta(days=new_days - 1)
-#                 update_history_data.append(u_history)
-#         else:
-#             if in_progress_history := u_histories.first():
-#                 in_progress_history.status = TokensHistory.Status.IN_PROGRESS
-#                 update_history_data.append(in_progress_history)
-#         update_fileds = ['status', 'start_date', 'end_date', 'freezing_date', 'updated_at']
-#         if update_history_data:
-#             TokensHistory.objects.bulk_update(update_history_data, update_fileds)
+def daily_member_status():
+    # 每日任务 更新会员状态
+    # 昨天到期的用户
+    today = datetime.date.today()
+    yesterday = today + datetime.timedelta(days=-1)
+    filter_query = Q(end_date__lte=yesterday)
+    histories = TokensHistory.objects.filter(filter_query).order_by('end_date')
+    logger.info(f'daily member status, {histories.count()} record to update')
+    update_history_data = []
+    for history in histories:
+        member = Member.objects.filter(user_id=history.user_id).first()
+        member_type = member.get_member_type()
+        if (
+            (member_type == Member.Type.STANDARD and history.type in TokensHistory.TYPE_EXCHANGE_PREMIUM)
+            or (member_type == Member.Type.FREE and history.type in TokensHistory.TYPE_EXCHANGE_STANDARD)
+        ):
+            # todo 高级分享改为普通分享
+            Bot.objects.filter(user_id=history.user_id, advance_share=True, del_flag=False).update(advance_share=False)
+            pass
+
+    update_history_completed_status()
 
 
-def daily_duration_award():
+def daily_duration_award(is_clock=False):
     """
     每日任务 赠送会员代币并清理过期代币
     :return:
     """
-    today = datetime.date.today()
+    users_clock, clock_times= None, None
+    if is_clock:
+        clock_times = MemberTimeClock.get_member_time_clock()
+        if clock_times:
+            for user_id, clock_time in clock_times.items():
+                update_history_completed_status(user_id, clock_time.date())
+            users_clock = {k: v.strftime('%Y-%m-%d') for k, v in clock_times.items()}
     configs = GlobalConfig.get_award([GlobalConfig.SubType.DURATION])
     config = configs[GlobalConfig.SubType.DURATION]
     if config and config.get('duration'):
@@ -152,10 +133,15 @@ def daily_duration_award():
                     'updated_at': datetime.datetime.now()
                 })
         # 上次赠送时间超过duration的用户赠送代币
-        user_ids = TokensHistory.get_need_duration_award_user(duration)
+        user_ids = TokensHistory.get_need_duration_award_user(duration, users_clock)
         award_users = list(set(no_member_users + user_ids))
         if award_users:
             for user_id in award_users:
+                clock_time = clock_times.get(user_id) if clock_times else None
+                if clock_time:
+                    today = clock_time.date()
+                else:
+                    today = datetime.date.today()
                 history_objs.append(TokensHistory(
                     user_id=user_id,
                     trade_no=generate_trade_no(),
@@ -178,7 +164,7 @@ def daily_duration_award():
             logger.error(f'daily_duration_award error, {e}, \n' + traceback.format_exc())
 
     # 代币过期处理
-    if histories := TokensHistory.get_expire_history():
+    if histories := TokensHistory.get_expire_history(users_clock):
         history_objs = []
         for history in histories:
             history_objs.append(TokensHistory(
@@ -197,7 +183,25 @@ def daily_duration_award():
             member.update_amount()
 
 
-
+def update_history_completed_status(user_id=None, today=None):
+    """
+    更新结束时间小于当前时间的历史记录状态为已完成 跳过vip用户
+    :param user_id:
+    :param today:
+    :return:
+    """
+    today = datetime.date.today() if not today else today
+    filter_query = Q(end_date__lt=today)
+    if user_id:
+        if not Member.objects.filter(user_id=user_id, is_vip=True, del_flag=False).exists():
+            filter_query &= Q(user_id=user_id)
+        else:
+            return True
+    else:
+        if vip_users := Member.objects.filter(is_vip=True, del_flag=False).values_list('user_id', flat=True).all():
+            filter_query &= ~Q(user_id__in=vip_users)
+    TokensHistory.objects.filter(filter_query).update(status=TokensHistory.Status.COMPLETED)
+    return True
 
 
 class MemberTimeClock:
@@ -280,12 +284,8 @@ class MemberTimeClock:
                     # del history_tokens record include exchange and expiration records
                     TokensHistory.objects.filter(
                         user_id=user_id,
-                        type__in=[TokensHistory.Type.EXCHANGE_STANDARD_30, TokensHistory.Type.EXCHANGE_PREMIUM_90,
-                                  TokensHistory.Type.EXCHANGE_STANDARD_360,
-                                  TokensHistory.Type.EXCHANGE_PREMIUM_30, TokensHistory.Type.EXCHANGE_STANDARD_90,
-                                  TokensHistory.Type.EXCHANGE_PREMIUM_360,
-                                  TokensHistory.Type.EXPIRATION,
-                                  ]).delete()
+                        type__in=TokensHistory.TYPE_EXCHANGE + [TokensHistory.Type.EXPIRATION]
+                    ).delete()
                     # update member record
                     member = Member.objects.filter(user_id=user_id).first()
                     member.standard_start_date = None
@@ -308,27 +308,6 @@ class MemberTimeClock:
         每日任务 赠送会员代币并清理过期代币 单独处理有 clock time 的用户
         :return:
         """
-        users_clock = None
-        if is_clock:
-            clock_times = MemberTimeClock.get_member_time_clock()
-            users_clock = {k: v.strftime('%Y-%m-%d') for k, v in clock_times.items()}
-            if not users_clock:
-                return True
-        if histories := TokensHistory.get_expire_history(users_clock):
-            history_objs = []
-            for history in histories:
-                history_objs.append(TokensHistory(
-                    user_id=history['user_id'],
-                    trade_no=generate_trade_no(),
-                    out_trade_no=history['trade_no'],
-                    title=f"{history['title']} expire",
-                    amount=-history['amount'],
-                    type=TokensHistory.Type.EXPIRATION,
-                    status=TokensHistory.Status.COMPLETED,
-                ))
+        daily_duration_award(is_clock)
 
-            TokensHistory.objects.bulk_create(history_objs)
-            members = Member.objects.filter(user_id__in=[h['user_id'] for h in histories])
-            for member in members:
-                member.update_amount()
         return True
