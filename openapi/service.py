@@ -144,6 +144,9 @@ def usage_conversation(user_id, validated_data):
     parts_info = UsageBaseSerializer.get_schedule_parts_info(schedule_type)
     api = OpenapiLog.Api.CONVERSATION
     statis_data = {}
+    m_values = Conversation.AllLLMModel.values
+    m_labels = Conversation.AllLLMModel.labels
+    all_models = {m_values[i]: m_labels[i] for i in range(len(m_values))}
     for part_info in parts_info:
         part_type = part_info['part_type']
         total_list = []
@@ -162,17 +165,24 @@ def usage_conversation(user_id, validated_data):
                 'label': part_info['part_list'],
                 model: total_list
             }
+            statis_data['use_models'] = [{'label': all_models[model], 'value':model}]
         else:
             temp_data = {
-                'label': part_info['part_list'],
+                # 'label': part_info['part_list'],
             }
+            user_models = []
             for m in Conversation.LLMModel.values:
-                temp_data[m] = []
+                m_data = []
                 static_dict = {s['date']:s for s in static if s['model'] == m}
                 for part in part_info['part_list']:
                     if part in static_dict:
-                        temp_data[m].append(static_dict[part]['count'])
+                        m_data.append(static_dict[part]['count'])
+                        user_models.append(m)
                     else:
-                        temp_data[m].append(0)
-            statis_data[part_type] = temp_data
+                        m_data.append(0)
+                if m in user_models:
+                    temp_data[m] = m_data
+            statis_data[part_type] = {'label': part_info['part_list']} | temp_data
+            statis_data['use_models'] = [{'label': all_models[m], 'value':m} for m in user_models]
+        # statis_data['all_models'] = [{'label': all_models[m], 'value':m} for m in Conversation.LLMModel.values]
     return statis_data

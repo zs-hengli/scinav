@@ -286,8 +286,8 @@ def bot_subscribe(user_id, bot:Bot, action='subscribe'):
         'del_flag': action != 'subscribe'
     }
     subscribe, created = BotSubscribe.objects.update_or_create(data, user_id=user_id, bot_id=bot_id)
-    if created and user_id != bot.user_id:
-        tokens_award(bot.user_id, TokensHistory.Type.SUBSCRIBED_BOT, bot_id=bot_id)
+    if user_id != bot.user_id and action == 'subscribe':
+        tokens_award(bot.user_id, TokensHistory.Type.SUBSCRIBED_BOT, bot_id=bot_id, from_user_id=user_id)
 
 
 def bot_user_full_text_document_ids(bot_id=None, bot: Bot = None):

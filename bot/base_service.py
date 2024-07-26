@@ -54,10 +54,15 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
     bot_is_subscribed = is_subscribed(user_id, bot)
     public_count, need_public, need_public_count, personal_count, public_collections = 0, False, 0, 0, []
     all_public_collections = Collection.objects.filter(id__in=collection_ids, type=Collection.TypeChoices.PUBLIC).all()
-    if page_num == 1 and list_type in ['all', 'all_documents']:
-        need_public = True
-        need_public_count = len(all_public_collections)
-        public_collections = all_public_collections
+    if page_num == 1:
+        if list_type in ['all', 'all_documents']:
+            need_public = True
+            need_public_count = len(all_public_collections)
+            public_collections = all_public_collections
+        elif list_type in ['arxiv', 's2']:
+            need_public = True
+            public_collections = [c for c in all_public_collections if c.id == list_type]
+            need_public_count = len(public_collections)
     public_count = len(public_collections)
 
     query_set, d1, d2, ref_ds = CollectionDocumentListSerializer.get_collection_documents(
@@ -68,31 +73,30 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
     ref_doc_lib_ids = (
         set(ref_ds if ref_ds else []) & set(CollectionDocumentListSerializer._my_doc_lib_document_ids(user_id))
     )
-    if ref_ds and (
-        list_type in ['all', 'all_documents']
-        or (list_type in ['s2', 'arxiv'])
-        or (list_type in ['subscribe_full_text'] and (bot.type == Collection.TypeChoices.PUBLIC or bot.advance_share))
-        or (list_type in ['personal'])
-    ):
+    if ref_ds:
         if list_type in ['personal']:
             ref_ds = list(ref_doc_lib_ids)
         elif list_type in ['s2', 'arxiv']:
             if bot.type == Collection.TypeChoices.PUBLIC or bot.advance_share:
-                logger.debug(f'dddddddd arxiv ref_ds: {ref_ds}')
                 ref_ds = Document.objects.filter(
                     id__in=ref_ds, full_text_accessible=False, del_flag=False, collection_id=list_type
                 ).values_list('id', flat=True)
-                logger.debug(f'dddddddd arxiv ref_ds2: {ref_ds}')
+            else:
+                ref_ds = Document.objects.filter(
+                    id__in=ref_ds, del_flag=False, collection_id=list_type
+                ).values_list('id', flat=True)
             ref_ds = list(set(ref_ds) - set(ref_doc_lib_ids))
         elif list_type in ['subscribe_full_text']:
-            ref_ds = list(Document.objects.filter(
-                id__in=ref_ds, full_text_accessible=True, del_flag=False).values_list('id', flat=True).all())
-            ref_ds = list(set(ref_ds) - set(ref_doc_lib_ids))
+            if bot.type == Collection.TypeChoices.PUBLIC or bot.advance_share:
+                ref_ds = list(Document.objects.filter(
+                    id__in=ref_ds, full_text_accessible=True, del_flag=False).values_list('id', flat=True).all())
+                ref_ds = list(set(ref_ds) - set(ref_doc_lib_ids))
+            else:
+                ref_ds = []
 
     all_c_docs = query_set.all()
     start = start_num - (public_count % page_size if not need_public_count and start_num else 0)
     document_ids = [cd['document_id'] for cd in all_c_docs]
-    logger.debug(f'ddddddddd document_ids: {document_ids}')
     if ref_ds:
         document_ids += ref_ds
     filter_query = Q(id__in=document_ids)
@@ -105,8 +109,13 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
     show_total = query_total
 
     res_data = []
-    if list_type in ['all', 'all_documents'] and public_collections and need_public:
+    if list_type in ['all', 'all_documents', 'arxiv', 's2'] and public_collections:
         for p_c in public_collections:
+            if (
+                (list_type in ['s2', 'arxiv'] and p_c.id != list_type and not need_public)
+                or (list_type in ['all', 'all_documents'] and not need_public)
+            ):
+                continue
             res_data.append({
                 'id': None,
                 'collection_id': p_c.id,
@@ -161,9 +170,7 @@ def bot_documents(user_id, bot, list_type, page_size=10, page_num=1, keyword=Non
                 if not d_id['id']:
                     continue
                 full_text_ref_documents = []
-                logger.debug(f'ddddddddd ref_ds: {ref_ds}')
                 if ref_ds:
-                    logger.debug(f'ddddddddd ref_ds: {ref_ds}')
                     full_text_ref_documents = Document.objects.filter(
                         id__in=ref_ds, full_text_accessible=True, del_flag=False).values_list('id', flat=True)
                 if d_id['id'] in doc_lib_document_ids:

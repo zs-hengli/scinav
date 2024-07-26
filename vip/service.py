@@ -308,7 +308,11 @@ def _consume_tokens(user_id, member, exchange_member_type, duration, amount):
                 'status': new_history_status
             }
             # 普通会员升级高级会员
-            if exchange_member_type == Member.Type.PREMIUM and member.standard_end_date >= today:
+            if (
+                exchange_member_type == Member.Type.PREMIUM
+                and member.standard_end_date
+                and member.standard_end_date >= today
+            ):
                 standard_histories = TokensHistory.objects.filter(
                     user_id=user_id,
                     type__in=TokensHistory.TYPE_EXCHANGE_STANDARD,

@@ -7,7 +7,6 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from core.utils.views import extract_json, my_json_response
-from document.service import get_url_by_object_path
 from openapi.models import OpenapiKey
 from openapi.serializers import OpenapiKeyCreateQuerySerializer, OpenapiKeyUpdateQuerySerializer, \
     OpenapiListQuerySerializer, UsageBaseSerializer, UsageChatQuerySerializer

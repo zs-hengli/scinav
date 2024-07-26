@@ -268,13 +268,3 @@ class ChatLimit(APIView):
         limit_info = LimitCheckSerializer.chat_limit(user_id)
         return my_json_response(limit_info)
 
-
-@method_decorator([extract_json], name='dispatch')
-@method_decorator(require_http_methods(['GET']), name='dispatch')
-class ChatModels(APIView):
-
-    @staticmethod
-    def get(request, *args, **kwargs):
-        all_models = Conversation.LLMModel.choices
-        return my_json_response(limit_info)
-

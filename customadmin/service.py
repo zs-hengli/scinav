@@ -307,6 +307,8 @@ class Notice:
         notice.updated_at = datetime.datetime.now()
         try:
             with transaction.atomic():
+                if is_active:
+                    Notification.objects.filter(is_active=True).update(is_active=False)
                 notice.save()
                 data = NoticesDetailSerializer(notice).data
                 if is_active:

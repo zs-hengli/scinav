@@ -16,7 +16,7 @@ from user.authing_service import get_user_by_id_token
 from user.models import MyUser
 from user.service import save_auth_user_info
 from vip.base_service import tokens_award
-from vip.models import TokensHistory
+from vip.models import TokensHistory, Member
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ def check_token(request):
                 logger.debug(f'new user invite_code: {request.headers}, {invite_code}')
                 if invite_code:
                     tokens_award(
-                        user_id=invite_code, award_type=TokensHistory.Type.INVITE_REGISTER, new_user_id=user.id)
+                        user_id=invite_code, award_type=TokensHistory.Type.INVITE_REGISTER, from_user_id=user.id)
                     user.inviter_id = invite_code
                     user.save()
                 tokens_award(user_id=user.id, award_type=TokensHistory.Type.NEW_USER_AWARD)
@@ -89,6 +89,10 @@ def check_openapi_key(request):
         if not user or not check_res:
             logger.warning(f'Invalid access_token, request.headers: {request.headers}')
             raise exceptions.AuthenticationFailed(gettext_lazy('Invalid access_token.'))
+        member = Member.objects.filter(user_id=user.id).first()
+        if not member or member.get_member_type() == Member.Type.FREE:
+            logger.warning(f'Free user has no permission to use api')
+            raise exceptions.PermissionDenied(gettext_lazy('Free user has no permission to use api'))
         return user, openapi.id
     else:
         logger.info(f'no X-API-KEY in headers, headers: {request.headers}')

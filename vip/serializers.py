@@ -7,6 +7,7 @@ from rest_framework import serializers
 from django.utils.translation import gettext_lazy as _
 
 from customadmin.models import GlobalConfig
+from vip.base_service import MemberTimeClock
 from vip.models import TokensHistory, Member, MemberUsageLog
 
 
@@ -206,8 +207,13 @@ class TokensAwardQuerySerializer(serializers.Serializer):
 class LimitCheckSerializer(serializers.Serializer):
     @staticmethod
     def chat_limit(user_id):
+        clock_time = MemberTimeClock.get_member_time_clock(user_id)
+        if clock_time:
+            today = clock_time.date()
+        else:
+            today = datetime.date.today()
         member = Member.objects.filter(user_id=user_id).first()
-        member_type = member.get_member_type() if member else Member.Type.FREE
+        member_type = member.get_member_type(today) if member else Member.Type.FREE
         chat_static_day = MemberUsageLog.static_by_day(user_id, MemberUsageLog.UType.CHAT)
         chat_static_monty = MemberUsageLog.static_by_month(user_id, MemberUsageLog.UType.EMBEDDING)
         if member_type in [
@@ -231,8 +237,13 @@ class LimitCheckSerializer(serializers.Serializer):
 
     @staticmethod
     def embedding_limit(user_id):
+        clock_time = MemberTimeClock.get_member_time_clock(user_id)
+        if clock_time:
+            today = clock_time.date()
+        else:
+            today = datetime.date.today()
         member = Member.objects.filter(user_id=user_id).first()
-        member_type = member.get_member_type() if member else Member.Type.FREE
+        member_type = member.get_member_type(today) if member else Member.Type.FREE
         embedding_static_day = MemberUsageLog.static_by_day(user_id, MemberUsageLog.UType.EMBEDDING)
         embedding_static_monty = MemberUsageLog.static_by_month(user_id, MemberUsageLog.UType.EMBEDDING)
         if member_type in [Member.Type.FREE, Member.Type.STANDARD, Member.Type.PREMIUM]:

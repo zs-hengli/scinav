@@ -175,7 +175,7 @@ class TokensHistory(models.Model):
 
         sql = f"""SELECT h1.* FROM tokens_history h1 
 left join tokens_history h2 on h1.trade_no = h2.out_trade_no
-where h1.type = 'duration_award' AND h2.id is null
+where h1.type in ('duration_award', 'new_user_award') AND h2.id is null
         """
         sql += ' and (' + ' or '.join(where_sql) + ')'
         rest = my_custom_sql(sql)
@@ -231,7 +231,7 @@ where m_start_date is null or"""
         count_sql = f"select count(1) as count {from_sql} {where}"
         count_rest = my_custom_sql(count_sql)
         limit_sql = f" limit {page_size} offset {(page_num - 1) * page_size}"
-        rest = my_custom_sql(f"{select_sql} {from_sql} {where} {limit_sql}")
+        rest = my_custom_sql(f"{select_sql} {from_sql} {where} order by h.id desc {limit_sql}")
         return {'total': count_rest[0]['count'], 'list': rest}
 
     @staticmethod
@@ -242,7 +242,7 @@ where m_start_date is null or"""
             history_ids = ','.join(map(str, history_ids))
         sql = f"""select h.*, m.standard_end_date,m.premium_end_date,m.is_vip,m.amount as member_amount
 from tokens_history h  left join member m on h.user_id=m.user_id
-where h.id in ({history_ids}) order by h.id"""
+where h.id in ({history_ids}) order by h.id desc"""
         rest = my_custom_sql(sql)
         return rest
 

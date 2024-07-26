@@ -5,7 +5,7 @@ import traceback
 from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction, DatabaseError
-from django.db.models import Q
+from django.db.models import Q, F
 
 from bot.models import Bot
 from core.utils.date import SHA_TZ
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def tokens_award(
-    user_id, award_type, amount=None, bot_id=None, period_of_validity=None, admin_id=None, new_user_id=None
+    user_id, award_type, amount=None, bot_id=None, period_of_validity=None, admin_id=None, from_user_id=None
 ):
     # todo 细化赠币规则
     try:
@@ -27,11 +27,12 @@ def tokens_award(
                 member = Member.objects.create(user_id=user_id)
             # 获取amount
             if not amount:
-                amount, period_of_validity = get_award_amount(award_type, member)
+                amount, period_of_validity = get_award_amount(
+                    award_type, member, from_user_id=from_user_id, bot_id=bot_id)
                 if not amount:
                     return True
             end_date = (
-                datetime.date.today() + datetime.timedelta(days=period_of_validity)
+                datetime.date.today() + datetime.timedelta(days=period_of_validity - 1)
                 if period_of_validity else None
             )
             history_data = {
@@ -46,33 +47,41 @@ def tokens_award(
             }
             if admin_id:
                 history_data['give_user_id'] = admin_id
-            if new_user_id:
-                history_data['out_trade_no'] = new_user_id
+            if from_user_id and award_type in [TokensHistory.Type.INVITE_REGISTER]:
+                history_data['out_trade_no'] = from_user_id
             if bot_id:
-                if TokensHistory.objects.filter(
-                    type=award_type, out_trade_no=bot_id, user_id=user_id, status__gt=TokensHistory.Status.DELETE
-                ).exists():
-                    return True
+                # if TokensHistory.objects.filter(
+                #     type=award_type, out_trade_no=bot_id, user_id=user_id, give_user_id=from_user_id,
+                #     status__gt=TokensHistory.Status.DELETE
+                # ).exists():
+                #     return True
                 history_data['out_trade_no'] = bot_id
+                history_data['give_user_id'] = from_user_id
             TokensHistory.objects.create(**history_data)
             member.update_amount()
     except DatabaseError as e:
         logger.error(f'tokens award error, {e}, \n' + traceback.format_exc())
         return False
-    pass
+    return True
 
 
-def get_award_amount(award_type, member: Member = None):
+def get_award_amount(award_type, member: Member = None, from_user_id=None, bot_id=None):
     amount, period_of_validity = 0, None
     g_config = GlobalConfig.get_award([award_type])
     config = g_config.get(award_type) if g_config else {}
     if award_type in [TokensHistory.Type.NEW_USER_AWARD, TokensHistory.Type.DURATION_AWARD]:
         amount = config.get('per') if config.get('per') else 0
     elif award_type in [TokensHistory.Type.INVITE_REGISTER, TokensHistory.Type.SUBSCRIBED_BOT]:
-        count = TokensHistory.objects.filter(
-            user_id=member.user_id, type=award_type,
-            status__gt=TokensHistory.Status.DELETE).count()
-        if config and config.get('limit') and count >= int(config.get('limit')):
+        filter_query = Q(user_id=member.user_id, type=award_type,status__gt=TokensHistory.Status.DELETE)
+        if award_type == TokensHistory.Type.SUBSCRIBED_BOT:
+            filter_query &= Q(out_trade_no=bot_id)
+        count = TokensHistory.objects.filter(filter_query).count()
+        if (
+            count and award_type == TokensHistory.Type.SUBSCRIBED_BOT
+            and TokensHistory.objects.filter(filter_query & Q(give_user_id=from_user_id)).exists()
+        ):
+            amount = 0
+        elif config and config.get('limit') and count >= int(config.get('limit')):
             amount = 0
         else:
             amount = int(config['per']) if config.get('per') else 0
@@ -176,11 +185,11 @@ def daily_duration_award(is_clock=False):
                 trade_no=generate_trade_no(),
                 out_trade_no=history['trade_no'],
                 title=f"{history['title']} expire",
-                amount=-history['amount'],
+                amount=-history['amount'] + history['used'],
                 type=TokensHistory.Type.EXPIRATION,
                 status=TokensHistory.Status.COMPLETED,
             ))
-
+        TokensHistory.objects.filter(id__in=[h['id'] for h in histories]).update(used=F('amount'))
         TokensHistory.objects.bulk_create(history_objs)
         members = Member.objects.filter(user_id__in=[h['user_id'] for h in histories])
         for member in members:
