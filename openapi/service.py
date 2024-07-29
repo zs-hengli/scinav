@@ -170,19 +170,19 @@ def usage_conversation(user_id, validated_data):
             temp_data = {
                 # 'label': part_info['part_list'],
             }
-            user_models = []
+            user_models = {}
             for m in Conversation.LLMModel.values:
                 m_data = []
                 static_dict = {s['date']:s for s in static if s['model'] == m}
                 for part in part_info['part_list']:
                     if part in static_dict:
                         m_data.append(static_dict[part]['count'])
-                        user_models.append(m)
+                        user_models[m] = 1
                     else:
                         m_data.append(0)
                 if m in user_models:
                     temp_data[m] = m_data
             statis_data[part_type] = {'label': part_info['part_list']} | temp_data
-            statis_data['use_models'] = [{'label': all_models[m], 'value':m} for m in user_models]
+            statis_data['use_models'] = [{'label': all_models[m], 'value':m} for m in user_models.keys()]
         # statis_data['all_models'] = [{'label': all_models[m], 'value':m} for m in Conversation.LLMModel.values]
     return statis_data

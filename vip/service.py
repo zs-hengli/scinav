@@ -167,8 +167,8 @@ def get_member_info(user_id):
         GlobalConfig.ConfigType.MEMBER_PREMIUM,
         GlobalConfig.ConfigType.VIP,
     ])
-    chat_static_day = MemberUsageLog.static_by_day(user_id, MemberUsageLog.UType.CHAT)
-    embedding_static_monty = MemberUsageLog.static_by_month(user_id, MemberUsageLog.UType.EMBEDDING)
+    chat_static_day = MemberUsageLog.static_by_day(user_id, MemberUsageLog.UType.CHAT, today=today)
+    embedding_static_monty = MemberUsageLog.static_by_month(user_id, MemberUsageLog.UType.EMBEDDING, today=today)
     if not member:
         config_limits = [
             c for c in config if c['config_type'] == GlobalConfig.ConfigType.MEMBER_FREE

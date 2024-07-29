@@ -24,6 +24,7 @@ from document.service import document_update_from_rag
 from document.tasks import async_update_conversation_share_content
 from openapi.base_service import record_openapi_log
 from openapi.models import OpenapiLog
+from vip.base_service import MemberTimeClock
 from vip.models import MemberUsageLog
 from vip.serializers import LimitCheckSerializer
 
@@ -530,12 +531,12 @@ def chat_query(user_id, validated_data, openapi_key_id=None):
         conversation_id = validated_data['conversation_id']
 
     chat_limit = LimitCheckSerializer.chat_limit(user_id)
-    if chat_limit['daily'] and chat_limit['daily'] <= chat_limit['used_day']:
+    if chat_limit['daily'] and chat_limit['daily'] < chat_limit['used_day']:
         yield json.dumps({
             'event': 'on_error', 'error_code': 120006, 'error': '您已经到达今日智能对话问题上限',
             "detail": {"conversation_id": conversation_id}}) + "\n"
         return
-    elif chat_limit['monthly'] and chat_limit['monthly'] <= chat_limit['used_month']:
+    elif chat_limit['monthly'] and chat_limit['monthly'] < chat_limit['used_month']:
         yield json.dumps({
             'event': 'on_error', 'error_code': 120007, 'error': '您已经到达本月智能对话问题上限',
             "detail": {"conversation_id": conversation_id}}) + "\n"
@@ -635,7 +636,12 @@ def chat_query(user_id, validated_data, openapi_key_id=None):
                 user_id, openapi_key_id, OpenapiLog.Api.CONVERSATION, OpenapiLog.Status.SUCCESS,
                 model=model, obj_id1=conversation_id, obj_id2=question.id, )
         # add record to MemberUsageLog
-        MemberUsageLog.objects.create(
+        clock_time = MemberTimeClock.get_member_time_clock(user_id)
+        if clock_time:
+            now = clock_time
+        else:
+            now = datetime.datetime.now()
+        member_ul = MemberUsageLog.objects.create(
             user_id=user_id,
             openapi_key_id=openapi_key_id,
             model=model,
@@ -643,7 +649,10 @@ def chat_query(user_id, validated_data, openapi_key_id=None):
             obj_id1=conversation_id,
             obj_id2=question.id,
             status=MemberUsageLog.Status.SUCCESS,
+            created_at=now,
         )
+        if clock_time:
+            MemberUsageLog.objects.filter(id=member_ul.id).update(created_at=now)
 
     yield json.dumps({
         'event': 'conversation', 'name': None, 'run_id': None,

@@ -277,10 +277,11 @@ class NoticesQuerySerializer(serializers.Serializer):
 
 class NoticesDetailSerializer(serializers.ModelSerializer):
     created_at = serializers.DateTimeField(format='%Y-%m-%d %H:%M:%S')
+    updated_at = serializers.DateTimeField(format='%Y-%m-%d %H:%M:%S')
 
     class Meta:
         model = Notification
-        fields = ['id', 'title', 'content', 'en_title', 'en_content', 'is_active', 'created_at']
+        fields = ['id', 'title', 'content', 'en_title', 'en_content', 'is_active', 'updated_at', 'created_at']
 
 
 class NoticesCreateSerializer(serializers.Serializer):

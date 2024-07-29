@@ -321,19 +321,24 @@ class MemberUsageLog(models.Model):
     created_at = models.DateTimeField(null=False, db_index=True, auto_now_add=True)
 
     @staticmethod
-    def static_by_month(user_id, utype):
+    def static_by_month(user_id, utype, today=None):
+        if not today:
+            today = datetime.datetime.now()
+        today_str = today.strftime('%Y-%m-%d')
         sql = (f"select count(*) from member_usage_log where type={utype} and user_id='{user_id}'"
                f" and status in ({MemberUsageLog.Status.SUCCESS}, {MemberUsageLog.Status.UNKNOWN})"
-               f" and created_at>=to_timestamp(substring(to_char(now(),'yyyy-MM-dd hh24:MI:ss') FROM 1 FOR 10"
-               f"),'yyyy-MM-dd') - interval '30 day'")
+               f" and created_at>= DATE '{today_str}' - interval '30 day'")
         # logger.debug(f'ddddddddd static_by_month sql: {sql}')
         static = my_custom_sql(sql)
         return static[0].get('count', 0) if static else 0
 
     @staticmethod
-    def static_by_day(user_id, utype):
+    def static_by_day(user_id, utype, today=None):
+        if not today:
+            today = datetime.datetime.now()
+        today_str = today.strftime('%Y-%m-%d')
         sql = ("select count(*) as count from member_usage_log"
-               f" where type={utype} and user_id='{user_id}' and created_at>=current_date "
+               f" where type={utype} and user_id='{user_id}' and created_at>='{today_str}' "
                f" and status in ({MemberUsageLog.Status.SUCCESS}, {MemberUsageLog.Status.UNKNOWN})")
         # logger.debug(f'dddddddddd static_by_day sql: {sql}')
         static = my_custom_sql(sql)

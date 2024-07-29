@@ -79,7 +79,7 @@ class UsageBaseSerializer(serializers.Serializer):
         now = datetime.datetime.now()
         if schedule_type == UsageBaseSerializer.Schedule.WEEK:
             parts = 7
-            part_list = [(now - relativedelta(days=index)).strftime('%Y/%m/%d') for index in range(parts, -1, -1)]
+            part_list = [(now - relativedelta(days=index)).strftime('%Y/%m/%d') for index in range(parts - 1, -1, -1)]
             min_date = (now - relativedelta(days=parts)).strftime('%Y/%m/%d')
             info = [{
                 'parts_num': parts,
@@ -89,7 +89,7 @@ class UsageBaseSerializer(serializers.Serializer):
             }]
         elif schedule_type == UsageBaseSerializer.Schedule.MONTH:
             parts = 30
-            part_list = [(now - relativedelta(days=index)).strftime('%Y/%m/%d') for index in range(parts, -1, -1)]
+            part_list = [(now - relativedelta(days=index)).strftime('%Y/%m/%d') for index in range(parts - 1, -1, -1)]
             min_date = (now - relativedelta(days=parts)).strftime('%Y/%m/%d')
             info = [{
                 'parts_num': parts,
@@ -101,9 +101,9 @@ class UsageBaseSerializer(serializers.Serializer):
 
             parts_day, parts_month = 90, 3
             part_list_day = [
-                (now - relativedelta(days=index)).strftime('%Y/%m/%d') for index in range(parts_day, -1, -1)]
+                (now - relativedelta(days=index)).strftime('%Y/%m/%d') for index in range(parts_day - 1, -1, -1)]
             part_list_month = [
-                (now - relativedelta(months=index)).strftime('%Y/%m') for index in range(parts_month, -1, -1)]
+                (now - relativedelta(months=index)).strftime('%Y/%m') for index in range(parts_month - 1, -1, -1)]
             min_date_day = (now - relativedelta(days=parts_day)).strftime('%Y/%m/%d')
             min_date_month = (now - relativedelta(months=parts_month)).strftime('%Y/%m/%d')
             info = [{
@@ -119,7 +119,7 @@ class UsageBaseSerializer(serializers.Serializer):
             }]
         else:
             parts = 12
-            part_list = [(now - relativedelta(months=index)).strftime('%Y/%m') for index in range(parts, -1, -1)]
+            part_list = [(now - relativedelta(months=index)).strftime('%Y/%m') for index in range(parts - 1, -1, -1)]
             min_date = (now - relativedelta(months=parts)).strftime('%Y/%m/%d')
             info = [{
                 'parts': parts,

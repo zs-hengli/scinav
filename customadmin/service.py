@@ -278,6 +278,7 @@ class Notice:
         if admin_id:
             notice.updated_by = admin_id
         notice.updated_at = datetime.datetime.now()
+        notice.updated_at = datetime.datetime.now()
         try:
             with transaction.atomic():
                 notice.save()

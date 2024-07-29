@@ -26,6 +26,7 @@ from document.serializers import DocumentLibraryPersonalSerializer, DocLibAddQue
     DocumentLibraryListQuerySerializer, DocumentRagCreateSerializer, AuthorsDetailSerializer, SearchQuerySerializer
 from document.tasks import async_document_library_task, async_update_document, async_update_conversation_by_collection, \
     update_document_library_task
+from vip.base_service import MemberTimeClock
 from vip.models import MemberUsageLog
 from vip.serializers import LimitCheckSerializer
 
@@ -643,14 +644,22 @@ def document_personal_upload(validated_data):
             doc_lib_data, user_id=vd['user_id'], filename=file['filename'], object_path=file['object_path'])
         instances.append(instance)
         # add record to MemberUsageLog
-        MemberUsageLog.objects.create(
+        clock_time = MemberTimeClock.get_member_time_clock(vd['user_id'])
+        if clock_time:
+            now = clock_time
+        else:
+            now = datetime.datetime.now()
+        member_ul = MemberUsageLog.objects.create(
             user_id=vd['user_id'],
             openapi_key_id=openapi_key_id,
             type=MemberUsageLog.UType.EMBEDDING,
             obj_id1=instance.id,
             obj_id2=instance.task_id,
             status=MemberUsageLog.Status.UNKNOWN,
+            created_at=now,
         )
+        if clock_time:
+            MemberUsageLog.objects.filter(id=member_ul.id).update(created_at=now)
     return 0, 'success', instances
 
 

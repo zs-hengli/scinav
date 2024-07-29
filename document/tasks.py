@@ -20,7 +20,7 @@ from document.models import DocumentLibrary, Document
 from openapi.base_service import update_openapi_log_upload_status
 from openapi.models import OpenapiLog
 from user.models import UserOperationLog
-from vip.base_service import daily_duration_award
+from vip.base_service import daily_duration_award, MemberTimeClock
 from vip.models import MemberUsageLog
 
 logger = logging.getLogger('celery')
@@ -49,14 +49,22 @@ def async_document_library_task(self, task_id=None):
             i.save()
             if i.task_status != DocumentLibrary.TaskStatusChoices.ERROR:
                 # add record to MemberUsageLog
-                MemberUsageLog.objects.create(
+                clock_time = MemberTimeClock.get_member_time_clock(i.user_id)
+                if clock_time:
+                    now = clock_time
+                else:
+                    now = datetime.datetime.now()
+                member_ul = MemberUsageLog.objects.create(
                     user_id=i.user_id,
                     openapi_key_id=None,
                     type=MemberUsageLog.UType.EMBEDDING,
                     obj_id1=i.id,
                     obj_id2=i.task_id,
                     status=MemberUsageLog.Status.UNKNOWN,
+                    created_at=now,
                 )
+                if clock_time:
+                    MemberUsageLog.objects.filter(id=member_ul.id).update(created_at=now)
     # in progress
     if instances := DocumentLibrary.objects.filter(task_status__in=[
         DocumentLibrary.TaskStatusChoices.IN_PROGRESS, DocumentLibrary.TaskStatusChoices.QUEUEING,
