@@ -131,5 +131,5 @@ class UsageBaseSerializer(serializers.Serializer):
 
 
 class UsageChatQuerySerializer(UsageBaseSerializer):
-    model = serializers.ChoiceField(choices=Conversation.LLMModel, default=None, allow_blank=True)
+    model = serializers.ChoiceField(choices=Conversation.AllLLMModel, default=None, allow_blank=True)
 

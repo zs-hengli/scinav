@@ -28,7 +28,7 @@ from openapi.serializers_openapi import ChatResponseSerializer, UploadFileRespon
     UploadFileLimitResponseSerializer
 from openapi.serializers_openapi import SearchQuerySerializer, ExceptionResponseSerializer, TopicListSerializer
 from openapi.service import upload_paper, get_request_openapi_key_id
-from openapi.service_openapi import search, collection_list_mine
+from openapi.service_openapi import search, collection_list_mine, update_conversation
 
 logger = logging.getLogger(__name__)
 
@@ -529,6 +529,8 @@ for line in response.iter_lines():
                 'event': 'on_error', 'error_code': 100002, 'error': 'topic not found', 'detail': {}}) + '\n'
             logger.error(f'error msg: {out_str}')
             return streaming_response(iter(out_str))
+        if vd.get('has_conversation'):
+            conversation = update_conversation(vd['conversation'], vd)
 
         data = chat_query(user_id, vd, openapi_key_id)
         return streaming_response(data)

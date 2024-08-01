@@ -15,13 +15,15 @@ logger = logging.getLogger(__name__)
 
 def update_conversation_by_collection(user_id, conversation, collection_ids, model=None):
     # update conversation
-    document_ids, paper_ids, papers_info = [], [], []
+    document_ids, paper_ids, papers_info, is_updated = [], [], [], False
+    if model:
+        conversation.model = model
     update_data = {
         'conversation_id': conversation.id,
         'agent_id': conversation.agent_id,
+        'llm_name': conversation.model,
         # 'paper_ids': paper_ids,
         # 'public_collection_ids': public_collection_ids,
-        # 'llm_name': model,
     }
     all_collections = list(
         set(conversation.collections if conversation.collections else [])
@@ -69,6 +71,7 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
             conversation.save()
             if not update_data['agent_id'].startswith('default-scinav'):
                 RagConversations.update(**update_data)
+                is_updated = True
 
     elif collection_ids is not None and collection_ids != all_collections:
         paper_ids = []
@@ -80,11 +83,9 @@ def update_conversation_by_collection(user_id, conversation, collection_ids, mod
         conversation.type = None
         conversation.save()
         RagConversations.update(**update_data)
+        is_updated = True
 
-    if model:
-        update_data['llm_name'] = model
-        conversation.model = model
-        conversation.save()
+    if model and not is_updated:
         RagConversations.update(**update_data)
     return conversation
 

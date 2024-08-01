@@ -194,6 +194,7 @@ class TopicListRequestSerializer(serializers.Serializer):
         help_text='max records to return'
     )
 
+
 @extend_schema_serializer(
     examples=[
         OpenApiExample('Example', value={
@@ -231,6 +232,7 @@ class PersonalLibraryRequestSerializer(serializers.Serializer):
         IN_PROGRESS = 'in_progress', _('paper is parsing')
         COMPLETED = 'completed', _('paper parse completed')
         FAILED = 'failed', _('paper parse failed')
+
     limit = serializers.IntegerField(
         min_value=1, max_value=2000, required=False, default=100,
         help_text='max records to return'
@@ -387,9 +389,8 @@ class ChatQuerySerializer(serializers.Serializer):
                   'If the `question_id` is passed in, the `paper_knowledge` and `topic_id` will be ignored.'
     )
     model = serializers.ChoiceField(
-        choices=Conversation.LLMModel, required=False, default=Conversation.LLMModel.BASIC,
-        help_text='Specify large language `model` name. Currently, only `gpt-4o` is available'
-        # gpt-4o is currently open for access, but in the future, it will be restricted to advanced users only.
+        choices=Conversation.OpenapiLLMModel, required=False, default=Conversation.OpenapiLLMModel.GPT_4O_MINI,
+        help_text='Specify large language `model` name. Currently available models: '
     )
 
     def validate(self, attrs):
@@ -402,6 +403,7 @@ class ChatQuerySerializer(serializers.Serializer):
                     'API chat and web chat cannot use the same conversation_id.', 120002)
             if conversation:
                 attrs['has_conversation'] = True
+                attrs['conversation'] = conversation
                 return attrs
         paper_ids = []
         if attrs.get('paper_knowledge') and attrs['paper_knowledge'].get('paper_ids'):
@@ -444,7 +446,7 @@ class ChatResponseSerializer(serializers.Serializer):
                                  'that have been generated')
         CONVERSATION = 'conversation', _('when the conversation ends, it will contain the id and question_id')
 
-    event = serializers.ChoiceField(required=True, choices=EventType.choices,help_text='')
+    event = serializers.ChoiceField(required=True, choices=EventType.choices, help_text='')
     name = serializers.CharField(required=True, help_text='The name of the runnable that generated the event.')
     run_id = serializers.CharField(required=True, help_text='The run ID of the runnable that generated the event.')
     input = serializers.JSONField(

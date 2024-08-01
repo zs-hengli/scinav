@@ -26,6 +26,11 @@ class Conversation(models.Model):
         BASIC = "basic", "Basic"
         ADVANCED = "advanced", "Advanced"
 
+    class OpenapiLLMModel(models.TextChoices):
+        GPT_4O = 'gpt-4o', 'GPT-4o'
+        GPT_4O_MINI = "gpt-4o-mini", "GPT-4o-mini"
+        CLAUDE_3_5_SONNET = "claude-3.5-sonnet", "Claude-3.5-Sonnet"
+
     class AllLLMModel(models.TextChoices):
         GPT_4O = 'gpt-4o', 'GPT-4o'
         GPT_4O_MINI = "gpt-4o-mini", "GPT-4o-mini"

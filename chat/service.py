@@ -279,6 +279,7 @@ def update_simple_conversation(conversation: Conversation):
                 'conversation_id': conversation.id,
                 'agent_id': conversation.agent_id,
                 'paper_ids': new_paper_ids,
+                'llm_name': conversation.model,
             }
             RagConversation.update(**update_data)
             conversation.documents = [d.id for d in documents] if documents else []
